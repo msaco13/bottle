@@ -6,6 +6,8 @@
 // The bottle, cork and note are real 3D shapes drawn over it. The glass bends
 // the beach behind it and reflects the same sky.
 
+import { MAX_SHELLS, STARS, starAt } from './keeps.js';
+
 // ---------------------------------------------------------------- small maths
 
 export const M = {
@@ -92,6 +94,12 @@ uniform vec4 uBottle;         // x, z, size, how much shadow
 uniform vec3 uRip[3];         // x, z, age in seconds (negative: none)
 uniform float uDim;
 uniform float uLamp;          // 1 when this phone is listening for bottles: a lantern glows on the dry sand
+#ifdef KEEPS
+uniform vec4 uShell[12];      // what the conversation has left on the sand. Each: x, z, size, turn
+uniform vec4 uShellK[12];     // kind (0 scallop, 1 sea snail, 2 starfish), tint, how far it has faded in
+uniform vec3 uStar[10];       // its stars: x and y of the direction each hangs in, and how bright
+uniform float uJoin;          // 1 once all ten are lit and the figure is whole
+#endif
 ${SKY}
 float swash(float x, float t) {
   float ph = fract(t / 7.0 - x * 0.035);
@@ -127,6 +135,29 @@ void main() {
         col += vec3(0.85, 0.92, 1.0) * tail * (1.0 - smoothstep(0.0, 0.0035, across)) * sin(ph / 0.9 * 3.14159) * 1.5 * (1.0 - mask);
       }
     }
+#ifdef KEEPS
+    // the stars this conversation has lit, and the lines that join them. Sums are kept small so they stay exact on every phone.
+    if (uStar[0].z > 0.0 && rd.y > 0.01 && rd.y < 0.32 && abs(rd.x) < 0.45) {
+      float sum = 0.0;
+      vec3 prev = vec3(0.0);
+      for (int i = 0; i < 10; i++) {
+        vec3 s = uStar[i];
+        if (s.z > 0.0) {
+          vec2 q = clamp((rd.xy - s.xy) * 100.0, -8.0, 8.0);
+          float d2 = dot(q, q);
+          sum += s.z * (0.80 + 0.20 * sin(uTime * 1.7 + float(i) * 2.4)) * (exp(-d2 * 9.0) * 1.7 + exp(-d2 * 0.9) * 0.30);
+          if (prev.z > 0.0) {
+            vec2 ab = (s.xy - prev.xy) * 100.0, ap = clamp((rd.xy - prev.xy) * 100.0, -60.0, 60.0);
+            float len2 = max(dot(ab, ab), 0.01), h = clamp(dot(ap, ab) / len2, 0.0, 1.0);
+            float off = length(ap - ab * h), gap = min(h, 1.0 - h) * sqrt(len2);
+            sum += min(s.z, prev.z) * (1.0 - smoothstep(0.05, 0.20, off)) * smoothstep(0.7, 1.6, gap) * (0.16 + 0.16 * uJoin);
+          }
+        }
+        prev = s;
+      }
+      col += pick(vec3(1.0, 0.90, 0.74), vec3(0.90, 0.95, 1.0), vec3(1.0, 0.97, 0.90)) * sum * (1.0 - 0.85 * mask) * pickf(0.90, 1.0, 0.55);
+    }
+#endif
   } else {
     float tt = -uCam.y / rd.y;
     vec3 p = uCam + rd * tt;
@@ -150,6 +181,51 @@ void main() {
     float fr = pow(1.0 - max(dot(-rd, rn), 0.0), 4.0);
     vec3 wetCol = sand * 0.50 + sky(R) * (0.07 + 0.62 * fr) * (0.45 + 0.55 * film);
     col = mix(sand, wetCol, wet);
+#ifdef KEEPS
+    // shells and starfish on the dry sand, each with the short shadow the low light gives it
+    if (uShellK[0].z > 0.0 && z > 0.90 && z < 1.70 && abs(x) < 0.80) {
+      vec3 light = pick(vec3(1.0, 0.94, 0.88), vec3(0.40, 0.48, 0.68), vec3(1.16, 1.10, 1.04));
+      for (int i = 0; i < 12; i++) {
+        vec4 s = uShell[i];
+        vec4 k = uShellK[i];
+        if (k.z > 0.0) {
+          vec2 d = (p.xz - s.xy) / s.z;
+          col *= 1.0 - 0.42 * k.z * (1.0 - smoothstep(0.50, 1.20, length(d - vec2(0.06, 0.24))));
+          if (dot(d, d) < 1.6) {
+            float cs = cos(s.w), sn = sin(s.w);
+            vec2 q = vec2(d.x * cs - d.y * sn, d.x * sn + d.y * cs);
+            float cover = 0.0;
+            vec3 sc = vec3(0.0);
+            vec3 blush = mix(vec3(0.94, 0.58, 0.50), vec3(0.74, 0.64, 0.86), k.y);
+            if (k.x < 0.5) {
+              // a scallop: a ribbed fan opening from its hinge
+              vec2 hh = q - vec2(0.0, -0.72);
+              float a = atan(hh.x, hh.y), r = length(hh);
+              float fan = 1.62 * (1.0 - 0.34 * a * a) * (0.965 + 0.035 * cos(a * 13.0));
+              cover = (1.0 - smoothstep(fan - 0.12, fan, r)) * (1.0 - smoothstep(1.00, 1.10, abs(a)));
+              cover = max(cover, (1.0 - smoothstep(0.24, 0.34, abs(hh.x))) * (1.0 - smoothstep(0.08, 0.16, abs(hh.y))));
+              sc = mix(vec3(0.80, 0.66, 0.56), vec3(0.99, 0.94, 0.86), 0.5 + 0.5 * cos(a * 13.0)) * (0.88 + 0.12 * sin(r * 11.0));
+              sc = mix(sc, blush, 0.42 * (1.0 - smoothstep(0.2, 1.5, r)));
+            } else if (k.x < 1.5) {
+              // a sea snail seen from above: one band winding in to the middle
+              float r = length(q * vec2(1.0, 1.14)), a = atan(q.y, q.x);
+              cover = 1.0 - smoothstep(0.76, 0.88, r);
+              float wind = 0.5 + 0.5 * sin(a + 10.0 * sqrt(r + 0.02));
+              sc = mix(mix(vec3(0.52, 0.36, 0.27), blush * 0.8, 0.35), vec3(0.97, 0.91, 0.82), smoothstep(0.25, 0.70, wind)) * (1.08 - 0.30 * r);
+            } else {
+              // a starfish: five arms
+              float r = length(q), a = atan(q.y, q.x);
+              float arm = 0.30 + 0.70 * pow(0.5 + 0.5 * cos(a * 5.0), 2.4);
+              cover = 1.0 - smoothstep(arm - 0.12, arm, r);
+              sc = mix(vec3(0.98, 0.66, 0.38), vec3(0.84, 0.36, 0.22), smoothstep(0.0, 0.9, r)) * (0.90 + 0.10 * cos(a * 5.0));
+              sc += vec3(0.10, 0.08, 0.05) * step(0.80, hash(floor(q * 9.0)));
+            }
+            col = mix(col, sc * light, cover * k.z);
+          }
+        }
+      }
+    }
+#endif
     float lampFlicker = 0.86 + 0.14 * vnoise(vec2(uTime * 7.0, 3.3));
     float lampAway = length(p.xz - vec2(0.27, 1.16));
     col += vec3(1.0, 0.60, 0.24) * uLamp * lampFlicker * 0.60 * exp(-lampAway * lampAway * 7.0);      // its pool of light on the sand
@@ -347,6 +423,7 @@ export class Camera {
     this.W = 1; this.H = 1; this.scale = 1;
     this.cam = { pos: [0, 1.22, 2.75], target: [0, 0.0, -1.5], fov: 62 * Math.PI / 180 };
     this.mood = 0; this.lamp = 0;
+    this.keeps = null;          // what the conversation has left here: see keeps.js
   }
   basis() {
     const c = this.cam, f = norm(sub(c.target, c.pos)), r = norm(cross(f, [0, 1, 0])), u = cross(r, f);
@@ -374,6 +451,9 @@ export class Camera {
 }
 
 // How to ask a phone for a 3D drawing surface, best first. Safari on an iPhone sometimes refuses the first and grants a later one.
+// For a test: build the shore as a phone with a small graphics chip would, without shells or stars.
+const NO_KEEPS = typeof location !== 'undefined' && /[?&]dev\b/.test(location.search) && /[?&]nokeeps\b/.test(location.search);
+
 const ASKS = [
   ['webgl', { alpha: false, antialias: true, depth: true, stencil: false, powerPreference: 'high-performance' }, 'smooth edges'],
   ['webgl', { alpha: false, antialias: true, depth: true, stencil: false }, 'smooth edges, default power'],
@@ -404,7 +484,13 @@ export class Scene {
     const hp = gl.getShaderPrecisionFormat ? gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT) : null;
     this.highp = !!(hp && hp.precision > 0);
     const fit = (src) => (this.highp ? src : src.replace('precision highp float;', 'precision mediump float;'));
-    this.shore = this._program(QUAD_VS, fit(SHORE_FS));
+    // The shells and stars ask more of the phone's graphics chip. If it has little room, or will not build that shader, the plain shore is built instead.
+    this.shore = null;
+    this.keepsOn = false;
+    let room = 0;
+    try { room = gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) || 0; } catch (e) { room = 0; }
+    if (room >= 96 && !NO_KEEPS) { try { this.shore = this._program(QUAD_VS, fit('#define KEEPS\n' + SHORE_FS)); this.keepsOn = true; } catch (e) { this.shore = null; } }
+    if (!this.shore) this.shore = this._program(QUAD_VS, fit(SHORE_FS));
     this.blit = this._program(QUAD_VS, fit(BLIT_FS));
     this.glass = this._program(MESH_VS, fit(GLASS_FS));
     this.solid = this._program(MESH_VS, fit(SOLID_FS));
@@ -438,6 +524,7 @@ export class Scene {
     this._frame = 0;
     this.mood = 0;              // 0 dusk, 1 night, 2 dawn
     this.lamp = 0;              // 1 when the lantern is lit
+    this.keeps = null;          // what the conversation has left here: see keeps.js
   }
 
   /** What this phone gave us, in a few words. */
@@ -445,7 +532,7 @@ export class Scene {
     const gl = this.gl;
     let chip = '';
     try { const x = gl.getExtension('WEBGL_debug_renderer_info'); chip = String(x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).replace(/\s+/g, ' ').slice(0, 70); } catch (e) { chip = ''; }
-    return `3D beach | ${this.kind}${this.highp ? '' : ', half precision'}${this.direct ? ', glass does not bend the view' : ''} | ${chip} | ${this.canvas.width}x${this.canvas.height}`;
+    return `3D beach | ${this.kind}${this.highp ? '' : ', half precision'}${this.direct ? ', glass does not bend the view' : ''}${this.keepsOn ? '' : ', no keepsakes'} | ${chip} | ${this.canvas.width}x${this.canvas.height}`;
   }
 
   /** Let go of everything, so the phone has the memory back. */
@@ -561,6 +648,16 @@ export class Scene {
     gl.uniform3fv(u.uRip, rip);
     gl.uniform1f(u.uDim, s.dim || 0);
     gl.uniform1f(u.uLamp, this.lamp || 0);
+    if (this.keepsOn) {
+      const k = this.keeps, sh = new Float32Array(MAX_SHELLS * 4), kd = new Float32Array(MAX_SHELLS * 4), st = new Float32Array(STARS * 3);
+      if (k) {
+        k.shells.forEach((s, i) => { sh.set([s.x, s.z, s.r, s.turn], i * 4); kd.set([s.kind, s.tint, s.a, 0], i * 4); });
+        k.stars.forEach((s, i) => { const at = starAt(s, this.W > this.H); st.set([at[0], at[1], s.a], i * 3); });
+      }
+      for (let i = 0; i < MAX_SHELLS; i++) if (!sh[i * 4 + 2]) sh[i * 4 + 2] = 1;      // never a size of nothing to divide by
+      gl.uniform4fv(u.uShell, sh); gl.uniform4fv(u.uShellK, kd); gl.uniform3fv(u.uStar, st);
+      gl.uniform1f(u.uJoin, k ? k.join : 0);
+    }
     this._quad();
 
     // 2. onto the screen

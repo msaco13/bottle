@@ -6,6 +6,7 @@
 // Plain canvas drawing only. No images, nothing to download.
 
 import { M, swash, Camera, SUNS, BOTTLE, CORK, NOTE } from './scene.js';
+import { starAt } from './keeps.js';
 
 // sky from the horizon up, the sea far and near, sand far and near, foam, the sun or moon and its glow: dusk, night, dawn
 const LOOK = [
@@ -108,6 +109,30 @@ export class Flat extends Camera {
       g.restore();
     }
 
+    // ---- the stars this conversation has lit, and the lines that join them
+    const keeps = this.keeps;
+    if (keeps && keeps.stars.length) {
+      const tone = this.mood === 1 ? '230,242,255' : this.mood === 2 ? '255,248,230' : '255,230,190', strength = this.mood === 2 ? 0.55 : 1;
+      const pts = keeps.stars.map((st) => { const at = starAt(st, W > H); return far([at[0], at[1], -Math.sqrt(Math.max(0, 1 - at[0] * at[0] - at[1] * at[1]))]); });
+      g.globalCompositeOperation = 'lighter';
+      g.lineWidth = 1; g.lineCap = 'round';
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], c = pts[i], len = Math.hypot(c[0] - a[0], c[1] - a[1]), lit = Math.min(keeps.stars[i].a, keeps.stars[i - 1].a);
+        if (len < 14 || lit <= 0) continue;
+        const ux = (c[0] - a[0]) / len, uy = (c[1] - a[1]) / len;
+        g.strokeStyle = `rgba(${tone},${((0.20 + 0.20 * keeps.join) * lit * strength).toFixed(3)})`;
+        g.beginPath(); g.moveTo(a[0] + ux * 6, a[1] + uy * 6); g.lineTo(c[0] - ux * 6, c[1] - uy * 6); g.stroke();
+      }
+      pts.forEach((p, i) => {
+        const lit = keeps.stars[i].a * strength * (0.80 + 0.20 * Math.sin(t * 1.7 + i * 2.4));
+        if (lit <= 0) return;
+        const halo = g.createRadialGradient(p[0], p[1], 0, p[0], p[1], 8);
+        halo.addColorStop(0, `rgba(${tone},${Math.min(1, lit).toFixed(3)})`); halo.addColorStop(0.3, `rgba(${tone},${(lit * 0.35).toFixed(3)})`); halo.addColorStop(1, `rgba(${tone},0)`);
+        g.fillStyle = halo; g.fillRect(p[0] - 8, p[1] - 8, 16, 16);
+      });
+      g.globalCompositeOperation = 'source-over';
+    }
+
     // ---- sand, everywhere below the horizon first
     const sand = g.createLinearGradient(0, hy, 0, H);
     sand.addColorStop(0, L.sand[0]); sand.addColorStop(1, L.sand[1]);
@@ -179,6 +204,53 @@ export class Flat extends Camera {
       g.beginPath(); g.ellipse(c[0], c[1], Math.abs(ex[0] - c[0]) + 1, Math.abs(ez[1] - c[1]) + 1, 0, 0, 6.283); g.stroke();
     }
     g.globalAlpha = 1;
+
+    // ---- shells and starfish on the dry sand, laid flat on the ground as the beach is seen
+    if (keeps && keeps.shells.length) {
+      const shade = this.mood === 1 ? [0.40, 0.48, 0.68] : this.mood === 2 ? [1.16, 1.10, 1.04] : [1.0, 0.94, 0.88];
+      const ink = (r, gr, bl) => `rgb(${Math.min(255, Math.round(r * shade[0]))},${Math.min(255, Math.round(gr * shade[1]))},${Math.min(255, Math.round(bl * shade[2]))})`;
+      for (const sh of keeps.shells) {
+        if (sh.a <= 0) continue;
+        const c = P([sh.x, 0, sh.z]), ex = P([sh.x + sh.r, 0, sh.z]), ez = P([sh.x, 0, sh.z + sh.r]);
+        g.save();
+        g.globalAlpha = sh.a;
+        g.transform(ex[0] - c[0], ex[1] - c[1], ez[0] - c[0], ez[1] - c[1], c[0], c[1]);      // from here on, one unit is the shell's own size on the sand
+        g.fillStyle = 'rgba(8,6,14,0.34)';
+        g.beginPath(); g.arc(0.06, 0.24, 0.95, 0, 6.283); g.fill();
+        g.rotate(-sh.turn);
+        const blush = [240 - 51 * sh.tint, 148 + 15 * sh.tint, 128 + 92 * sh.tint];
+        if (sh.kind === 0) {
+          const fan = (a) => 1.62 * (1 - 0.34 * a * a);
+          g.beginPath(); g.moveTo(-0.3, -0.84); g.lineTo(-0.3, -0.62);
+          for (let a = -1.05; a <= 1.051; a += 0.15) g.lineTo(Math.sin(a) * fan(a), -0.72 + Math.cos(a) * fan(a));
+          g.lineTo(0.3, -0.62); g.lineTo(0.3, -0.84); g.closePath();
+          g.fillStyle = ink(240, 222, 200); g.fill();
+          g.fillStyle = ink(blush[0], blush[1], blush[2]); g.globalAlpha = sh.a * 0.4;
+          g.beginPath(); g.arc(0, -0.5, 0.5, 0, 6.283); g.fill();
+          g.globalAlpha = sh.a;
+          g.strokeStyle = ink(190, 156, 132); g.lineWidth = 0.07;
+          g.beginPath();
+          for (let a = -0.9; a <= 0.91; a += 0.3) { g.moveTo(0, -0.72); g.lineTo(Math.sin(a) * fan(a) * 0.94, -0.72 + Math.cos(a) * fan(a) * 0.94); }
+          g.stroke();
+        } else if (sh.kind === 1) {
+          g.fillStyle = ink(244, 230, 208);
+          g.beginPath(); g.ellipse(0, 0, 0.84, 0.74, 0, 0, 6.283); g.fill();
+          g.strokeStyle = ink(150 + 0.2 * blush[0], 92 + 0.2 * blush[1], 70 + 0.2 * blush[2]); g.lineWidth = 0.16; g.lineCap = 'round';
+          g.beginPath();
+          for (let k = 0; k <= 40; k++) { const a = k * 0.33, r = 0.70 * (1 - k / 44); const x = Math.cos(a) * r, y = Math.sin(a) * r * 0.88; if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+          g.stroke();
+        } else {
+          g.beginPath();
+          for (let k = 0; k <= 60; k++) { const a = k / 60 * 6.283, r = 0.30 + 0.70 * Math.pow(0.5 + 0.5 * Math.cos(a * 5), 2.4); if (k) g.lineTo(Math.cos(a) * r, Math.sin(a) * r); else g.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+          g.closePath();
+          g.fillStyle = ink(232, 128, 72); g.fill();
+          g.fillStyle = ink(250, 176, 104);
+          g.beginPath(); g.arc(0, 0, 0.26, 0, 6.283); g.fill();
+        }
+        g.restore();
+      }
+      g.globalAlpha = 1;
+    }
 
     // ---- the lantern, when this phone is listening for bottles
     if (this.lamp) {
