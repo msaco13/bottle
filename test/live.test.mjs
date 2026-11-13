@@ -1,6 +1,7 @@
 // Against the real Bottle database, by hand: node test/live.test.mjs
 // It proves the promises about who can read what. It leaves a few scrambled test rows behind.
 import { newKey, newClaim, threadId, seal, add, list, open, reach, rpc, notify, box, unbox, hex, b64, SERVER } from '../js/thread.js';
+import { newPic, put, get, nameOf } from '../js/pic.js';
 import assert from 'node:assert';
 
 const person = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return b64(a); };     // what the server is shown for one phone
@@ -77,6 +78,25 @@ assert.equal(await rpc('handoff_put', { p_id: id, p_blob: await box('handoff:' +
 assert.deepEqual(await unbox('handoff:' + code, await rpc('handoff_take', { p_id: id })), { s: 'x'.repeat(22) });
 assert.equal(await rpc('handoff_take', { p_id: id }), null, 'a parcel opens once');
 say('the shore copy and the one-time parcel work');
+
+// A picture: left with the server scrambled, fetched back whole, and out of reach of everything else.
+const pic = newPic(), photo = new Uint8Array(2000).map((_, i) => (i * 37) % 256);
+assert.equal(await put(pic, photo, 'image/jpeg'), true);
+const fetched = await get(pic);
+assert.equal(fetched.type, 'image/jpeg');
+assert.deepEqual(Array.from(new Uint8Array(await fetched.blob.arrayBuffer())), Array.from(photo), 'a picture comes back exactly as it went in');
+assert.equal(await put(pic, photo, 'image/jpeg'), true, 'sending the same one twice is harmless');
+assert.equal(await get(newPic()), null, 'a secret that was never used fetches nothing');
+const where = `${SERVER.url}/storage/v1/object/pictures/`, head = { apikey: SERVER.key, authorization: 'Bearer ' + SERVER.key };
+const raw = new Uint8Array(await (await fetch(`${SERVER.url}/storage/v1/object/public/pictures/${await nameOf(pic)}`)).arrayBuffer());
+assert.equal(raw.length, 12 + 1 + photo.length + 16);
+assert(!raw.subarray(13, 60).every((b, i) => b === photo[i]), 'what the server holds is not the picture');
+assert.equal((await fetch(where + 'not-a-picture.jpg', { method: 'POST', headers: { ...head, 'content-type': 'application/octet-stream' }, body: photo })).ok, false, 'only names worked out from a secret are taken');
+assert.equal((await fetch(where + 'a'.repeat(40), { method: 'POST', headers: { ...head, 'content-type': 'image/jpeg' }, body: photo })).ok, false, 'only plain bytes are taken');
+assert.equal((await fetch(where + await nameOf(pic), { method: 'DELETE', headers: head })).ok, false, 'nobody outside can delete one');
+assert.equal((await get(pic)).type, 'image/jpeg', 'and it is still there');
+assert.deepEqual(await (await fetch(`${SERVER.url}/storage/v1/object/list/pictures`, { method: 'POST', headers: { ...head, 'content-type': 'application/json' }, body: JSON.stringify({ prefix: '', limit: 5 }) })).json(), [], 'nor list what is there');
+say('a picture is kept scrambled, comes back whole, and cannot be listed, changed or deleted from outside');
 
 // Notifications: only real push services are accepted, and the private parts are out of reach.
 assert.equal(await rpc('push_save', { p_auth: dad, p_endpoint: 'https://evil.example/push', p_p256dh: 'B'.repeat(87), p_key: 'a'.repeat(22) }), undefined, 'only real push services');

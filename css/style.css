@@ -70,6 +70,25 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
   100% { clip-path: inset(0 0 0 0); transform: none; }
 }
 #words { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* a picture that came in the bottle: on the paper, above the words. A tap shows it larger. */
+#picWrap { display: none; margin: 0 0 16px; }
+#picWrap.on { display: block; }
+#pic { display: none; width: 100%; max-height: 42vh; object-fit: contain; border-radius: 2px; background: rgba(90, 60, 30, 0.10); box-shadow: 0 2px 10px rgba(60, 40, 20, 0.35); cursor: zoom-in; opacity: 0; transition: opacity 0.8s ease; }
+#picWrap.got #pic { display: block; opacity: 1; }
+#picNote { font-family: var(--font); font-size: 14px; line-height: 1.4; opacity: 0.7; padding: 18px 8px; text-align: center; border: 1px dashed rgba(90, 60, 30, 0.35); border-radius: 2px; }
+#picWrap.got #picNote { display: none; }
+#picBig { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(8, 6, 16, 0.94); cursor: zoom-out; }
+#picBig.show { display: flex; }
+#picBigImg { max-width: 100%; max-height: 100%; object-fit: contain; }
+/* on the desk: choosing one, and the small copy that shows it is tucked in */
+#picRow { display: flex; flex-direction: column; gap: 8px; }
+#picAdd { flex: none; padding: 11px 14px; }
+#picShow { display: none; align-items: center; gap: 10px; }
+#picRow.has #picShow { display: flex; }
+#picRow.has #picAdd { display: none; }
+#picThumb { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 240, 220, 0.08); }
+#picSay { flex: 1; min-width: 0; font-size: 14px; line-height: 1.35; color: var(--dim); }
+#picDrop { padding: 6px 4px; text-shadow: none; }
 #words span { display: inline-block; opacity: 0; animation: ink 0.5s ease forwards; }
 /* a wax seal with the sender's initial, pressed on once the words are down */
 #seal { position: absolute; left: 22px; bottom: 16px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 700; color: rgba(255, 220, 210, 0.85); text-shadow: 0 -1px 0 rgba(60, 0, 0, 0.6); background: radial-gradient(circle at 35% 30%, #d8483a, #8f1d18 62%, #6b1210); box-shadow: 0 3px 8px rgba(60, 10, 0, 0.45), inset 0 0 0 3px rgba(255, 255, 255, 0.07), inset 0 -4px 8px rgba(0, 0, 0, 0.35); opacity: 0; transform: rotate(-12deg) scale(1.7); }

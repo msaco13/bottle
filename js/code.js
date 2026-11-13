@@ -10,6 +10,8 @@
 //        key   the secret of the conversation this bottle belongs to (see thread.js)
 //   [message, name, mood, to, key, claim]  added later still, optional:
 //        claim the one seat this bottle carries: the first phone to open it joins the conversation
+//   [message, name, mood, to, key, claim, pic]  added later still, optional:
+//        pic   the secret of a picture that came with the note (see pic.js). With one, the words may be empty.
 // Plain base64 on purpose (no compression): it opens on every phone, old or new.
 //
 // PROMISE: every link ever made must keep opening. New things may only be added
@@ -21,8 +23,8 @@ export const MAX_NAME = 40;
 export const MOODS = { dusk: '', night: 'n', dawn: 'a' };
 const MOOD_OF = { n: 'night', a: 'dawn' };
 
-/** bottle: { message, name, mood, to, key, claim } */
-export function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '') {
+/** bottle: { message, name, mood, to, key, claim, pic } */
+export function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '') {
   const list = [
     String(message).slice(0, MAX_MESSAGE),
     String(name || '').trim().slice(0, MAX_NAME),
@@ -30,6 +32,7 @@ export function encode(message, name = '', mood = 'dusk', to = '', key = '', cla
     String(to || '').trim().slice(0, MAX_NAME),
     /^[A-Za-z0-9_-]{16,32}$/.test(key || '') ? key : '',
     /^[A-Za-z0-9_-]{8,32}$/.test(claim || '') ? claim : '',
+    /^[A-Za-z0-9_-]{22}$/.test(pic || '') ? pic : '',
   ];
   while (list.length > 1 && list[list.length - 1] === '') list.pop();   // old-style links stay exactly as they were
   const bytes = new TextEncoder().encode(JSON.stringify(list));
@@ -38,7 +41,7 @@ export function encode(message, name = '', mood = 'dusk', to = '', key = '', cla
   return '1.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** Returns { message, name, mood, to, key, claim } or null if this is not a bottle. Never throws. */
+/** Returns { message, name, mood, to, key, claim, pic } or null if this is not a bottle. Never throws. */
 export function decode(hash) {
   try {
     let s = String(hash || '').replace(/^#/, '');
@@ -51,8 +54,9 @@ export function decode(hash) {
     const bin = atob(b), bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     const v = JSON.parse(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
-    if (!Array.isArray(v) || typeof v[0] !== 'string' || !v[0].trim()) return null;
     const str = (x) => (typeof x === 'string' ? x : '');
+    const pic = Array.isArray(v) && /^[A-Za-z0-9_-]{22}$/.test(str(v[6])) ? v[6] : '';
+    if (!Array.isArray(v) || typeof v[0] !== 'string' || (!v[0].trim() && !pic)) return null;      // a bottle has words, or a picture, or both
     return {
       message: v[0].slice(0, MAX_MESSAGE),
       name: str(v[1]).slice(0, MAX_NAME),
@@ -60,6 +64,7 @@ export function decode(hash) {
       to: str(v[3]).slice(0, MAX_NAME),
       key: /^[A-Za-z0-9_-]{16,32}$/.test(str(v[4])) ? v[4] : '',
       claim: /^[A-Za-z0-9_-]{8,32}$/.test(str(v[5])) ? v[5] : '',
+      ...(pic ? { pic } : {}),          // only there when the bottle carries one: every older link reads exactly as it always did
     };
   } catch {
     return null;
@@ -67,5 +72,5 @@ export function decode(hash) {
 }
 
 export function linkFor(base, b) {
-  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim);
+  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic);
 }

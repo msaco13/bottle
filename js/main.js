@@ -13,6 +13,7 @@ import { newKey, newClaim, add, list, open, reach } from './thread.js';
 import { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber, mobile, reachOf, setReach } from './shore.js';
 import { standing, light, douse, tend, ios, standalone } from './lantern.js';
 import { count } from './count.js';
+import { newPic, prepare, put, get } from './pic.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -40,7 +41,7 @@ for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
 let shown = bottle;          // the note on the paper right now (the one from the link, or an earlier one from the shelf)
 let seat = '';               // where this phone stands in the link's conversation, once the server has said (see thread.js)
 let asked = false;
-const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (b.name || '');
+const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (b.name || '') && (a.pic || '') === (b.pic || '');
 
 /** The notes of a conversation: what the server says now, joined with what this phone has already seen. */
 async function notesFor(key) {
@@ -77,10 +78,43 @@ function keepSay() {
 /** Put a sky over the shore: 'dusk', 'night' or 'dawn'. */
 function sky(mood) { if (scene) scene.mood = MOOD[mood] || 0; document.documentElement.dataset.mood = MOOD[mood] ? mood : 'dusk'; }
 
+/** Put the picture that came with a note on the paper. The words never wait for it. */
+let picUrl = '', picTurn = 0;
+function showPic(b) {
+  const wrap = $('picWrap'), img = $('pic'), turn = ++picTurn;
+  if (picUrl) { try { URL.revokeObjectURL(picUrl); } catch {} picUrl = ''; }
+  wrap.className = b.pic ? 'on' : '';
+  img.removeAttribute('src');
+  if (!b.pic) return;
+  const say = $('picNote');
+  say.textContent = 'A picture came with this. Bringing it in.';
+  say.onclick = null;
+  const bring = async () => {
+    const got = await get(b.pic);
+    if (turn !== picTurn) return;                      // another note is on the paper by now
+    if (!got) {
+      count('pic', 'could not be brought in', true);
+      say.textContent = 'A picture came with this, but it could not be brought in. Tap here to try again.';
+      say.onclick = () => { say.textContent = 'Trying again.'; say.onclick = null; bring(); };
+      return;
+    }
+    picUrl = URL.createObjectURL(got.blob);
+    img.onload = () => { if (turn === picTurn) wrap.classList.add('got'); };
+    img.src = picUrl;
+    count('pic', 'shown: ' + (got.type === 'image/gif' ? 'a GIF' : 'a photo') + ', ' + Math.round(got.blob.size / 1024) + ' KB');
+  };
+  bring();
+}
+
+// A tap on the picture shows it as large as the screen allows. A tap there puts it away.
+$('pic').addEventListener('click', () => { if (!picUrl) return; $('picBigImg').src = picUrl; $('picBig').classList.add('show'); });
+$('picBig').addEventListener('click', () => { $('picBig').classList.remove('show'); $('picBigImg').removeAttribute('src'); });
+
 function showLetter(instant, note) {
   if (note) shown = note;
   const b = shown;
   sky(b.mood);
+  showPic(b);
   const letter = $('letter'), paper = $('paper');
   // replay the unrolling when a different note is put on the paper
   letter.classList.remove('show'); void paper.offsetWidth;
@@ -252,6 +286,43 @@ $('homeClose').onclick = () => {
 // ---------------------------------------------------------------- your shore (the people) and the writing desk
 
 let deskReady = false, deskCtx = {}, madeLink = '', madeTo = '', deskMood = 'dusk';
+// The picture being tucked into the bottle on the desk, if any: { secret, state: 'working' | 'ready' | 'failed', done: a promise of true or false, url }
+let deskPic = null;
+function dropPic() {
+  if (deskPic && deskPic.url) { try { URL.revokeObjectURL(deskPic.url); } catch {} }
+  deskPic = null;
+  $('picRow').classList.remove('has');
+  $('picThumb').removeAttribute('src');
+  $('picFile').value = '';
+}
+/** A picture was chosen. Show it at once, then make it ready and leave it with the server while the note is being written. */
+function tuckPic(file) {
+  dropPic();
+  if (!file) return;
+  const mine = deskPic = { secret: '', state: 'working', url: URL.createObjectURL(file), done: null };
+  $('picThumb').src = mine.url;
+  $('picRow').classList.add('has');
+  $('picSay').textContent = 'Tucking it in.';
+  mine.done = (async () => {
+    let why = '';
+    try {
+      const made = await prepare(file);
+      const secret = newPic();
+      if (await put(secret, made.bytes, made.type)) { mine.secret = secret; mine.state = 'ready'; mine.kb = Math.round(made.bytes.length / 1024); mine.gif = made.type === 'image/gif'; }
+      else why = 'send';
+    } catch (e) { why = (e && e.message) || 'open'; }
+    if (mine.state !== 'ready') mine.state = 'failed';
+    if (deskPic === mine) {
+      $('picSay').textContent = mine.state === 'ready' ? (mine.gif ? 'Your GIF is tucked in.' : 'Your picture is tucked in.')
+        : why === 'big' ? 'That GIF is too big to send (the most is about 3 MB). Try a shorter one.'
+        : why === 'kind' ? 'That is not a picture. Choose a photo or a GIF.'
+        : why === 'open' ? 'This phone could not read that picture. Try another.'
+        : 'It could not be sent just now. Remove it and try again.';
+    }
+    count('pic', mine.state === 'ready' ? `tucked in: ${mine.gif ? 'a GIF' : 'a photo'}, ${mine.kb} KB` : 'not tucked in: ' + why, true);
+    return mine.state === 'ready';
+  })();
+}
 let reachAsked = true;       // false once the server has shown it cannot say who is reachable: then stop asking
 const when = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
 const whose = (to) => (to ? to + '’s' : 'their');
@@ -297,7 +368,7 @@ function pickWords(count) {
   $('newOne').disabled = on && n < 2;
   if (on) $('homeLede').textContent = 'Tap everyone this bottle is for. Each of them gets their own.';
 }
-const openNote = (f) => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k }); };
+const openNote = (f) => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k, pic: f.open.pic }); };
 
 // Your shore: everyone this phone sends bottles to, news first. A name sends them a bottle; a waiting bottle opens.
 // Drawn at once from what the phone remembers, then again when the server has answered.
@@ -358,7 +429,7 @@ async function follow(id) {
   const pick = theirs.filter((n) => n.at > (th.s || 0)).pop() || theirs.pop() || all.pop();
   if (!pick) return home();
   count('followed', 'a notification was tapped');
-  location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k }));
+  location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k, pic: pick.pic }));
 }
 
 /** The words on the desk: who it is for, and whether it will go straight there or by a link. */
@@ -410,6 +481,7 @@ function desk(ctx) {
   const key = deskCtx.key;
   if (key) learnReach(key).then((changed) => { if (changed && deskCtx.key === key && !compose.classList.contains('done')) deskWords(); });
   msg.value = '';
+  dropPic();
   try { who.value = myName(); } catch {}
   for (const c of $('moods').children) c.classList.toggle('on', c.dataset.mood === ((shown && shown.mood) || 'dusk'));
   deskMood = (shown && shown.mood) || 'dusk';
@@ -447,7 +519,7 @@ function made(how, to, number, extra) {
  * One note, a bottle each. Every person gets their own bottle in their own conversation, with its own seat.
  * It goes straight to anyone whose lantern is lit. Each of the others gets a button that texts or shares their link.
  */
-function sendMany(message, name) {
+function sendMany(message, name, pic) {
   const who = deskCtx.many, el = $('made'), list = $('sentList');
   const run = sendMany.run = (sendMany.run || 0) + 1;
   madeLink = ''; madeTo = '';
@@ -470,7 +542,7 @@ function sendMany(message, name) {
   who.forEach((p, i) => {
     let claim = '';
     try { claim = newClaim(); } catch {}
-    const b = { message, name, mood: deskMood, to: p.to, key: p.key, claim };
+    const b = { message, name, mood: deskMood, to: p.to, key: p.key, claim, pic };
     const link = linkFor(location.origin + location.pathname, b), number = numberOf(p.key);
     const row = document.createElement('div'); row.className = 'sentRow';
     const head = document.createElement('span'); head.className = 'rowWho'; head.textContent = p.to || 'Someone';
@@ -480,9 +552,9 @@ function sendMany(message, name) {
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(p.key, p.to, 0);
-    keep(p.key, [{ message, name, mood: deskMood, to: p.to, id, at: Date.now() + i }]);
+    keep(p.key, [{ message, name, mood: deskMood, to: p.to, id, at: Date.now() + i, ...(pic ? { pic } : {}) }]);
     // one after another, a moment apart, so the server is never asked for too much at once
-    wait(i * 350).then(() => token()).then((auth) => add(auth, p.key, { m: message, n: name, mood: deskMood, to: p.to, id, t: Date.now() }, claim)).then(async (r) => {
+    wait(i * 350).then(() => token()).then((auth) => add(auth, p.key, { m: message, n: name, mood: deskMood, to: p.to, id, t: Date.now(), ...(pic ? { p: pic } : {}) }, claim)).then(async (r) => {
       if (!r.ok) count('f_save', 'the server did not take the note', true);
       const reached = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
       if (reached) setReach(p.key, { j: 1, l: 1 }); else if (r.ok && reachOf(p.key).l) setReach(p.key, { l: 0 });
@@ -525,18 +597,27 @@ function wire() {
     try { await navigator.share({ title: 'A message in a bottle', text: sayWith(madeTo), url: madeLink }); count('share', 'sent', true); return true; }
     catch (e) { count('share', (e && e.name) === 'AbortError' ? 'closed without sending' : 'failed: ' + ((e && e.name) || ''), true); return false; }
   };
-  $('desk').addEventListener('submit', (e) => {
+  $('desk').addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!msg.value.trim()) { msg.focus(); return; }
+    if (!msg.value.trim() && !deskPic) { msg.focus(); return; }
+    // A picture still on its way is waited for. One that would not go is never left out without a word.
+    if (deskPic && deskPic.state === 'working') {
+      const label = $('make').textContent;
+      $('make').disabled = true; $('make').textContent = 'Tucking the picture in';
+      await deskPic.done;
+      $('make').disabled = false; $('make').textContent = label;
+    }
+    if (deskPic && deskPic.state !== 'ready') { $('picShow').scrollIntoView({ block: 'center' }); return; }
+    const pic = deskPic ? deskPic.secret : '';
     const name = who.value.trim();
     setName(name);
-    if (deskCtx.many) { sendMany(msg.value.trim(), name); return; }
+    if (deskCtx.many) { sendMany(msg.value.trim(), name, pic); return; }
     let key = deskCtx.key || '', claim = '';
     try { if (!key) key = newKey(); claim = newClaim(); } catch {}
     const to = deskCtx.to || $('forWho').value.trim();
     const number = mobile($('mobile').value) || numberOf(key);
     // The link carries the note, the conversation's key, and one seat: whoever opens it first is the one it was for.
-    const b = { message: msg.value.trim(), name, mood: deskMood, to, key, claim };
+    const b = { message: msg.value.trim(), name, mood: deskMood, to, key, claim, pic };
     madeTo = to;
     const link = madeLink = linkFor(location.origin + location.pathname, b);
     // A reply adds to a shore the two of you already share. Say what it will leave there.
@@ -545,7 +626,7 @@ function wire() {
     // If their lantern is lit the bottle goes straight to their shore and their phone is told. No link to text.
     const direct = !!(deskCtx.key && reachOf(key).l);
     made(direct ? 'sending' : 'link', to, number, leaves);
-    count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters`, true);
+    count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters${pic ? ', with a picture' : ''}`, true);
     // Going by link: Messages or the share sheet opens straight away, while this is still the same tap.
     if (!direct) {
       if (number) { count('share', 'opened Messages, already addressed', true); try { location.href = $('text').href; } catch {} }
@@ -556,8 +637,8 @@ function wire() {
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(key, to, 0, number);
-    keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now() }]);
-    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now() }, claim)).then(async (r) => {
+    keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now(), ...(pic ? { pic } : {}) }]);
+    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now(), ...(pic ? { p: pic } : {}) }, claim)).then(async (r) => {
       if (!r.ok) count('f_save', 'the server did not take the note', true);
       // Was the other phone told? The sender is given a few seconds to answer.
       const told = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
@@ -583,6 +664,9 @@ function wire() {
     });
   });
   for (const c of $('moods').children) c.addEventListener('click', () => { deskMood = c.dataset.mood; sky(deskMood); for (const o of $('moods').children) o.classList.toggle('on', o === c); });
+  $('picAdd').addEventListener('click', () => $('picFile').click());
+  $('picFile').addEventListener('change', () => tuckPic($('picFile').files && $('picFile').files[0]));
+  $('picDrop').addEventListener('click', () => { dropPic(); count('pic', 'removed', true); });
   $('link').addEventListener('focus', () => $('link').select());
   $('copy').addEventListener('click', async () => {
     let ok = false;

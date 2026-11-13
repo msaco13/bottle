@@ -77,4 +77,19 @@ for (const junk of ['', '#', '#hello', '#1.', '#1.!!!!', '#1.eyJ4IjoxfQ', '#2.ab
 // a link with a line break pasted into it still opens
 const e = encode('wrapped by a chat app', 'Sam');
 assert.equal(decode('#' + e.slice(0, 20) + '\n ' + e.slice(20)).name, 'Sam');
+// a picture: one more optional thing on the end. With one, the words may be empty.
+{
+  const PIC = 'pppppppppppppppppppppp';
+  const withPic = decode(encode('Look at this', 'Mike', 'night', 'Dad', KEY, 'seatseatseatseat', PIC));
+  assert.deepEqual(withPic, { message: 'Look at this', name: 'Mike', mood: 'night', to: 'Dad', key: KEY, claim: 'seatseatseatseat', pic: PIC });
+  assert.equal(decode(encode('', 'Mike', 'dusk', '', '', '', PIC)).pic, PIC, 'a picture with no words is still a bottle');
+  assert.equal(decode(encode('', 'Mike', 'dusk', '', '', '', PIC)).message, '');
+  assert.equal(decode(encode('', 'Mike')), null, 'no words and no picture is not a bottle');
+  assert.equal('pic' in decode(encode('words', 'Mike', 'dusk', '', '', '', 'not a picture')), false, 'a picture that is not one is dropped');
+  assert.equal('pic' in decode(SENT[1][0]), false, 'an old link has never heard of pictures');
+  assert.equal(encode('m', 'n', 'dusk', 't', KEY, 'seatseatseatseat'), encode('m', 'n', 'dusk', 't', KEY, 'seatseatseatseat', ''), 'no picture, no seventh field');
+  assert.equal(decode(linkFor('https://a.test/', { message: 'hi', pic: PIC }).split('#')[1]).pic, PIC);
+  const longest = linkFor('https://msaco13.github.io/bottle/', { message: 'x'.repeat(MAX_MESSAGE), name: 'N'.repeat(40), mood: 'night', to: 'T'.repeat(40), key: KEY, claim: 'seatseatseatseat', pic: PIC });
+  assert(longest.length < 1100, 'the longest link with a picture: ' + longest.length);
+}
 console.log('code ok');

@@ -70,7 +70,7 @@ export const seal = (key, note) => box(key, note);
 /** Unscramble one. null if it is not ours or has been tampered with. */
 export async function unseal(key, body) {
   const v = await unbox(key, body);
-  return v && typeof v.m === 'string' ? v : null;
+  return v && typeof v.m === 'string' ? v : null;       // v.p, if there, is the secret of a picture that came with it
 }
 
 /** Ask the server something. Resolves to its answer (which may be null), or undefined if it could not be asked. */
@@ -164,7 +164,9 @@ export async function list(auth, key) {
       const v = await unseal(key, row.body);
       if (!v || seen.has(v.id)) continue;
       seen.add(v.id);
-      out.push({ message: v.m, name: v.n || '', mood: v.mood || 'dusk', to: v.to || '', id: v.id, at: Date.parse(row.created_at) || v.t || 0 });
+      const note = { message: v.m, name: v.n || '', mood: v.mood || 'dusk', to: v.to || '', id: v.id, at: Date.parse(row.created_at) || v.t || 0 };
+      if (typeof v.p === 'string' && /^[A-Za-z0-9_-]{22}$/.test(v.p)) note.pic = v.p;
+      out.push(note);
     }
     return out.sort((a, b) => a.at - b.at);
   } catch { return null; }
