@@ -165,7 +165,17 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 .person .row { flex: 1; min-width: 0; }
 .peek { flex: none; appearance: none; font: inherit; font-size: 13.5px; color: var(--dim); background: rgba(255, 240, 220, 0.05); border: 1px solid var(--line); border-radius: 14px; padding: 0 12px; cursor: pointer; }
 .rowWho { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-#install, #homeBack, #toHome, #text, #several, #editPeople { display: none; }
+#install, #homeBack, #toHome, #text, #several, #editPeople, #gatherB { display: none; }
+/* a beach many people fill: what it is for, on the desk; its two links, once it is started; the ones this phone started, on the shore */
+#occasionRow { display: none; flex-direction: column; gap: 8px; }
+#desk.gather #occasionRow { display: flex; }
+#gatherSay { color: var(--gold); margin: 0; }
+#gatherSay:empty, #gatherCount:empty, #gathers:empty { display: none; }
+#gathers { display: flex; flex-direction: column; gap: 8px; }
+#gatherBox, #beachPart { display: none; flex-direction: column; gap: 10px; }
+#made.gather #gatherBox, #made.gather #beachPart { display: flex; }
+#made.gather #byLink, #made.gather #showLink, #made.gather #try { display: none; }
+#gatherCount { color: var(--gold); }
 /* renaming or removing someone: the name becomes a field, with the way to remove them beside it */
 .person input.rowEdit { flex: 1; min-width: 0; font-size: 16.5px; padding: 11px 14px; }
 .peek.sure { color: #ffd0b8; border-color: rgba(255, 150, 120, 0.6); }

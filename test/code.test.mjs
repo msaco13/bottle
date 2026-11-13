@@ -92,4 +92,15 @@ assert.equal(decode('#' + e.slice(0, 20) + '\n ' + e.slice(20)).name, 'Sam');
   const longest = linkFor('https://msaco13.github.io/bottle/', { message: 'x'.repeat(MAX_MESSAGE), name: 'N'.repeat(40), mood: 'night', to: 'T'.repeat(40), key: KEY, claim: 'seatseatseatseat', pic: PIC });
   assert(longest.length < 1100, 'the longest link with a picture: ' + longest.length);
 }
+// a beach many people fill for one person: an eighth optional field, and its link needs no words of its own
+{
+  const invite = decode(encode('Happy 40th', 'Mike', 'dusk', 'Ana', KEY, '', '', 'i'));
+  assert.deepEqual(invite, { message: 'Happy 40th', name: 'Mike', mood: 'dusk', to: 'Ana', key: KEY, claim: '', g: 'i' });
+  assert.equal(decode(encode('', 'Mike', 'dusk', 'Ana', KEY, '', '', 'o')).g, 'o', 'a beach with nothing said about it is still a beach');
+  assert.equal(decode(encode('', 'Mike', 'dusk', 'Ana', '', '', '', 'o')), null, 'but not without its key');
+  assert.equal('g' in decode(encode('words', 'Mike', 'dusk', 'Ana', KEY, '', '', 'x')), false, 'anything else there is dropped');
+  assert.equal('g' in decode(SENT[1][0]), false, 'an old link has never heard of beaches');
+  assert.equal(encode('m', 'n', 'dusk', 't', KEY, 'seatseatseatseat', 'pppppppppppppppppppppp'), encode('m', 'n', 'dusk', 't', KEY, 'seatseatseatseat', 'pppppppppppppppppppppp', ''), 'no beach, no eighth field');
+  assert.equal(decode(linkFor('https://a.test/', { message: 'Farewell', name: 'Mike', to: 'Ana', key: KEY, g: 'i' }).split('#')[1]).g, 'i');
+}
 console.log('code ok');

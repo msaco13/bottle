@@ -14,7 +14,8 @@ const results = [];
 const check = (name, ok, detail = '') => { results.push([ok, name, detail]); console.log((ok ? 'ok    ' : 'WRONG ') + name + (detail ? '  | ' + detail : '')); };
 
 const shelf = new Map();          // the pictures the pretend server is holding, by name
-async function phone({ reach, sent = 0, addOk = true, seed, ios = false, picOk = true, at = '?dev' }) {
+const open = new Map();           // and the beaches many people are filling: conversation number -> rows
+async function phone({ reach, sent = 0, addOk = true, seed, ios = false, picOk = true, listOk = true, at = '?dev' }) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true,
     userAgent: ios ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1' : undefined });
   const page = await ctx.newPage(); page.setDefaultTimeout(60000);
@@ -39,7 +40,14 @@ async function phone({ reach, sent = 0, addOk = true, seed, ios = false, picOk =
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } });
     if (fn === 'bottle_reach') return reach === undefined ? json({ message: 'no such function' }, 404) : json(reach);
     if (fn === 'bottle_add') return addOk ? json('ok') : json({ message: 'down' }, 500);
-    if (fn === 'bottle_list') return json([]);
+    if (fn === 'add_bottle') {
+      if (!addOk) return json({ message: 'down' }, 500);
+      const rows = open.get(body.p_thread) || [];
+      rows.push({ id: rows.length + 1, body: body.p_body, created_at: new Date(Date.now() + rows.length * 1000).toISOString() });
+      open.set(body.p_thread, rows);
+      return json('ok');
+    }
+    if (fn === 'bottle_list') return listOk ? json([...(open.get(body.p_thread) || [])].reverse()) : json({ message: 'down' }, 500);
     if (fn === 'bottle_open') return json('member');
     if (fn === 'notify') return json({ sent: typeof sent === 'function' ? sent(calls.filter((c) => c === 'notify:bottle').length) : sent, failed: 0 });
     if (fn === 'shore_get') return json(null);
@@ -330,6 +338,98 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   await n.page.evaluate(() => { window.dev.hold = false; window.dev.frame(1 / 60); window.dev.hold = true; });
   check('someone opening the real link is not hurried', !(await n.page.evaluate(() => document.getElementById('skip').classList.contains('show'))));
   await n.ctx.close();
+}
+// 11. a beach many people fill for one person: started, added to from an invitation, and opened bottle by bottle
+{
+  const { linkFor } = await import('../js/code.js');
+  const { threadId, seal } = await import('../js/thread.js');
+  const rel = (l, q = '?dev') => l.replace('http://localhost:8899/', '').replace('#', q + '#');
+  // the one who starts it
+  const p = await phone({});
+  check('the desk offers a beach from everyone', await p.shown('gatherB'));
+  await p.page.click('#gatherB'); await p.page.waitForTimeout(200);
+  check('starting a beach asks who it is for and what for', (await p.text('deskTitle')) === 'A beach full of bottles' && await p.shown('occasion') && await p.shown('forWho') && (await p.text('make')) === 'Start the beach');
+  await p.page.fill('#who', 'Mike'); await p.page.fill('#msg', 'Forty looks good on you.');
+  await p.page.click('#make'); await p.page.waitForTimeout(300);
+  check('it will not start without saying who it is for', (await p.text('gatherSay')) === 'Say who the beach is for.' && await p.shown('desk'));
+  await p.page.fill('#forWho', 'Ana'); await p.page.fill('#occasion', 'Happy 40th');
+  await p.page.click('#make');
+  await p.page.waitForFunction(() => document.getElementById('made').classList.contains('gather'), null, { timeout: 15000 });
+  await p.page.waitForTimeout(500);
+  check('started: two things to pass on, and the first bottle counted', (await p.text('madeTitle')) === 'The beach is started' && await p.shown('inviteCopy') && await p.shown('beachCopy') && (await p.text('gatherCount')) === '1 bottle so far, from Mike.', await p.text('gatherCount'));
+  check('the links speak of the person', (await p.text('beachLabel')) === '2. When it is time, send Ana the beach' && (await p.text('beachCopy')) === 'Copy the link to Ana\u2019s beach');
+  await p.shot('11-started');
+  const g = await p.page.evaluate(() => JSON.parse(localStorage.getItem('bottle-gathers'))[0]);
+  check('this phone remembers the beach it started', g.to === 'Ana' && g.o === 'Happy 40th' && /^[A-Za-z0-9_-]{22}$/.test(g.k));
+  await p.page.click('#again'); await p.page.waitForTimeout(500);
+  check('and finds it again on its shore', await p.shown('home') && (await p.text('gathers')).startsWith('A beach for Ana'), await p.text('gathers'));
+  await p.page.click('#gathers .row'); await p.page.waitForTimeout(400);
+  check('a tap brings its links back', (await p.text('madeTitle')) === 'The beach for Ana' && await p.shown('beachCopy'));
+  await p.ctx.close();
+  const invite = linkFor('http://localhost:8899/', { message: 'Happy 40th', name: 'Mike', to: 'Ana', key: g.k, g: 'i' });
+  const beachLink = linkFor('http://localhost:8899/', { message: 'Happy 40th', name: 'Mike', to: 'Ana', key: g.k, g: 'o' });
+  // two people with the invitation
+  for (const [who, words, sky] of [['Dad', 'Proud of you, kiddo.', 'night'], ['Jorge', 'Drinks are on you.', 'dawn']]) {
+    const c = await phone({ at: rel(invite) });
+    await c.page.waitForTimeout(600);
+    check(who + ': the invitation says whose beach and what for', (await c.text('deskTitle')) === 'A bottle for Ana' && (await c.text('deskLede')).startsWith('Mike is filling a beach with bottles for Ana: Happy 40th.') && (await c.text('make')) === 'Add my bottle', await c.text('deskLede'));
+    check(who + ': and how many are in so far', /^\d bottles? so far, from Mike/.test(await c.text('gatherSay')), await c.text('gatherSay'));
+    check(who + ': nothing but a name and a note is asked for', !(await c.shown('forRow')) && !(await c.shown('mobileRow')) && !(await c.shown('occasion')));
+    await c.page.fill('#who', who); await c.page.fill('#msg', words);
+    await c.page.click(`#moods [data-mood=${sky}]`);
+    if (who === 'Dad') await c.shot('11-invited');
+    await c.page.click('#make');
+    await c.page.waitForFunction(() => document.getElementById('made').classList.contains('joined'), null, { timeout: 15000 });
+    await c.page.waitForTimeout(400);
+    check(who + ': the bottle is in, and only the invitation is offered on', (await c.text('madeTitle')) === 'Your bottle is in the water' && await c.shown('inviteCopy') && !(await c.shown('beachCopy')), await c.text('gatherCount'));
+    await c.ctx.close();
+  }
+  check('three bottles are with the server, scrambled', (open.get(await threadId(g.k)) || []).length === 3 && !JSON.stringify(open.get(await threadId(g.k))).includes('Proud'));
+  // a server that will not take a bottle
+  const d = await phone({ at: rel(invite), addOk: false });
+  await d.page.fill('#msg', 'This one will not go.'); await d.page.click('#make');
+  await d.page.waitForFunction(() => /could not be added/.test(document.getElementById('gatherSay').textContent), null, { timeout: 30000 });
+  check('a bottle the server will not take is said so, and the words are kept', await d.shown('desk') && (await d.page.evaluate(() => document.getElementById('msg').value)) === 'This one will not go.');
+  await d.ctx.close();
+  // the person it is for
+  const a = await phone({ at: rel(beachLink) });
+  await a.page.waitForTimeout(500);
+  await a.page.evaluate(() => { window.dev.hold = false; window.dev.run(0.3); window.dev.hold = true; });
+  check('the beach says how many washed up', (await a.text('hint')) === '3 bottles washed up for you. Touch the water', await a.text('hint'));
+  const bring = async () => { await a.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(1); window.dev.hold = true; }); await a.page.touchscreen.tap(20, 20); await a.page.waitForTimeout(900); return [await a.text('dear'), await a.text('words'), await a.text('sign'), await a.text('reply'), await a.text('keepNote')]; };
+  let got = await bring();
+  check('the first bottle is the one who started it', got[0] === 'For Ana' && got[1] === 'Forty looks good on you.' && got[2] === '~ Mike' && got[3] === 'Bring in the next bottle (2 left)' && got[4].startsWith('1 of 3 opened.'), got.join(' | '));
+  await a.page.click('#reply'); await a.page.waitForTimeout(300);
+  check('the next one rides in: the note is put away and the story starts again', (await a.page.evaluate(() => !document.getElementById('letter').classList.contains('show') && ['adrift', 'arrive'].includes(window.dev.story.state))));
+  check('and it comes under its own sky', (await a.page.evaluate(() => document.documentElement.dataset.mood)) === 'night');
+  got = await bring();
+  check('the second bottle', got[1] === 'Proud of you, kiddo.' && got[2] === '~ Dad' && got[3] === 'Bring in the last bottle' && got[4].startsWith('2 of 3 opened.'), got.join(' | '));
+  await a.page.click('#reply'); await a.page.waitForTimeout(300);
+  got = await bring();
+  check('the last bottle, and what comes after', got[1] === 'Drinks are on you.' && got[3] === 'Write a bottle of your own' && (await a.text('sealNote')) === 'That was the last one. 3 bottles, from 3 people.', got.join(' | ') + ' | ' + await a.text('sealNote'));
+  check('each one opened left a shell and lit a star', await a.page.evaluate(() => window.dev.scene.keeps.shells.length === 3 && window.dev.scene.keeps.stars.length === 3));
+  check('the ones opened can be read again', (await a.page.evaluate(() => [...document.querySelectorAll('#shelf .chip')].map((c) => c.textContent).join(','))) === 'Jorge,Dad,Mike');
+  check('no errors', !a.errs.length, a.errs.join(' ; '));
+  await a.ctx.close();
+  // a dozen in the water, for a look
+  const KEY2 = 'gggggggggggggggggggggg', rows = [];
+  for (let i = 0; i < 12; i++) rows.push({ id: i + 1, body: await seal(KEY2, { m: 'Bottle ' + (i + 1), n: 'Friend ' + (i + 1), mood: 'dusk', to: 'Ana', id: 'f' + i, t: now + i }), created_at: new Date(now + i * 1000).toISOString() });
+  open.set(await threadId(KEY2), rows);
+  for (const flat of ['', '&flat']) {
+    const m = await phone({ at: rel(linkFor('http://localhost:8899/', { message: '', name: 'Mike', to: 'Ana', key: KEY2, g: 'o' }), '?dev' + flat) });
+    await m.page.waitForTimeout(500);
+    await m.page.evaluate(() => { window.dev.hold = false; window.dev.run(0.5); window.dev.hold = true; });
+    check((flat ? 'flat' : '3D') + ': a dozen wait in the water', (await m.text('hint')) === '12 bottles washed up for you. Touch the water' && !m.errs.length, m.errs.join(' ; '));
+    await m.shot('11-dozen' + (flat ? '-flat' : ''));
+    await m.ctx.close();
+  }
+  // the server cannot be reached
+  const x = await phone({ at: rel(beachLink), listOk: false });
+  await x.page.waitForTimeout(400);
+  await x.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(1); window.dev.hold = true; });
+  await x.page.waitForTimeout(700);
+  check('a beach that cannot be fetched says so and offers to try again', (await x.text('words')).startsWith('The bottles could not be brought in just now.') && (await x.text('reply')) === 'Try again');
+  await x.ctx.close();
 }
 await browser.close();
 const bad = results.filter((r) => !r[0]);

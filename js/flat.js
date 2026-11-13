@@ -5,7 +5,7 @@
 //
 // Plain canvas drawing only. No images, nothing to download.
 
-import { M, swash, Camera, SUNS, BOTTLE, CORK, NOTE } from './scene.js';
+import { M, swash, Camera, SUNS, BOTTLE, CORK, NOTE, CORK_SEAT, NOTE_SEAT } from './scene.js';
 import { starAt } from './keeps.js';
 
 // sky from the horizon up, the sea far and near, sand far and near, foam, the sun or moon and its glow: dusk, night, dawn
@@ -282,7 +282,8 @@ export class Flat extends Camera {
     g.fillStyle = vig; g.fillRect(0, 0, W, H);
     if (s.dim > 0) { g.fillStyle = `rgba(6,5,14,${Math.min(0.75, s.dim * 0.55)})`; g.fillRect(0, 0, W, H); }
 
-    if (!s.bottle) return;
+    const others = s.others && s.others.length ? [...s.others].sort((m, n) => m[14] - n[14]).slice(-14) : [];      // on a beach many people have filled: the bottles still waiting, farthest first
+    if (!s.bottle && !others.length) return;
 
     // ---- the bottle, the note inside it, the cork. Each is a shape turned about its own axis, seen from the side.
     const shape = (m, profile) => {
@@ -309,40 +310,44 @@ export class Flat extends Camera {
       stops.forEach(([o, c]) => gr.addColorStop(o, c));
       return gr;
     };
-    const glass = shape(s.bottle, BOTTLE);
-    // the glass, seen through
-    trace(glass);
-    g.globalAlpha = 0.5;
-    g.fillStyle = across(glass, 5, [[0, L.glass[2]], [0.22, L.glass[1]], [0.5, L.glass[0]], [0.78, L.glass[1]], [1, L.glass[2]]]);
-    g.fill();
-    g.globalAlpha = 1;
-    // the note: rolled paper with a red thread
-    if (s.note) {
-      const note = shape(s.note, NOTE);
-      trace(note);
-      g.fillStyle = across(note, 3, [[0, '#b9a98a'], [0.3, L.paper], [0.62, L.paper], [1, '#a8987c']]);
+    const whole = (bottleM, noteM, corkM) => {
+      const glass = shape(bottleM, BOTTLE);
+      // the glass, seen through
+      trace(glass);
+      g.globalAlpha = 0.5;
+      g.fillStyle = across(glass, 5, [[0, L.glass[2]], [0.22, L.glass[1]], [0.5, L.glass[0]], [0.78, L.glass[1]], [1, L.glass[2]]]);
       g.fill();
-      const mid = P(M.point(s.note, [0, -0.10, 0])), w = note.pts[3][2];
-      g.strokeStyle = '#a32a22'; g.lineWidth = Math.max(1.5, w * 0.22);
-      g.beginPath(); g.moveTo(mid[0] + note.nx * w, mid[1] + note.ny * w); g.lineTo(mid[0] - note.nx * w, mid[1] - note.ny * w); g.stroke();
-    }
-    // the cork
-    if (s.cork) {
-      const cork = shape(s.cork, CORK);
-      trace(cork);
-      g.fillStyle = across(cork, 3, [[0, '#6e4a26'], [0.4, '#c09058'], [1, '#70491f']]);
+      g.globalAlpha = 1;
+      // the note: rolled paper with a red thread
+      if (noteM) {
+        const note = shape(noteM, NOTE);
+        trace(note);
+        g.fillStyle = across(note, 3, [[0, '#b9a98a'], [0.3, L.paper], [0.62, L.paper], [1, '#a8987c']]);
+        g.fill();
+        const mid = P(M.point(noteM, [0, -0.10, 0])), w = note.pts[3][2];
+        g.strokeStyle = '#a32a22'; g.lineWidth = Math.max(1.5, w * 0.22);
+        g.beginPath(); g.moveTo(mid[0] + note.nx * w, mid[1] + note.ny * w); g.lineTo(mid[0] - note.nx * w, mid[1] - note.ny * w); g.stroke();
+      }
+      // the cork
+      if (corkM) {
+        const cork = shape(corkM, CORK);
+        trace(cork);
+        g.fillStyle = across(cork, 3, [[0, '#6e4a26'], [0.4, '#c09058'], [1, '#70491f']]);
+        g.fill();
+      }
+      // the glass, its surface: a darker rim, a bright edge, and the long streak of light every bottle carries
+      trace(glass);
+      g.fillStyle = across(glass, 5, [[0, 'rgba(8,40,36,0.55)'], [0.16, 'rgba(8,40,36,0)'], [0.84, 'rgba(8,40,36,0)'], [1, 'rgba(8,40,36,0.6)']]);
       g.fill();
-    }
-    // the glass, its surface: a darker rim, a bright edge, and the long streak of light every bottle carries
-    trace(glass);
-    g.fillStyle = across(glass, 5, [[0, 'rgba(8,40,36,0.55)'], [0.16, 'rgba(8,40,36,0)'], [0.84, 'rgba(8,40,36,0)'], [1, 'rgba(8,40,36,0.6)']]);
-    g.fill();
-    g.strokeStyle = this.mood === 1 ? 'rgba(170,215,225,0.55)' : 'rgba(235,255,248,0.6)';
-    g.lineWidth = 1.4; g.stroke();
-    g.strokeStyle = this.mood === 1 ? 'rgba(200,225,255,0.5)' : 'rgba(255,255,255,0.72)';
-    g.lineWidth = Math.max(1.5, glass.pts[5][2] * 0.13); g.lineCap = 'round';
-    g.beginPath();
-    for (let i = 3; i <= 8; i++) { const p = glass.pts[i], k = 0.58; if (i === 3) g.moveTo(p[0] + glass.nx * p[2] * k, p[1] + glass.ny * p[2] * k); else g.lineTo(p[0] + glass.nx * p[2] * k, p[1] + glass.ny * p[2] * k); }
-    g.stroke();
+      g.strokeStyle = this.mood === 1 ? 'rgba(170,215,225,0.55)' : 'rgba(235,255,248,0.6)';
+      g.lineWidth = 1.4; g.stroke();
+      g.strokeStyle = this.mood === 1 ? 'rgba(200,225,255,0.5)' : 'rgba(255,255,255,0.72)';
+      g.lineWidth = Math.max(1.5, glass.pts[5][2] * 0.13); g.lineCap = 'round';
+      g.beginPath();
+      for (let i = 3; i <= 8; i++) { const p = glass.pts[i], k = 0.58; if (i === 3) g.moveTo(p[0] + glass.nx * p[2] * k, p[1] + glass.ny * p[2] * k); else g.lineTo(p[0] + glass.nx * p[2] * k, p[1] + glass.ny * p[2] * k); }
+      g.stroke();
+    };
+    for (const m of others) whole(m, M.mul(m, M.translate(0, NOTE_SEAT, 0)), M.mul(m, M.translate(0, CORK_SEAT, 0)));
+    if (s.bottle) whole(s.bottle, s.note, s.cork);
   }
 }

@@ -16,6 +16,14 @@ const HOLD = 0.50;        // and in your hands
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ease = (t) => t * t * (3 - 2 * t);
 
+/** On a beach with many bottles: where the i-th one still waiting bobs out in the water, at time t. */
+export function floating(i, t) {
+  const z = -1.1 - ((i * 0.381966 + 0.15) % 1) * 5.6 + 0.10 * Math.sin(t * 0.23 + i);          // spread from just past the surf to well out, so they do not bunch
+  const x = (((i * 0.618034 + 0.3) % 1) * 2 - 1) * 0.26 * (2.75 - z) + 0.10 * Math.sin(t * 0.31 + i * 1.7);
+  const rot = M.mul(M.rotY(0.4 + i * 1.3 + 0.25 * Math.sin(t * 0.4 + i)), M.mul(M.rotZ(-Math.PI / 2), M.rotY(i * 0.9 + t * 0.15)));
+  return M.mul(M.translate(x, 0.16 * LIE + 0.004 + 0.014 * Math.sin(t * 2.1 + i * 2.3), z), M.mul(rot, M.scale(LIE)));
+}
+
 export class Story {
   /** view: { W, H, project(world), ground(sx, sy, y), basis() } */
   constructor(view) {

@@ -4,7 +4,7 @@ Write a note, get one link, text it to someone. They tap it and a bottle washes 
 
 Live: https://msaco13.github.io/bottle/ (the page with no message is the writing page). Stats: https://msaco13.github.io/bottle/stats.html
 
-Last updated: 2026-11-13, late afternoon. Published: keepsakes, Your shore, one bottle for several people, and pictures and GIFs. Michael has an Android, no iPhone. On 2026-11-13 he cleared the assistant to merge this repository's pull requests and to change the Bottle database without asking each time. Touching no other Supabase project still holds.
+Last updated: 2026-11-13, late afternoon. Published: keepsakes, Your shore, one bottle for several people, pictures and GIFs, and a beach full of bottles from many people. Michael has an Android, no iPhone. On 2026-11-13 he cleared the assistant to merge this repository's pull requests and to change the Bottle database without asking each time. Touching no other Supabase project still holds.
 
 **Money, changed 2026-11-13.** Michael moved the Supabase organization that holds Bottle ("aisimulationcenter.com") to the Pro plan. Per Supabase's docs that day: $25 a month for the organization with $10 of compute credit that covers one project; every other running project adds at least $10 a month, and Bottle's Nano size is billed at that rate; paid projects are never paused for being idle; 100 GB of file storage and 250 GB of egress are included, and more is only billed if the spend cap is switched off. Not checked: how many other projects share that organization, and whether the spend cap is on. Pro is now the baseline. Say so before anything that would cost more.
 
@@ -41,6 +41,20 @@ What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a
 - The server knows a shore only by the hash of its token. It cannot work the secret back out.
 - The phone also keeps the notes it has already seen (`bottle-notes`), so the history is still there if the server is asleep.
 - Clearing the browser's data makes a new, empty shore. Old links still open.
+
+## A beach full of bottles, from everyone
+
+For a birthday, a farewell, a big day. One person starts it; many people each add a bottle; the person it is for finds them all washed up together.
+
+- **Starting one**: "A beach full of bottles for someone, from everyone" on Your shore, or "Or fill a beach with bottles from everyone" on the desk. Who it is for (required), what it is for (optional), and the starter's own bottle, which is the first. They get two things to pass on: **the invitation** (for everyone who should add a bottle) and **the beach** (for the person, when it is time). The phone remembers the beaches it started (`bottle-gathers`, also in the scrambled copy of the shore) and lists them on Your shore, a tap from their links.
+- **Adding one**: the invitation opens a desk that says whose beach it is, what for, and how many bottles are in so far and from whom. A name, a note, a picture if wanted, a sky. Afterwards only the invitation is offered to pass on, not the beach.
+- **Opening it**: the beach says how many washed up, and the others bob out in the water while one rides in. It is opened like any bottle, under the sky its writer chose. Under the note: "Bring in the next bottle (2 left)", and the story plays again for the next. Each one opened leaves a shell and lights a star (so ten bottles join the stars). The ones opened can be read again; the ones still in the water stay a surprise. Which have been opened is kept on the phone (`bottle-read`).
+- **The link** has an eighth, optional field, `g`: `"i"` the invitation, `"o"` the beach. In such a link the message is what it is for, the name is who started it, `to` is who it is for, and the key is the beach's. Every older link reads exactly as before.
+- **The server**: a beach is the old open kind of conversation, where the key alone lets a phone add and read (`add_bottle`, and `bottle_list` with no shore). No database change was needed. Brakes as before: 400 bottles, one a second (the page waits and tries again), and the page reads at most 200.
+- **Privacy, different from a single bottle**: anyone holding either link can read every bottle on that beach, like a card everyone signs. Nobody can take a bottle back or remove someone else's. There are no seats.
+- **Unlike a single bottle, a beach needs the server.** The bottles are not in the link. If the server cannot be reached the beach says so and offers to try again; adding a bottle says it could not be added and keeps the words.
+- Tested: 30 browser checks of the whole journey (103 in all), the link test, the flat-beach test with a dozen waiting bottles, and `test/live.test.mjs` against the real server (two bottles added a moment apart, both read back).
+- **Not tested**: any real phone. How a dozen extra bottles cost in pictures a second. How it feels with thirty.
 
 ## Pictures and GIFs
 
@@ -80,7 +94,7 @@ What turns it from a link maker into something you open to send. No accounts, no
 - The number is kept with the person in this phone's list, which is scrambled before its copy goes to the server, like the names. What is known of each lantern (`bottle-reach`) stays on the phone.
 - Android: "Put Bottle on your home screen" appears on the shore when Chrome offers to install it.
 - Sending results are counted under "Lantern (notifications)" on the stats page, as "sending: went straight to their lit lantern" and so on.
-- Tested with `test/app.browser.mjs` (73 checks with pictures, unsigned notes and the small things, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
+- Tested with `test/app.browser.mjs` (103 checks with pictures, unsigned notes, the small things and a beach from everyone, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
 - **Not tested**: any real phone. Whether `sms:` opens Messages with the words in place on a real iPhone and Android. The contact picker. The install offer. And everything about iPhone lanterns, as before: direct sending to an iPhone depends on it.
 - **One bottle for several people** ("One bottle for several people" on the shore, when it has two or more): tick up to eight names, write one note, and each gets their own bottle in their own conversation with its own seat. It goes straight to anyone whose lantern is lit. Each of the others gets one button that texts or shares their own link. A group text cannot carry it: one link has one seat.
 
@@ -238,7 +252,7 @@ One machine: a Windows PC on the home network.
 
 ## Next ideas, not started
 
-- A beach full of bottles for one person from many (birthdays, farewells): one "add your bottle" link for the group, one link for the person. The old open conversations (key alone lets you add) may be most of the server side. Needs no notifications.
+- For a beach from everyone: a way for its starter to remove a bottle; a reply to everyone from the person it was for; more than fourteen bottles drawn in the water.
 - The daily tide: one small question on everyone's desk each day, one tap to bottle the answer to someone in "Your bottles".
 - Bottles that arrive later ("wash up at sunrise"). An honest lock needs the server to hold the key, which bends promise 2 for those bottles.
 - Something for conversations past 12 bottles (sea glass, a second figure in the sky).
