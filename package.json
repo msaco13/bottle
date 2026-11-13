@@ -1,0 +1,6 @@
+{
+  "name": "bottle",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node test/code.test.mjs && node test/story.test.mjs", "start": "node dev-server.mjs" }
+}
