@@ -42,16 +42,18 @@ async function vapid() {
 }
 
 type Sub = { endpoint: string; p256dh: string; auth: string };
-async function tell(subs: Sub[], data: unknown) {
+// patient: the subscription may be seconds old, and a push service can call a brand-new one "gone" until it catches up.
+async function tell(subs: Sub[], data: unknown, patient = false) {
   if (!subs || !subs.length) return { sent: 0, gone: 0, failed: 0, codes: [] as number[] };
   const v = await vapid();
   const list = subs.slice(0, 20);
   const once = (s: Sub) => send(s, data, v, ABOUT).catch(() => 0);
   const codes = await Promise.all(list.map(once));
   // A push service can hiccup. Anything that was not a clear yes or a clear "gone" gets one more try.
-  const again = codes.map((c, i) => (c === 0 || c === 429 || c >= 500 ? i : -1)).filter((i) => i >= 0);
-  if (again.length) {
-    await new Promise((r) => setTimeout(r, 700));
+  for (let turn = 0; turn < (patient ? 3 : 1); turn++) {
+    const again = codes.map((c, i) => (c === 0 || c === 429 || c >= 500 || (patient && (c === 404 || c === 410)) ? i : -1)).filter((i) => i >= 0);
+    if (!again.length) break;
+    await new Promise((r) => setTimeout(r, patient ? 2000 : 700));
     const second = await Promise.all(again.map((i) => once(list[i])));
     again.forEach((i, k) => { codes[i] = second[k]; });
   }
@@ -74,7 +76,7 @@ Deno.serve(async (req: Request) => {
     }
     if (b.do === "lit" && ok(b.auth)) {
       const subs = await rpc("push_self", { p_auth: b.auth });
-      const r = await tell(subs, { kind: "lit" });
+      const r = await tell(subs, { kind: "lit" }, true);
       return json({ sent: r.sent, failed: r.failed, codes: r.codes });
     }
     if (b.do === "watch") {

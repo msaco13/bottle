@@ -66,7 +66,10 @@ export async function light() {
     await subscribe();
     flag(true);
     await names();
-    const r = await notify({ do: 'lit', auth: await token() });      // the first notification is the proof that it works
+    // The first notification is the proof that it works. A push service needs a moment to hear about a brand-new subscription,
+    // so wait a breath first, and the sender keeps trying for a few seconds if it is told "gone".
+    await new Promise((res) => setTimeout(res, 1500));
+    const r = await notify({ do: 'lit', auth: await token() }, 16000);
     return r && r.sent > 0 ? 'lit' : 'lit, but the first notification was not accepted' + (r && r.codes ? ' (' + r.codes.join(',') + ')' : '');
   } catch (e) {
     return 'failed: ' + String((e && e.message) || e).slice(0, 120);
