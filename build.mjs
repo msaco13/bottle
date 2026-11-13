@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 
-const ORDER = ['code', 'scene', 'story', 'audio', 'thread', 'count', 'main'];   // each may only use the ones before it
+const ORDER = ['code', 'scene', 'story', 'audio', 'thread', 'shore', 'lantern', 'count', 'main'];   // each may only use the ones before it
 let out = "/* Message in a bottle. Built from js/ by build.mjs. Do not edit: edit js/ and rebuild. */\n(function () {\n'use strict';\nconst __m = {};\n";
 for (const name of ORDER) {
   let src = fs.readFileSync(new URL(`./js/${name}.js`, import.meta.url), 'utf8');

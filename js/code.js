@@ -8,6 +8,8 @@
 //        mood  "n" night, "a" dawn. Missing means dusk.
 //        to    who it is addressed to (set when someone sends one back)
 //        key   the secret of the conversation this bottle belongs to (see thread.js)
+//   [message, name, mood, to, key, claim]  added later still, optional:
+//        claim the one seat this bottle carries: the first phone to open it joins the conversation
 // Plain base64 on purpose (no compression): it opens on every phone, old or new.
 //
 // PROMISE: every link ever made must keep opening. New things may only be added
@@ -19,14 +21,15 @@ export const MAX_NAME = 40;
 export const MOODS = { dusk: '', night: 'n', dawn: 'a' };
 const MOOD_OF = { n: 'night', a: 'dawn' };
 
-/** bottle: { message, name, mood, to, key } */
-export function encode(message, name = '', mood = 'dusk', to = '', key = '') {
+/** bottle: { message, name, mood, to, key, claim } */
+export function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '') {
   const list = [
     String(message).slice(0, MAX_MESSAGE),
     String(name || '').trim().slice(0, MAX_NAME),
     MOODS[mood] || '',
     String(to || '').trim().slice(0, MAX_NAME),
     /^[A-Za-z0-9_-]{16,32}$/.test(key || '') ? key : '',
+    /^[A-Za-z0-9_-]{8,32}$/.test(claim || '') ? claim : '',
   ];
   while (list.length > 1 && list[list.length - 1] === '') list.pop();   // old-style links stay exactly as they were
   const bytes = new TextEncoder().encode(JSON.stringify(list));
@@ -35,7 +38,7 @@ export function encode(message, name = '', mood = 'dusk', to = '', key = '') {
   return '1.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** Returns { message, name, mood, to, key } or null if this is not a bottle. Never throws. */
+/** Returns { message, name, mood, to, key, claim } or null if this is not a bottle. Never throws. */
 export function decode(hash) {
   try {
     let s = String(hash || '').replace(/^#/, '');
@@ -56,6 +59,7 @@ export function decode(hash) {
       mood: MOOD_OF[v[2]] || 'dusk',
       to: str(v[3]).slice(0, MAX_NAME),
       key: /^[A-Za-z0-9_-]{16,32}$/.test(str(v[4])) ? v[4] : '',
+      claim: /^[A-Za-z0-9_-]{8,32}$/.test(str(v[5])) ? v[5] : '',
     };
   } catch {
     return null;
@@ -63,5 +67,5 @@ export function decode(hash) {
 }
 
 export function linkFor(base, b) {
-  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key);
+  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim);
 }

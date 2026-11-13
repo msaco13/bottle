@@ -1,5 +1,5 @@
 // Conversations: the scrambling, and the promise that nothing depends on the server.
-import { newKey, threadId, seal, unseal, add, list, SERVER } from '../js/thread.js';
+import { newKey, newClaim, claimHash, threadId, seal, unseal, box, unbox, add, list, open, SERVER } from '../js/thread.js';
 import fs from 'node:fs';
 import assert from 'node:assert';
 
@@ -25,21 +25,32 @@ assert.equal(await unseal(key, 'not-a-note'), null);
 console.log(`a 40 character note is ${a.length} characters on the server, unreadable without the key`);
 assert((await seal(key, { m: 'x'.repeat(600), n: 'n'.repeat(40), mood: 'night', to: 't'.repeat(40), id: 'abcdefghij', t: 1794500000000 })).length < 3000, 'the longest note fits the server limit');
 
+// seats: 16 link-safe characters, kept on the server only as a fingerprint
+const seatA = newClaim();
+assert(/^[A-Za-z0-9_-]{16}$/.test(seatA) && seatA !== newClaim());
+assert(/^[0-9a-f]{64}$/.test(await claimHash(seatA)) && !(await claimHash(seatA)).includes(seatA));
+// anything can be boxed with a secret, and only that secret opens it
+const boxed = await box('shore:secret', { threads: [{ k: key }] });
+assert.deepEqual(await unbox('shore:secret', boxed), { threads: [{ k: key }] });
+assert.equal(await unbox('shore:other', boxed), null);
+
 // with no server, or a dead one, everything quietly carries on
 const saved = { ...SERVER };
 SERVER.url = ''; SERVER.key = '';
-assert.equal(await add(key, note), false);
-assert.deepEqual(await list(key), []);
+const me = 'a'.repeat(22);
+assert.equal(await add(me, key, note, newClaim()), false);
+assert.equal(await list(me, key), null, 'no server: null, so the page falls back on what the phone has kept');
+assert.equal(await open(me, key, newClaim()), null);
 SERVER.url = 'http://127.0.0.1:9'; SERVER.key = 'x';            // nothing listens here
 const t0 = Date.now();
-assert.equal(await add(key, note), false);
-assert.deepEqual(await list(key), []);
+assert.equal(await add(me, key, note, newClaim()), false);
+assert.equal(await list(me, key), null);
 assert(Date.now() - t0 < 14000, 'a dead server must not hang the page');
 Object.assign(SERVER, saved);
 
 // the built file is up to date with the source
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
-for (const f of ['code', 'scene', 'story', 'audio', 'thread', 'count', 'main']) {
+for (const f of ['code', 'scene', 'story', 'audio', 'thread', 'shore', 'lantern', 'count', 'main']) {
   const src = fs.readFileSync(new URL(`../js/${f}.js`, import.meta.url), 'utf8');
   const probe = src.split('\n').filter((l) => l.length > 50 && !l.startsWith('import') && !l.startsWith('export'))[3];
   assert(app.includes(probe), `app.js is stale: rebuild (node build.mjs) after changing js/${f}.js`);

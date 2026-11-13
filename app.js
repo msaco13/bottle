@@ -15,6 +15,8 @@ __m.code = (function () {
 //        mood  "n" night, "a" dawn. Missing means dusk.
 //        to    who it is addressed to (set when someone sends one back)
 //        key   the secret of the conversation this bottle belongs to (see thread.js)
+//   [message, name, mood, to, key, claim]  added later still, optional:
+//        claim the one seat this bottle carries: the first phone to open it joins the conversation
 // Plain base64 on purpose (no compression): it opens on every phone, old or new.
 //
 // PROMISE: every link ever made must keep opening. New things may only be added
@@ -26,14 +28,15 @@ const MAX_NAME = 40;
 const MOODS = { dusk: '', night: 'n', dawn: 'a' };
 const MOOD_OF = { n: 'night', a: 'dawn' };
 
-/** bottle: { message, name, mood, to, key } */
-function encode(message, name = '', mood = 'dusk', to = '', key = '') {
+/** bottle: { message, name, mood, to, key, claim } */
+function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '') {
   const list = [
     String(message).slice(0, MAX_MESSAGE),
     String(name || '').trim().slice(0, MAX_NAME),
     MOODS[mood] || '',
     String(to || '').trim().slice(0, MAX_NAME),
     /^[A-Za-z0-9_-]{16,32}$/.test(key || '') ? key : '',
+    /^[A-Za-z0-9_-]{8,32}$/.test(claim || '') ? claim : '',
   ];
   while (list.length > 1 && list[list.length - 1] === '') list.pop();   // old-style links stay exactly as they were
   const bytes = new TextEncoder().encode(JSON.stringify(list));
@@ -42,7 +45,7 @@ function encode(message, name = '', mood = 'dusk', to = '', key = '') {
   return '1.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** Returns { message, name, mood, to, key } or null if this is not a bottle. Never throws. */
+/** Returns { message, name, mood, to, key, claim } or null if this is not a bottle. Never throws. */
 function decode(hash) {
   try {
     let s = String(hash || '').replace(/^#/, '');
@@ -63,6 +66,7 @@ function decode(hash) {
       mood: MOOD_OF[v[2]] || 'dusk',
       to: str(v[3]).slice(0, MAX_NAME),
       key: /^[A-Za-z0-9_-]{16,32}$/.test(str(v[4])) ? v[4] : '',
+      claim: /^[A-Za-z0-9_-]{8,32}$/.test(str(v[5])) ? v[5] : '',
     };
   } catch {
     return null;
@@ -70,7 +74,7 @@ function decode(hash) {
 }
 
 function linkFor(base, b) {
-  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key);
+  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim);
 }
 
 return { MAX_MESSAGE, MAX_NAME, MOODS, encode, decode, linkFor };
@@ -171,6 +175,7 @@ uniform vec2 uTan;
 uniform vec4 uBottle;         // x, z, size, how much shadow
 uniform vec3 uRip[3];         // x, z, age in seconds (negative: none)
 uniform float uDim;
+uniform float uLamp;          // 1 when this phone is listening for bottles: a lantern glows on the dry sand
 ${SKY}
 float swash(float x, float t) {
   float ph = fract(t / 7.0 - x * 0.035);
@@ -229,6 +234,9 @@ void main() {
     float fr = pow(1.0 - max(dot(-rd, rn), 0.0), 4.0);
     vec3 wetCol = sand * 0.50 + sky(R) * (0.07 + 0.62 * fr) * (0.45 + 0.55 * film);
     col = mix(sand, wetCol, wet);
+    float lampFlicker = 0.86 + 0.14 * vnoise(vec2(uTime * 7.0, 3.3));
+    float lampAway = length(p.xz - vec2(0.27, 1.16));
+    col += vec3(1.0, 0.60, 0.24) * uLamp * lampFlicker * 0.60 * exp(-lampAway * lampAway * 7.0);      // its pool of light on the sand
     // bubbles the last wave left on the sand
     float lace = fbm(p.xz * 8.0 + vec2(0.0, uTime * 0.25));
     float left = (1.0 - smoothstep(0.0, 0.34, z - zs)) * step(zs, z);
@@ -282,6 +290,12 @@ void main() {
     float bl = length(bd);
     col *= 1.0 - 0.52 * (1.0 - smoothstep(0.35, 1.0, bl)) * uBottle.w;
     if (z < zs) col = mix(col, FOAM + vec3(0.0, 0.30, 0.34) * glow, (1.0 - smoothstep(0.0, 0.28, abs(bl - 1.02))) * uBottle.w * 0.55 * smoothstep(0.45, 0.7, fbm(p.xz * 11.0 + uTime)));
+  }
+  if (uLamp > 0.0) {
+    // the flame itself: a bright point just above the sand, with a soft halo
+    vec3 toLamp = vec3(0.27, 0.10, 1.16) - uCam;
+    float along = dot(toLamp, rd), off = length(toLamp - rd * along);
+    col += vec3(1.0, 0.74, 0.38) * uLamp * (0.86 + 0.14 * vnoise(vec2(uTime * 7.0, 3.3))) * step(0.0, along) * (exp(-off * off * 1400.0) * 1.8 + exp(-off * off * 90.0) * 0.22);
   }
   col *= 1.0 - 0.30 * dot(ndc * 0.62, ndc * 0.62);
   col *= 1.0 - 0.50 * uDim;
@@ -451,6 +465,7 @@ class Scene {
     this.cam = { pos: [0, 1.22, 2.75], target: [0, 0.0, -1.5], fov: 62 * Math.PI / 180 };
     this._frame = 0;
     this.mood = 0;              // 0 dusk, 1 night, 2 dawn
+    this.lamp = 0;              // 1 when the lantern is lit
   }
 
   _program(vs, fs) {
@@ -557,6 +572,7 @@ class Scene {
     (s.ripples || []).slice(-3).forEach((r, i) => { rip[i * 3] = r.x; rip[i * 3 + 1] = r.z; rip[i * 3 + 2] = r.age; });
     gl.uniform3fv(u.uRip, rip);
     gl.uniform1f(u.uDim, s.dim || 0);
+    gl.uniform1f(u.uLamp, this.lamp || 0);
     this._quad();
 
     // 2. onto the screen
@@ -1061,62 +1077,76 @@ __m.thread = (function () {
 // phone, and the key only ever travels inside links, after the #. The server sees
 // a conversation number and unreadable text. It cannot read a single note.
 //
+// SEALS. A conversation is sealed: only its members may read it or add to it. Each
+// bottle carries one seat (its "claim"). The first phone to open that bottle takes
+// the seat. A link that is forwarded on, and opened by someone else later, finds
+// the seat taken: they can read the one note that is in the link, and nothing else.
+// "Who is asking" is a token made from a secret that never leaves the phone (shore.js).
+//
 // A bottle never NEEDS the server: the note itself is in the link. If the server is
-// slow, asleep or gone, bottles still open and replies still send. Only the shelf of
-// earlier notes goes missing.
+// slow, asleep or gone, bottles still open and replies still send.
 
 const SERVER = {
   url: 'https://segtizidayglyouweszn.supabase.co',     // the Bottle project. It holds nothing else.
-  // Its publishable key. It is meant to be public: all it can do is call the two functions below.
+  // Its publishable key. It is meant to be public: all it can do is call the functions below.
   key: 'sb_publishable_2XYYYTBW-AEQN6IaXllIjQ_mQkYc4PP',
+  // The public half of the key notifications are signed with. Also meant to be public.
+  push: 'BN4Fq7TPzNUleFeKu7mcCiiu5VQtrmy4sJ2JKRUPJwJwNnPfrSgHIn6lBE2YEZEaSIqL3ns0TDAlJfRuzaRXzIA',
 };
 
 const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
 const unb64 = (str) => { let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; const bin = atob(b), out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
 const subtle = () => (globalThis.crypto && globalThis.crypto.subtle) || null;
+const sha = async (text) => new Uint8Array(await subtle().digest('SHA-256', new TextEncoder().encode(text)));
+const hex = async (text) => Array.from(await sha(text), (b) => b.toString(16).padStart(2, '0')).join('');
+const random = (n) => { const a = new Uint8Array(n); globalThis.crypto.getRandomValues(a); return b64(a); };
 
 /** A new conversation secret: 16 random bytes as 22 link-safe characters. */
-function newKey() {
-  const a = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(a);
-  return b64(a);
-}
+function newKey() { return random(16); }
+/** A new seat for one bottle: 12 random bytes as 16 link-safe characters. */
+function newClaim() { return random(12); }
 
 /** The public number of a conversation. Worked out from the key, and useless for reading anything. */
-async function threadId(key) {
-  const h = await subtle().digest('SHA-256', new TextEncoder().encode('bottle-thread:' + key));
-  return b64(new Uint8Array(h).subarray(0, 16));
+async function threadId(key) { return b64((await sha('bottle-thread:' + key)).subarray(0, 16)); }
+/** What the server keeps of a seat: its fingerprint, never the seat itself. */
+async function claimHash(claim) { return hex('bottle-claim:' + claim); }
+
+async function aes(secret) {
+  return subtle().importKey('raw', await sha('bottle-key:' + secret), 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
-async function aes(key) {
-  const raw = await subtle().digest('SHA-256', new TextEncoder().encode('bottle-key:' + key));
-  return subtle().importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-
-/** Scramble a note for the server. */
-async function seal(key, note) {
+/** Scramble anything with a secret. */
+async function box(secret, value) {
   const iv = new Uint8Array(12);
   globalThis.crypto.getRandomValues(iv);
-  const ct = new Uint8Array(await subtle().encrypt({ name: 'AES-GCM', iv }, await aes(key), new TextEncoder().encode(JSON.stringify(note))));
+  const ct = new Uint8Array(await subtle().encrypt({ name: 'AES-GCM', iv }, await aes(secret), new TextEncoder().encode(JSON.stringify(value))));
   const out = new Uint8Array(12 + ct.length);
   out.set(iv); out.set(ct, 12);
   return b64(out);
 }
 
-/** Unscramble one. null if it is not ours or has been tampered with. */
-async function unseal(key, body) {
+/** Unscramble it. null if the secret is wrong or it has been tampered with. */
+async function unbox(secret, text) {
   try {
-    const raw = unb64(body);
-    const pt = await subtle().decrypt({ name: 'AES-GCM', iv: raw.subarray(0, 12) }, await aes(key), raw.subarray(12));
-    const v = JSON.parse(new TextDecoder().decode(pt));
-    return v && typeof v.m === 'string' ? v : null;
+    const raw = unb64(text);
+    const pt = await subtle().decrypt({ name: 'AES-GCM', iv: raw.subarray(0, 12) }, await aes(secret), raw.subarray(12));
+    return JSON.parse(new TextDecoder().decode(pt));
   } catch {
     return null;
   }
 }
 
-async function call(fn, args, ms = 6000) {
-  if (!SERVER.url || !subtle()) return null;
+/** Scramble a note for the server. */
+const seal = (key, note) => box(key, note);
+/** Unscramble one. null if it is not ours or has been tampered with. */
+async function unseal(key, body) {
+  const v = await unbox(key, body);
+  return v && typeof v.m === 'string' ? v : null;
+}
+
+/** Ask the server something. Resolves to its answer (which may be null), or undefined if it could not be asked. */
+async function rpc(fn, args, ms = 6000) {
+  if (!SERVER.url || !subtle() || typeof fetch !== 'function') return undefined;
   const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = setTimeout(() => ctl && ctl.abort(), ms);
   try {
@@ -1125,30 +1155,60 @@ async function call(fn, args, ms = 6000) {
       headers: { 'content-type': 'application/json', apikey: SERVER.key, authorization: 'Bearer ' + SERVER.key },
       body: JSON.stringify(args),
     });
-    if (!r.ok) return null;
-    return await r.json();
+    if (!r.ok) return undefined;
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
   } catch {
-    return null;                 // no signal, server asleep, blocked: carry on without it
+    return undefined;                 // no signal, server asleep, blocked: carry on without it
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** Put a note in its conversation. note: { m, n, mood, to, id, t }. Resolves true if the server took it. */
-async function add(key, note) {
-  if (!key || !SERVER.url || !subtle()) return false;
+/** Ask the notification sender to do something. Never waited on by anything that matters. */
+async function notify(body, ms = 8000) {
+  if (!SERVER.url || typeof fetch !== 'function') return null;
+  const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = setTimeout(() => ctl && ctl.abort(), ms);
   try {
-    const r = await call('add_bottle', { p_thread: await threadId(key), p_body: await seal(key, note) });
-    return r != null;
+    const r = await fetch(`${SERVER.url}/functions/v1/notify`, { method: 'POST', signal: ctl ? ctl.signal : undefined, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return r.ok ? await r.json() : null;
+  } catch { return null; } finally { clearTimeout(timer); }
+}
+
+/**
+ * Open a bottle: take its seat in the conversation, or learn where this phone stands.
+ *   'claimed' this phone just took the seat      'member' it already belongs
+ *   'legacy'  an old conversation, open as before 'none'   the server has never heard of it
+ *   'taken'   another phone opened this bottle first: no earlier notes, no replying into it
+ *   null      the server could not be asked
+ */
+async function open(auth, key, claim) {
+  if (!key || !auth || !subtle()) return null;
+  try {
+    const r = await rpc('bottle_open', { p_auth: auth, p_thread: await threadId(key), p_claim: claim || null });
+    return typeof r === 'string' ? r : null;
+  } catch { return null; }
+}
+
+/** Put a note in its conversation, with the seat its link will carry. note: { m, n, mood, to, id, t }. Resolves true if the server took it. */
+async function add(auth, key, note, claim) {
+  if (!key || !auth || !subtle()) return false;
+  try {
+    const thread = await threadId(key);
+    const r = await rpc('bottle_add', { p_auth: auth, p_thread: thread, p_body: await seal(key, note), p_claim: claim ? await claimHash(claim) : null });
+    if (r !== 'ok') return false;
+    notify({ do: 'bottle', auth, thread });          // tell the other side's lantern. Not waited on.
+    return true;
   } catch { return false; }
 }
 
-/** Every note in a conversation, oldest first. Empty if there is no server to ask. */
-async function list(key) {
-  if (!key || !SERVER.url || !subtle()) return [];
+/** Every note in a conversation this phone belongs to, oldest first. null if the server could not be asked. */
+async function list(auth, key) {
+  if (!key || !subtle()) return null;
   try {
-    const rows = await call('thread_bottles', { p_thread: await threadId(key) });
-    if (!Array.isArray(rows)) return [];
+    const rows = await rpc('bottle_list', { p_auth: auth || null, p_thread: await threadId(key) });
+    if (!Array.isArray(rows)) return null;
     const out = [], seen = new Set();
     for (const row of rows) {
       const v = await unseal(key, row.body);
@@ -1157,10 +1217,290 @@ async function list(key) {
       out.push({ message: v.m, name: v.n || '', mood: v.mood || 'dusk', to: v.to || '', id: v.id, at: Date.parse(row.created_at) || v.t || 0 });
     }
     return out.sort((a, b) => a.at - b.at);
-  } catch { return []; }
+  } catch { return null; }
 }
 
-return { SERVER, newKey, threadId, seal, unseal, add, list };
+return { SERVER, b64, unb64, hex, newKey, newClaim, threadId, claimHash, box, unbox, seal, unseal, rpc, notify, open, add, list };
+})();
+
+// ---------------------------------------------------------------- shore.js
+__m.shore = (function () {
+// Your shore: what this phone remembers, and who it is to the server.
+//
+// The memory is small: your name, the conversations you are part of, the ids of
+// notes you wrote, and a copy of the notes you have already seen (so the history
+// is still here if the server is asleep or gone).
+//
+// The shore's SECRET is made here and never leaves the phone as it is. Two things
+// are worked out from it:
+//   a token   shown to the server to say "this is me" (for the seats in thread.js)
+//   a key     that scrambles the list of conversations before a copy is kept on
+//             the server, so the same shore can be opened from the Home Screen app
+// The server can check the token. It cannot work the secret or the key back out of it.
+
+const { rpc, box, unbox, b64, hex, threadId } = __m.thread;
+const has = typeof localStorage !== 'undefined';
+const get = (k) => { try { return has ? localStorage.getItem(k) : null; } catch { return null; } };
+const set = (k, v) => { try { if (has) localStorage.setItem(k, v); } catch {} };
+const stored = (k) => { try { const v = JSON.parse(get(k) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+const sha = async (text) => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)));
+
+const myName = () => get('bottle-name') || '';
+function setName(n) { if (n !== myName()) { set('bottle-name', n); save(); } }
+const threads = () => stored('bottle-threads').filter((x) => x && typeof x.k === 'string');
+
+// A note the server knows is mine only if this phone wrote it. A note known just from its link is guessed from the name on it,
+// until the conversation loads and says for certain (two people can share a name).
+const isMine = (n) => !!n && (n.id ? stored('bottle-mine').includes(n.id) : !!(n.name && n.name === myName()));
+function wrote(id) { set('bottle-mine', JSON.stringify([id, ...stored('bottle-mine')].slice(0, 300))); save(); }
+
+/** Keep a conversation: its key, who it is with, and the newest note already seen (by the server's clock). */
+function remember(k, w, seenAt) {
+  if (!k) return;
+  const all = threads(), old = all.find((x) => x.k === k) || {};
+  const next = { k, w: w || old.w || '', s: Math.max(old.s || 0, seenAt || 0), t: Date.now() };
+  set('bottle-threads', JSON.stringify([next, ...all.filter((x) => x.k !== k)].slice(0, 30)));
+  if (next.w !== old.w || next.s !== old.s || !old.k) save();
+}
+
+// ---------------------------------------------------------------- the notes already seen, kept on the phone
+
+const notes = () => { try { const v = JSON.parse(get('bottle-notes') || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
+/** What this phone has already seen of a conversation, oldest first. */
+function kept(key) { const v = notes()[key]; return Array.isArray(v) ? v : []; }
+/** Add what the server just said to what is kept, and give back the two together. */
+function keep(key, fresh) {
+  const by = new Map();
+  for (const n of [...kept(key), ...(fresh || [])]) if (n && n.id) by.set(n.id, n);
+  const all = [...by.values()].sort((a, b) => a.at - b.at).slice(-80);
+  const book = notes();
+  book[key] = all;
+  const order = threads().map((t) => t.k);
+  for (const k of Object.keys(book)) if (k !== key && !order.slice(0, 15).includes(k)) delete book[k];
+  set('bottle-notes', JSON.stringify(book));
+  return all;
+}
+
+// ---------------------------------------------------------------- who this phone is
+
+/** The secret of this shore. Made the first time it is needed. */
+function secret() {
+  let s = get('bottle-shore');
+  if (!s || !/^[A-Za-z0-9_-]{22}$/.test(s)) {
+    const a = new Uint8Array(16);
+    crypto.getRandomValues(a);
+    s = b64(a);
+    set('bottle-shore', s);
+  }
+  return s;
+}
+
+let tokenOf = '', tokenIs = '';
+/** What the server is shown. Worked out from the secret, and no way back. */
+async function token() {
+  const s = secret();
+  if (tokenOf !== s) { tokenIs = b64((await sha('bottle-shore-auth:' + s)).subarray(0, 16)); tokenOf = s; }
+  return tokenIs;
+}
+
+// ---------------------------------------------------------------- a copy with the server, scrambled
+
+const state = () => ({ v: 1, name: myName(), threads: threads(), mine: stored('bottle-mine') });
+
+/** Fold another copy of the shore into this one. Returns true if anything here changed. */
+function fold(other) {
+  if (!other || typeof other !== 'object') return false;
+  const before = JSON.stringify(state());
+  const by = new Map();
+  for (const t of [...(Array.isArray(other.threads) ? other.threads : []), ...threads()]) {
+    if (!t || typeof t.k !== 'string') continue;
+    const old = by.get(t.k);
+    by.set(t.k, old ? { k: t.k, w: (t.t || 0) >= (old.t || 0) ? (t.w || old.w || '') : (old.w || t.w || ''), s: Math.max(t.s || 0, old.s || 0), t: Math.max(t.t || 0, old.t || 0) } : { k: t.k, w: t.w || '', s: t.s || 0, t: t.t || 0 });
+  }
+  set('bottle-threads', JSON.stringify([...by.values()].sort((a, b) => b.t - a.t).slice(0, 30)));
+  set('bottle-mine', JSON.stringify([...new Set([...stored('bottle-mine'), ...(Array.isArray(other.mine) ? other.mine : [])])].slice(0, 300)));
+  if (!myName() && typeof other.name === 'string' && other.name) set('bottle-name', other.name.slice(0, 40));
+  return JSON.stringify(state()) !== before;
+}
+
+/** Bring in whatever the server's copy has that this phone does not. Resolves true if something new arrived. */
+async function pull() {
+  try {
+    const blob = await rpc('shore_get', { p_auth: await token() });
+    if (typeof blob !== 'string') return false;
+    return fold(await unbox('shore:' + secret(), blob));
+  } catch { return false; }
+}
+
+let timer = 0;
+/** Send this phone's copy to the server, a moment after the last change. */
+function save() {
+  if (!has || typeof window === 'undefined') return;
+  clearTimeout(timer);
+  timer = setTimeout(() => { saveNow(); }, 1200);
+}
+async function saveNow() {
+  try {
+    clearTimeout(timer);
+    await pull();
+    const ok = await rpc('shore_put', { p_auth: await token(), p_blob: await box('shore:' + secret(), state()) });
+    names();
+    return ok === 'ok';
+  } catch { return false; }
+}
+
+// ---------------------------------------------------------------- carrying the shore to the Home Screen app (iPhone)
+
+/**
+ * An iPhone only delivers notifications to a page that has been added to the Home Screen, and that
+ * app starts with an empty memory. So the shore is left in a parcel on the server, scrambled, and the
+ * app is started with the parcel's one-time code in its address. The code works once, for three days.
+ */
+async function carry() {
+  try {
+    if (!(await saveNow())) return '';
+    const a = new Uint8Array(16);
+    crypto.getRandomValues(a);
+    const code = b64(a);
+    const ok = await rpc('handoff_put', { p_id: await hex('bottle-handoff-id:' + code), p_blob: await box('handoff:' + code, { s: secret() }) });
+    return ok === 'ok' ? code : '';
+  } catch { return ''; }
+}
+
+/** The other end: open the parcel and become that shore. Resolves 'here' already done, 'came' just arrived, 'lost' no parcel. */
+async function arrive(code) {
+  try {
+    if (!/^[A-Za-z0-9_-]{22}$/.test(code || '')) return 'lost';
+    if (get('bottle-carried') === code) return 'here';
+    const blob = await rpc('handoff_take', { p_id: await hex('bottle-handoff-id:' + code) });
+    const v = typeof blob === 'string' ? await unbox('handoff:' + code, blob) : null;
+    if (!v || !/^[A-Za-z0-9_-]{22}$/.test(v.s || '')) return 'lost';
+    set('bottle-shore', v.s);
+    set('bottle-carried', code);
+    await pull();
+    save();
+    return 'came';
+  } catch { return 'lost'; }
+}
+
+// ---------------------------------------------------------------- for the notification: who each conversation is with
+
+/** Leave a small list where the notification worker can read it: conversation number -> name. Nothing else. */
+async function names() {
+  try {
+    if (typeof caches === 'undefined') return;
+    const map = {};
+    for (const t of threads()) map[await threadId(t.k)] = t.w || '';
+    const c = await caches.open('bottle-kv');
+    await c.put(new URL('__names', location.href.replace(/[?#].*$/, '')).href, new Response(JSON.stringify(map), { headers: { 'content-type': 'application/json' } }));
+  } catch {}
+}
+
+/** The conversation a notification pointed at, if this phone knows it. */
+async function threadByNumber(id) {
+  for (const t of threads()) if ((await threadId(t.k)) === id) return t;
+  return null;
+}
+
+return { myName, setName, threads, isMine, wrote, remember, kept, keep, secret, token, pull, save, saveNow, carry, arrive, names, threadByNumber };
+})();
+
+// ---------------------------------------------------------------- lantern.js
+__m.lantern = (function () {
+// The lantern: a light on your shore, so a bottle can find you. In plain terms, a
+// notification on this phone when someone sends you one.
+//
+// Android and computers: one tap, the browser asks, done.
+// iPhone: Apple only delivers notifications to a page that has been added to the Home
+// Screen (iOS 16.4 and later). So on an iPhone the lantern is lit in two steps: add the
+// page to the Home Screen, then open it from there and light the lantern in it.
+
+const { SERVER, rpc, notify, unb64 } = __m.thread;
+const { token, names } = __m.shore;
+const has = typeof window !== 'undefined' && typeof navigator !== 'undefined';
+const ua = has ? navigator.userAgent : '';
+const ios = has && (/iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1));
+/** Opened from the Home Screen, not in a browser tab. */
+const standalone = has && (navigator.standalone === true || (typeof matchMedia === 'function' && matchMedia('(display-mode: standalone)').matches)
+  || /[?&]dev\b.*[?&]standalone\b/.test(location.search));          // ?dev&standalone pretends, for building
+/** An app's own little browser (Instagram, Facebook and the like). On an iPhone these cannot add to the Home Screen. */
+const inApp = has && (/FBAN|FBAV|FB_IAB|Instagram|Line\/|Snapchat|musical_ly|TikTok|Bytedance|GSA\/|; wv\)/i.test(ua) || (ios && !/Safari\//.test(ua)));
+const iosVersion = (() => { const m = ua.match(/OS (\d+)[_.](\d+)/); return m ? Number(m[1]) + Number(m[2]) / 10 : (ios ? 17 : 0); })();
+const can = has && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+// For looking at each state by hand while building: ?dev&lantern=home (or can, lit, safari, blocked).
+const pretend = has && /[?&]dev\b/.test(location.search) ? new URLSearchParams(location.search).get('lantern') : null;
+const flag = (v) => { try { if (v === undefined) return localStorage.getItem('bottle-lantern') === '1'; if (v) localStorage.setItem('bottle-lantern', '1'); else localStorage.removeItem('bottle-lantern'); } catch {} return !!v; };
+
+/**
+ * Where this phone stands:
+ *   'lit'      it will be told            'can'    one tap lights it
+ *   'home'     iPhone: add to the Home Screen first      'safari'  iPhone, inside another app: open in Safari first
+ *   'blocked'  notifications were refused in the browser's settings      'none'  this browser cannot do it
+ */
+function standing() {
+  if (!has) return 'none';
+  if (pretend) return pretend;
+  if (can) {
+    if (Notification.permission === 'denied') return 'blocked';
+    return Notification.permission === 'granted' && flag() ? 'lit' : 'can';
+  }
+  if (ios && !standalone && iosVersion >= 16.4) return inApp ? 'safari' : 'home';
+  return 'none';
+}
+
+async function subscribe() {
+  const reg = await navigator.serviceWorker.register('sw.js');
+  await navigator.serviceWorker.ready;
+  const want = unb64(SERVER.push);
+  let sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    // made for another sender's key (it should never be): start again
+    const k = sub.options && sub.options.applicationServerKey ? new Uint8Array(sub.options.applicationServerKey) : null;
+    if (k && (k.length !== want.length || k.some((b, i) => b !== want[i]))) { await sub.unsubscribe(); sub = null; }
+  }
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: want });
+  const j = sub.toJSON();
+  const ok = await rpc('push_save', { p_auth: await token(), p_endpoint: sub.endpoint, p_p256dh: j.keys.p256dh, p_key: j.keys.auth });
+  if (ok !== 'ok') throw new Error('the server did not take it');
+  return sub;
+}
+
+/** Light it. Must be called straight from a tap. Resolves 'lit', 'refused', or 'failed: why'. */
+async function light() {
+  try {
+    if (!can) return 'failed: this browser cannot';
+    const answer = await Notification.requestPermission();
+    if (answer !== 'granted') return 'refused';
+    await subscribe();
+    flag(true);
+    await names();
+    const r = await notify({ do: 'lit', auth: await token() });      // the first notification is the proof that it works
+    return r && r.sent > 0 ? 'lit' : 'lit, but the first notification was not accepted' + (r && r.codes ? ' (' + r.codes.join(',') + ')' : '');
+  } catch (e) {
+    return 'failed: ' + String((e && e.message) || e).slice(0, 120);
+  }
+}
+
+/** Put it out. */
+async function douse() {
+  try {
+    flag(false);
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub) { await rpc('push_drop', { p_auth: await token(), p_endpoint: sub.endpoint }); await sub.unsubscribe(); }
+  } catch {}
+}
+
+/** Each visit: if the lantern is lit, make sure the server still knows where to reach this phone. */
+async function tend() {
+  try {
+    if (standing() !== 'lit') return;
+    await subscribe();
+    await names();
+  } catch {}
+}
+
+return { ios, standalone, inApp, standing, light, douse, tend };
 })();
 
 // ---------------------------------------------------------------- count.js
@@ -1254,39 +1594,42 @@ const { decode, linkFor, MAX_MESSAGE } = __m.code;
 const { Scene, swash, DRY_LINE, MOOD } = __m.scene;
 const { Story } = __m.story;
 const { Shore } = __m.audio;
-const { newKey, add, list } = __m.thread;
+const { newKey, newClaim, add, list, open } = __m.thread;
+const { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber } = __m.shore;
+const { standing, light, douse, tend, ios, standalone } = __m.lantern;
 const { count } = __m.count;
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const bottle = decode(location.hash) || decode(qs.get('b'));
+const hop = /^#n\.([A-Za-z0-9_-]{22})$/.exec(location.hash);          // a notification was tapped: it names a conversation
 const stage = $('stage');
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const isIOS = ios;
 const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
 
 addEventListener('hashchange', () => location.reload());
 if (bottle) document.documentElement.classList.add('reading');
+// Off an iPhone, an installed copy should start at the writing desk, not at whatever bottle was open when it was installed.
+if (!ios) { const m = document.querySelector('link[rel="manifest"]'); if (m) m.href = 'manifest-app.webmanifest'; }
+
+// Seats are only taken once a person has touched the page. A link preview or a robot loads the page and never does.
+let human = !!(navigator.userActivation && navigator.userActivation.hasBeenActive);
+const waiting = [];
+const touched = (fn) => { if (human) fn(); else waiting.push(fn); };
+for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
+  addEventListener(ev, () => { if (human) return; human = true; for (const f of waiting.splice(0)) f(); }, { capture: true, passive: true });
+}
 
 // ---------------------------------------------------------------- the note itself
 
 let shown = bottle;          // the note on the paper right now (the one from the link, or an earlier one from the shelf)
-const myName = () => { try { return localStorage.getItem('bottle-name') || ''; } catch { return ''; } };
+let seat = '';               // where this phone stands in the link's conversation, once the server has said (see thread.js)
+let asked = false;
 const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (b.name || '');
 
-// What this phone remembers, and nothing leaves it: the conversations it is part of and the notes it wrote.
-const stored = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
-const threads = () => stored('bottle-threads').filter((x) => x && typeof x.k === 'string');
-// A note the server knows is mine only if this phone wrote it. A note known just from its link is guessed from the name on it,
-// until the conversation loads and says for certain (two people can share a name).
-const isMine = (n) => !!n && (n.id ? stored('bottle-mine').includes(n.id) : !!(n.name && n.name === myName()));
-function wrote(id) { try { localStorage.setItem('bottle-mine', JSON.stringify([id, ...stored('bottle-mine')].slice(0, 300))); } catch {} }
-/** Keep a conversation: its key, who it is with, and the newest note already seen (by the server's clock). */
-function remember(k, w, seenAt) {
-  if (!k) return;
-  try {
-    const all = threads(), old = all.find((x) => x.k === k) || {};
-    const next = { k, w: w || old.w || '', s: Math.max(old.s || 0, seenAt || 0), t: Date.now() };
-    localStorage.setItem('bottle-threads', JSON.stringify([next, ...all.filter((x) => x.k !== k)].slice(0, 12)));
-  } catch {}
+/** The notes of a conversation: what the server says now, joined with what this phone has already seen. */
+async function notesFor(key) {
+  const fresh = await list(await token(), key);
+  return fresh ? keep(key, fresh) : kept(key);        // if the server is asleep, the history is still here
 }
 
 /** Put a sky over the shore: 'dusk', 'night' or 'dawn'. */
@@ -1328,26 +1671,38 @@ function showLetter(instant, note) {
   $('after').classList.remove('show');
   clearTimeout(showLetter.t);
   showLetter.t = setTimeout(() => $('after').classList.add('show'), instant ? 300 : (2.4 + parts.length * per) * 1000);
-  if (!note) shelf();
+  if (!note) touched(shelf);
 }
 
 /** Point the reply button at the other person in this note, and keep the conversation on this phone. */
 function address(b) {
   const mine = isMine(b);
   const other = mine ? b.to : b.name;
+  const key = seat === 'taken' ? '' : (bottle.key || b.key || '');       // a taken seat: the reply starts a conversation of its own
   $('reply').textContent = (mine ? 'Send another' : 'Send one back') + (other ? ' to ' + other : '');
-  $('reply').onclick = () => desk({ to: other || '', key: bottle.key || b.key || '' });
-  remember(bottle.key || b.key, other, b.at || 0);
+  $('reply').onclick = () => desk({ to: other || '', key });
+  if (asked && key) remember(key, other, b.at || 0);
 }
 
-// The earlier notes of this conversation, if the server has them. Nothing here is needed to read or reply.
+// The earlier notes of this conversation. Nothing here is needed to read the note or to reply.
 async function shelf() {
   const el = $('shelf');
   el.textContent = '';
   const old = $('newest'); if (old) old.remove();
   $('reply').classList.remove('ghost');
+  $('sealNote').textContent = '';
   if (!bottle || !bottle.key) return;
-  const all = await list(bottle.key);
+  // Break the seal: take this bottle's seat in its conversation, or find that another phone already has.
+  seat = await open(await token(), bottle.key, bottle.claim);
+  asked = true;
+  count('seal', seat || 'the server did not answer');
+  if (seat === 'taken') {
+    $('sealNote').textContent = 'This bottle was opened on another phone first, so the notes before it stay there. You can still send one back.';
+    if (shown === bottle) address(bottle);
+    return;
+  }
+  if (shown === bottle) address(bottle);
+  const all = await notesFor(bottle.key);
   if (!all.length) return;
   const here = all.find((n) => same(n, bottle));
   if (here) { bottle.id = here.id; bottle.at = here.at; if (shown === bottle) address(bottle); }      // now it is known for certain whose note this is
@@ -1382,6 +1737,70 @@ async function shelf() {
   el.appendChild(row);
 }
 
+// ---------------------------------------------------------------- the lantern (see lantern.js)
+
+let lanternSaid = '', carriedLost = false, homeBack = '';
+
+/** Draw the lantern's line wherever it belongs: under a note, under a new bottle, and on the desk. */
+function lantern() {
+  const st = standing();
+  if (scene) scene.lamp = st === 'lit' ? 1 : 0;
+  for (const id of ['lanternA', 'lanternB', 'lanternC']) {
+    const el = $(id);
+    if (!el) continue;
+    el.textContent = '';
+    if (st === 'none') continue;
+    if (id === 'lanternC' && !(st === 'lit' || standalone || threads().length)) continue;      // the desk only mentions it to people it could help
+    // In the Home Screen app, lighting it is the first thing to do, so it goes at the very top.
+    if (id === 'lanternC') { if (standalone && st !== 'lit') $('desk').insertBefore(el, $('desk').firstChild); else $('make').after(el); }
+    const say = (t) => { const p = document.createElement('p'); p.className = 'lanternSay'; p.textContent = t; el.appendChild(p); };
+    const btn = (t, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = t; b.onclick = fn; el.appendChild(b); return b; };
+    if (id === 'lanternC' && carriedLost && !threads().length) say('Your bottles did not come across. In Safari, open any bottle, tap "Light a lantern" and add it to the Home Screen again.');
+    if (st === 'lit') {
+      say('Your lantern is lit. This phone will tell you when a bottle washes up.');
+      btn('Put the lantern out', async () => { await douse(); count('lantern', 'put out', true); lantern(); }, 'link');
+    } else if (st === 'blocked') {
+      // They said no to notifications. Do not bring it up again, except on the desk where it explains why nothing arrives.
+      if (id === 'lanternC') say('Notifications are switched off for this page in your browser settings, so a bottle cannot announce itself here.');
+    } else if (st === 'safari') {
+      say('To be told when a bottle arrives, open this page in Safari and light a lantern there.');
+    } else if (st === 'home') {
+      btn('Light a lantern, so a bottle can find you', homeCard, 'btn ghost');
+    } else {
+      btn(standalone ? 'Light the lantern' : 'Light a lantern, so a bottle can find you', async (e) => {
+        const b = e.currentTarget;
+        b.disabled = true; b.textContent = 'Lighting it';
+        const how = await light();                    // the browser asks its one question here
+        count('lantern', how, true);
+        lanternSaid = how === 'lit' ? '' : how === 'refused' ? 'No lantern, then. You can light one any time.' : how.startsWith('lit') ? '' : 'The lantern would not light (' + how.replace('failed: ', '') + '). Try again in a minute.';
+        lantern();
+      }, standalone ? 'btn' : 'btn ghost');
+      if (lanternSaid) say(lanternSaid);
+    }
+  }
+}
+
+/** iPhone: the three taps that put the page on the Home Screen, with the shore packed to come along. */
+async function homeCard() {
+  count('lantern', 'iphone: shown the home screen steps', true);
+  $('homecard').classList.add('show');
+  $('homeState').textContent = 'Packing your bottles to come with you.';
+  const code = await carry();
+  if (!$('homecard').classList.contains('show')) return;
+  if (code) {
+    // The Home Screen app starts at whatever address is showing when it is added. So the address becomes the parcel's code, until this card is closed.
+    if (!homeBack) homeBack = location.href;
+    try { history.replaceState(null, '', location.pathname + '?i=' + code); } catch {}
+    $('homeState').textContent = 'Packed. Your bottles will come with you.';
+  } else {
+    $('homeState').textContent = 'The server could not be reached just now, so your bottles would not come along. Close this and try again in a minute.';
+  }
+}
+$('homeClose').onclick = () => {
+  $('homecard').classList.remove('show');
+  if (homeBack) { try { history.replaceState(null, '', homeBack); } catch {} homeBack = ''; }
+};
+
 // ---------------------------------------------------------------- the writing desk
 
 let deskReady = false, deskCtx = {}, madeLink = '', madeTo = '', deskMood = 'dusk';
@@ -1394,7 +1813,7 @@ async function inbox() {
   if (!mine.length) return;
   const turn = inbox.turn = (inbox.turn || 0) + 1;
   const found = (await Promise.all(mine.map(async (th) => {
-    const all = await list(th.k);
+    const all = await notesFor(th.k);
     if (!all.length) return null;
     const theirs = all.filter((n) => !isMine(n));
     const fresh = theirs.filter((n) => n.at > (th.s || 0));
@@ -1403,6 +1822,7 @@ async function inbox() {
       who: th.w || (theirs.length ? theirs[theirs.length - 1].name : '') || all[0].to || 'Someone' };
   }))).filter(Boolean);
   if (turn !== inbox.turn || !found.length) return;
+  el.textContent = '';
   found.sort((a, b) => (b.isNew - a.isNew) || (b.at - a.at));
   // News goes where it cannot be missed: above the desk. Otherwise the list waits quietly underneath.
   const news = found[0].isNew;
@@ -1426,6 +1846,20 @@ async function inbox() {
   }
 }
 
+/** A notification was tapped. Bring in the newest bottle of the conversation it named. */
+async function follow(id) {
+  const home = () => { try { history.replaceState(null, '', location.pathname + location.search); } catch {} };
+  let th = await threadByNumber(id);
+  if (!th) { await pull(); th = await threadByNumber(id); }
+  if (!th) return home();
+  const all = await notesFor(th.k);
+  const theirs = all.filter((n) => !isMine(n));
+  const pick = theirs.filter((n) => n.at > (th.s || 0)).pop() || theirs.pop() || all.pop();
+  if (!pick) return home();
+  count('followed', 'a notification was tapped');
+  location.replace(linkFor(location.origin + location.pathname, { message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k }));
+}
+
 /** ctx: { to, key } when sending one back. Empty for a fresh bottle. */
 function desk(ctx) {
   deskCtx = ctx || {};
@@ -1446,12 +1880,13 @@ function desk(ctx) {
   try { who.value = myName(); } catch {}
   const choose = (m) => { deskMood = m; sky(m); for (const c of $('moods').children) c.classList.toggle('on', c.dataset.mood === m); };
   choose((shown && shown.mood) || 'dusk');
-  const count = () => { $('left').textContent = String(MAX_MESSAGE - msg.value.length); };
-  count();
+  const tally = () => { $('left').textContent = String(MAX_MESSAGE - msg.value.length); };
+  tally();
+  lantern();
   if (deskCtx.to) setTimeout(() => msg.focus(), 350);
   if (deskReady) return;
   deskReady = true;
-  msg.addEventListener('input', count);
+  msg.addEventListener('input', tally);
 
   const share = async () => {
     try { await navigator.share({ title: 'A message in a bottle', text: madeTo ? `${madeTo}, a bottle washed up for you.` : 'Something washed ashore for you.', url: madeLink }); count('share', 'sent', true); return true; }
@@ -1461,10 +1896,11 @@ function desk(ctx) {
     e.preventDefault();
     if (!msg.value.trim()) { msg.focus(); return; }
     const name = who.value.trim();
-    try { localStorage.setItem('bottle-name', name); } catch {}
-    let key = deskCtx.key || '';
-    try { if (!key) key = newKey(); } catch {}
-    const b = { message: msg.value.trim(), name, mood: deskMood, to: deskCtx.to || $('forWho').value.trim(), key };
+    setName(name);
+    let key = deskCtx.key || '', claim = '';
+    try { if (!key) key = newKey(); claim = newClaim(); } catch {}
+    // The link carries the note, the conversation's key, and one seat: whoever opens it first is the one it was for.
+    const b = { message: msg.value.trim(), name, mood: deskMood, to: deskCtx.to || $('forWho').value.trim(), key, claim };
     madeTo = b.to;
     const link = madeLink = linkFor(location.origin + location.pathname, b);
     $('link').value = madeLink;
@@ -1475,6 +1911,7 @@ function desk(ctx) {
       : 'Send this link to one person. The note travels inside the link itself.';
     compose.classList.add('done');
     compose.scrollTop = 0;
+    lantern();
     // The share sheet opens straight away, while this is still the same tap.
     count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters`, true);
     if (navigator.share) share(); else count('share', 'no share sheet on this browser', true);
@@ -1482,7 +1919,8 @@ function desk(ctx) {
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(key, b.to, 0);
-    add(key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now() }).then((ok) => {
+    keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now() }]);
+    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now() }, claim)).then((ok) => {
       // Only promised once the server has really taken it.
       if (!ok) count('f_save', 'the server did not take the note', true);
       if (ok && madeLink === link) $('madeLede').textContent += ` When ${b.to ? b.to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
@@ -1504,6 +1942,21 @@ function desk(ctx) {
   $('backToNote').addEventListener('click', () => { compose.classList.remove('show'); if (bottle) { sky(shown.mood); $('letter').classList.add('show'); } });
 }
 
+// What happens once, as the page opens: bring the shore over (Home Screen app), follow a notification, catch up with the server.
+async function arriveAndCatchUp() {
+  const code = qs.get('i');
+  if (code && standalone) {
+    const how = await arrive(code);
+    if (how !== 'here') count('carried', how);
+    carriedLost = how === 'lost';
+    if (!$('who').value) $('who').value = myName();
+    if (!bottle && !deskCtx.to) { inbox(); lantern(); }
+  }
+  if (hop) return follow(hop[1]);
+  if (await pull() && !bottle && !deskCtx.to) { inbox(); lantern(); }
+  tend();
+}
+
 // ---------------------------------------------------------------- the shore
 
 let scene = null;
@@ -1511,6 +1964,8 @@ try { scene = qs.has('nogl') ? null : new Scene($('gl')); } catch (e) { scene = 
 if (!scene) count('f_nogl', 'no 3D was asked for');      // only reached with ?nogl: a real failure was counted above, and each kind counts once
 count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');   // ?nogl pretends there is no 3D, to test the fallback
 if (bottle) sky(bottle.mood);
+lantern();
+arriveAndCatchUp();
 const ready = () => { window.__bottleReady = true; const p = $('plain'); if (p) p.className = ''; };
 
 if (!scene) {

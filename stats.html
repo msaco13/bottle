@@ -49,6 +49,10 @@
     <button id="again">Refresh</button>
   </div>
 
+  <h2>The alarm</h2>
+  <p id="alarmSay">If phones report 3 or more problems in a day, this can tell your lantern (at most twice a day). Light a lantern on this phone first, on the writing page.</p>
+  <div class="row" style="margin-top:8px"><button id="alarm">Tell my lantern when something breaks</button></div>
+
   <h2>How far people get</h2>
   <div class="steps" id="steps"></div>
 
@@ -178,6 +182,29 @@
   });
   $("test").onclick = function () { test = !test; this.className = test ? "on" : ""; load(); };
   $("again").onclick = load;
+
+  // The alarm goes to the lantern of whoever presses this, on this phone and on any Home Screen copy of it.
+  function token(cb) {
+    var s = null;
+    try { s = localStorage.getItem("bottle-shore"); } catch (e) {}
+    if (!s || !window.crypto || !crypto.subtle) return cb(null);
+    crypto.subtle.digest("SHA-256", new TextEncoder().encode("bottle-shore-auth:" + s)).then(function (h) {
+      var b = new Uint8Array(h).subarray(0, 16), t = "";
+      for (var i = 0; i < b.length; i++) t += String.fromCharCode(b[i]);
+      cb(btoa(t).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""));
+    }, function () { cb(null); });
+  }
+  function alarmState() { var on = false; try { on = localStorage.getItem("bottle-alarm") === "1"; } catch (e) {} $("alarm").textContent = on ? "Stop telling my lantern" : "Tell my lantern when something breaks"; $("alarm").className = on ? "on" : ""; return on; }
+  $("alarm").onclick = function () {
+    var want = !alarmState();
+    token(function (t) {
+      if (!t) { $("alarmSay").textContent = "This phone has no shore yet. Open the writing page, light a lantern there, then come back and press this."; return; }
+      fetch(SERVER[0] + "/rest/v1/rpc/alerts_set", { method: "POST", headers: { "content-type": "application/json", apikey: SERVER[1], authorization: "Bearer " + SERVER[1] }, body: JSON.stringify({ p_auth: t, p_on: want }) })
+        .then(function (r) { if (!r.ok) throw new Error(r.status); try { localStorage.setItem("bottle-alarm", want ? "1" : "0"); } catch (e) {} alarmState(); $("alarmSay").textContent = want ? "Done. If phones report 3 or more problems in a day, your lantern will say so. It only works if a lantern is lit on this phone." : "Stopped."; })
+        .catch(function () { $("alarmSay").textContent = "The server could not be reached. Try again in a minute."; });
+    });
+  };
+  alarmState();
   load();
 })();
 </script>

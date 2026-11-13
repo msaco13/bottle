@@ -7,40 +7,43 @@ import { decode, linkFor, MAX_MESSAGE } from './code.js';
 import { Scene, swash, DRY_LINE, MOOD } from './scene.js';
 import { Story } from './story.js';
 import { Shore } from './audio.js';
-import { newKey, add, list } from './thread.js';
+import { newKey, newClaim, add, list, open } from './thread.js';
+import { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber } from './shore.js';
+import { standing, light, douse, tend, ios, standalone } from './lantern.js';
 import { count } from './count.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const bottle = decode(location.hash) || decode(qs.get('b'));
+const hop = /^#n\.([A-Za-z0-9_-]{22})$/.exec(location.hash);          // a notification was tapped: it names a conversation
 const stage = $('stage');
-const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+const isIOS = ios;
 const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
 
 addEventListener('hashchange', () => location.reload());
 if (bottle) document.documentElement.classList.add('reading');
+// Off an iPhone, an installed copy should start at the writing desk, not at whatever bottle was open when it was installed.
+if (!ios) { const m = document.querySelector('link[rel="manifest"]'); if (m) m.href = 'manifest-app.webmanifest'; }
+
+// Seats are only taken once a person has touched the page. A link preview or a robot loads the page and never does.
+let human = !!(navigator.userActivation && navigator.userActivation.hasBeenActive);
+const waiting = [];
+const touched = (fn) => { if (human) fn(); else waiting.push(fn); };
+for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
+  addEventListener(ev, () => { if (human) return; human = true; for (const f of waiting.splice(0)) f(); }, { capture: true, passive: true });
+}
 
 // ---------------------------------------------------------------- the note itself
 
 let shown = bottle;          // the note on the paper right now (the one from the link, or an earlier one from the shelf)
-const myName = () => { try { return localStorage.getItem('bottle-name') || ''; } catch { return ''; } };
+let seat = '';               // where this phone stands in the link's conversation, once the server has said (see thread.js)
+let asked = false;
 const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (b.name || '');
 
-// What this phone remembers, and nothing leaves it: the conversations it is part of and the notes it wrote.
-const stored = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
-const threads = () => stored('bottle-threads').filter((x) => x && typeof x.k === 'string');
-// A note the server knows is mine only if this phone wrote it. A note known just from its link is guessed from the name on it,
-// until the conversation loads and says for certain (two people can share a name).
-const isMine = (n) => !!n && (n.id ? stored('bottle-mine').includes(n.id) : !!(n.name && n.name === myName()));
-function wrote(id) { try { localStorage.setItem('bottle-mine', JSON.stringify([id, ...stored('bottle-mine')].slice(0, 300))); } catch {} }
-/** Keep a conversation: its key, who it is with, and the newest note already seen (by the server's clock). */
-function remember(k, w, seenAt) {
-  if (!k) return;
-  try {
-    const all = threads(), old = all.find((x) => x.k === k) || {};
-    const next = { k, w: w || old.w || '', s: Math.max(old.s || 0, seenAt || 0), t: Date.now() };
-    localStorage.setItem('bottle-threads', JSON.stringify([next, ...all.filter((x) => x.k !== k)].slice(0, 12)));
-  } catch {}
+/** The notes of a conversation: what the server says now, joined with what this phone has already seen. */
+async function notesFor(key) {
+  const fresh = await list(await token(), key);
+  return fresh ? keep(key, fresh) : kept(key);        // if the server is asleep, the history is still here
 }
 
 /** Put a sky over the shore: 'dusk', 'night' or 'dawn'. */
@@ -82,26 +85,38 @@ function showLetter(instant, note) {
   $('after').classList.remove('show');
   clearTimeout(showLetter.t);
   showLetter.t = setTimeout(() => $('after').classList.add('show'), instant ? 300 : (2.4 + parts.length * per) * 1000);
-  if (!note) shelf();
+  if (!note) touched(shelf);
 }
 
 /** Point the reply button at the other person in this note, and keep the conversation on this phone. */
 function address(b) {
   const mine = isMine(b);
   const other = mine ? b.to : b.name;
+  const key = seat === 'taken' ? '' : (bottle.key || b.key || '');       // a taken seat: the reply starts a conversation of its own
   $('reply').textContent = (mine ? 'Send another' : 'Send one back') + (other ? ' to ' + other : '');
-  $('reply').onclick = () => desk({ to: other || '', key: bottle.key || b.key || '' });
-  remember(bottle.key || b.key, other, b.at || 0);
+  $('reply').onclick = () => desk({ to: other || '', key });
+  if (asked && key) remember(key, other, b.at || 0);
 }
 
-// The earlier notes of this conversation, if the server has them. Nothing here is needed to read or reply.
+// The earlier notes of this conversation. Nothing here is needed to read the note or to reply.
 async function shelf() {
   const el = $('shelf');
   el.textContent = '';
   const old = $('newest'); if (old) old.remove();
   $('reply').classList.remove('ghost');
+  $('sealNote').textContent = '';
   if (!bottle || !bottle.key) return;
-  const all = await list(bottle.key);
+  // Break the seal: take this bottle's seat in its conversation, or find that another phone already has.
+  seat = await open(await token(), bottle.key, bottle.claim);
+  asked = true;
+  count('seal', seat || 'the server did not answer');
+  if (seat === 'taken') {
+    $('sealNote').textContent = 'This bottle was opened on another phone first, so the notes before it stay there. You can still send one back.';
+    if (shown === bottle) address(bottle);
+    return;
+  }
+  if (shown === bottle) address(bottle);
+  const all = await notesFor(bottle.key);
   if (!all.length) return;
   const here = all.find((n) => same(n, bottle));
   if (here) { bottle.id = here.id; bottle.at = here.at; if (shown === bottle) address(bottle); }      // now it is known for certain whose note this is
@@ -136,6 +151,70 @@ async function shelf() {
   el.appendChild(row);
 }
 
+// ---------------------------------------------------------------- the lantern (see lantern.js)
+
+let lanternSaid = '', carriedLost = false, homeBack = '';
+
+/** Draw the lantern's line wherever it belongs: under a note, under a new bottle, and on the desk. */
+function lantern() {
+  const st = standing();
+  if (scene) scene.lamp = st === 'lit' ? 1 : 0;
+  for (const id of ['lanternA', 'lanternB', 'lanternC']) {
+    const el = $(id);
+    if (!el) continue;
+    el.textContent = '';
+    if (st === 'none') continue;
+    if (id === 'lanternC' && !(st === 'lit' || standalone || threads().length)) continue;      // the desk only mentions it to people it could help
+    // In the Home Screen app, lighting it is the first thing to do, so it goes at the very top.
+    if (id === 'lanternC') { if (standalone && st !== 'lit') $('desk').insertBefore(el, $('desk').firstChild); else $('make').after(el); }
+    const say = (t) => { const p = document.createElement('p'); p.className = 'lanternSay'; p.textContent = t; el.appendChild(p); };
+    const btn = (t, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = t; b.onclick = fn; el.appendChild(b); return b; };
+    if (id === 'lanternC' && carriedLost && !threads().length) say('Your bottles did not come across. In Safari, open any bottle, tap "Light a lantern" and add it to the Home Screen again.');
+    if (st === 'lit') {
+      say('Your lantern is lit. This phone will tell you when a bottle washes up.');
+      btn('Put the lantern out', async () => { await douse(); count('lantern', 'put out', true); lantern(); }, 'link');
+    } else if (st === 'blocked') {
+      // They said no to notifications. Do not bring it up again, except on the desk where it explains why nothing arrives.
+      if (id === 'lanternC') say('Notifications are switched off for this page in your browser settings, so a bottle cannot announce itself here.');
+    } else if (st === 'safari') {
+      say('To be told when a bottle arrives, open this page in Safari and light a lantern there.');
+    } else if (st === 'home') {
+      btn('Light a lantern, so a bottle can find you', homeCard, 'btn ghost');
+    } else {
+      btn(standalone ? 'Light the lantern' : 'Light a lantern, so a bottle can find you', async (e) => {
+        const b = e.currentTarget;
+        b.disabled = true; b.textContent = 'Lighting it';
+        const how = await light();                    // the browser asks its one question here
+        count('lantern', how, true);
+        lanternSaid = how === 'lit' ? '' : how === 'refused' ? 'No lantern, then. You can light one any time.' : how.startsWith('lit') ? '' : 'The lantern would not light (' + how.replace('failed: ', '') + '). Try again in a minute.';
+        lantern();
+      }, standalone ? 'btn' : 'btn ghost');
+      if (lanternSaid) say(lanternSaid);
+    }
+  }
+}
+
+/** iPhone: the three taps that put the page on the Home Screen, with the shore packed to come along. */
+async function homeCard() {
+  count('lantern', 'iphone: shown the home screen steps', true);
+  $('homecard').classList.add('show');
+  $('homeState').textContent = 'Packing your bottles to come with you.';
+  const code = await carry();
+  if (!$('homecard').classList.contains('show')) return;
+  if (code) {
+    // The Home Screen app starts at whatever address is showing when it is added. So the address becomes the parcel's code, until this card is closed.
+    if (!homeBack) homeBack = location.href;
+    try { history.replaceState(null, '', location.pathname + '?i=' + code); } catch {}
+    $('homeState').textContent = 'Packed. Your bottles will come with you.';
+  } else {
+    $('homeState').textContent = 'The server could not be reached just now, so your bottles would not come along. Close this and try again in a minute.';
+  }
+}
+$('homeClose').onclick = () => {
+  $('homecard').classList.remove('show');
+  if (homeBack) { try { history.replaceState(null, '', homeBack); } catch {} homeBack = ''; }
+};
+
 // ---------------------------------------------------------------- the writing desk
 
 let deskReady = false, deskCtx = {}, madeLink = '', madeTo = '', deskMood = 'dusk';
@@ -148,7 +227,7 @@ async function inbox() {
   if (!mine.length) return;
   const turn = inbox.turn = (inbox.turn || 0) + 1;
   const found = (await Promise.all(mine.map(async (th) => {
-    const all = await list(th.k);
+    const all = await notesFor(th.k);
     if (!all.length) return null;
     const theirs = all.filter((n) => !isMine(n));
     const fresh = theirs.filter((n) => n.at > (th.s || 0));
@@ -157,6 +236,7 @@ async function inbox() {
       who: th.w || (theirs.length ? theirs[theirs.length - 1].name : '') || all[0].to || 'Someone' };
   }))).filter(Boolean);
   if (turn !== inbox.turn || !found.length) return;
+  el.textContent = '';
   found.sort((a, b) => (b.isNew - a.isNew) || (b.at - a.at));
   // News goes where it cannot be missed: above the desk. Otherwise the list waits quietly underneath.
   const news = found[0].isNew;
@@ -180,6 +260,20 @@ async function inbox() {
   }
 }
 
+/** A notification was tapped. Bring in the newest bottle of the conversation it named. */
+async function follow(id) {
+  const home = () => { try { history.replaceState(null, '', location.pathname + location.search); } catch {} };
+  let th = await threadByNumber(id);
+  if (!th) { await pull(); th = await threadByNumber(id); }
+  if (!th) return home();
+  const all = await notesFor(th.k);
+  const theirs = all.filter((n) => !isMine(n));
+  const pick = theirs.filter((n) => n.at > (th.s || 0)).pop() || theirs.pop() || all.pop();
+  if (!pick) return home();
+  count('followed', 'a notification was tapped');
+  location.replace(linkFor(location.origin + location.pathname, { message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k }));
+}
+
 /** ctx: { to, key } when sending one back. Empty for a fresh bottle. */
 function desk(ctx) {
   deskCtx = ctx || {};
@@ -200,12 +294,13 @@ function desk(ctx) {
   try { who.value = myName(); } catch {}
   const choose = (m) => { deskMood = m; sky(m); for (const c of $('moods').children) c.classList.toggle('on', c.dataset.mood === m); };
   choose((shown && shown.mood) || 'dusk');
-  const count = () => { $('left').textContent = String(MAX_MESSAGE - msg.value.length); };
-  count();
+  const tally = () => { $('left').textContent = String(MAX_MESSAGE - msg.value.length); };
+  tally();
+  lantern();
   if (deskCtx.to) setTimeout(() => msg.focus(), 350);
   if (deskReady) return;
   deskReady = true;
-  msg.addEventListener('input', count);
+  msg.addEventListener('input', tally);
 
   const share = async () => {
     try { await navigator.share({ title: 'A message in a bottle', text: madeTo ? `${madeTo}, a bottle washed up for you.` : 'Something washed ashore for you.', url: madeLink }); count('share', 'sent', true); return true; }
@@ -215,10 +310,11 @@ function desk(ctx) {
     e.preventDefault();
     if (!msg.value.trim()) { msg.focus(); return; }
     const name = who.value.trim();
-    try { localStorage.setItem('bottle-name', name); } catch {}
-    let key = deskCtx.key || '';
-    try { if (!key) key = newKey(); } catch {}
-    const b = { message: msg.value.trim(), name, mood: deskMood, to: deskCtx.to || $('forWho').value.trim(), key };
+    setName(name);
+    let key = deskCtx.key || '', claim = '';
+    try { if (!key) key = newKey(); claim = newClaim(); } catch {}
+    // The link carries the note, the conversation's key, and one seat: whoever opens it first is the one it was for.
+    const b = { message: msg.value.trim(), name, mood: deskMood, to: deskCtx.to || $('forWho').value.trim(), key, claim };
     madeTo = b.to;
     const link = madeLink = linkFor(location.origin + location.pathname, b);
     $('link').value = madeLink;
@@ -229,6 +325,7 @@ function desk(ctx) {
       : 'Send this link to one person. The note travels inside the link itself.';
     compose.classList.add('done');
     compose.scrollTop = 0;
+    lantern();
     // The share sheet opens straight away, while this is still the same tap.
     count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters`, true);
     if (navigator.share) share(); else count('share', 'no share sheet on this browser', true);
@@ -236,7 +333,8 @@ function desk(ctx) {
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(key, b.to, 0);
-    add(key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now() }).then((ok) => {
+    keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now() }]);
+    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now() }, claim)).then((ok) => {
       // Only promised once the server has really taken it.
       if (!ok) count('f_save', 'the server did not take the note', true);
       if (ok && madeLink === link) $('madeLede').textContent += ` When ${b.to ? b.to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
@@ -258,6 +356,21 @@ function desk(ctx) {
   $('backToNote').addEventListener('click', () => { compose.classList.remove('show'); if (bottle) { sky(shown.mood); $('letter').classList.add('show'); } });
 }
 
+// What happens once, as the page opens: bring the shore over (Home Screen app), follow a notification, catch up with the server.
+async function arriveAndCatchUp() {
+  const code = qs.get('i');
+  if (code && standalone) {
+    const how = await arrive(code);
+    if (how !== 'here') count('carried', how);
+    carriedLost = how === 'lost';
+    if (!$('who').value) $('who').value = myName();
+    if (!bottle && !deskCtx.to) { inbox(); lantern(); }
+  }
+  if (hop) return follow(hop[1]);
+  if (await pull() && !bottle && !deskCtx.to) { inbox(); lantern(); }
+  tend();
+}
+
 // ---------------------------------------------------------------- the shore
 
 let scene = null;
@@ -265,6 +378,8 @@ try { scene = qs.has('nogl') ? null : new Scene($('gl')); } catch (e) { scene = 
 if (!scene) count('f_nogl', 'no 3D was asked for');      // only reached with ?nogl: a real failure was counted above, and each kind counts once
 count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');   // ?nogl pretends there is no 3D, to test the fallback
 if (bottle) sky(bottle.mood);
+lantern();
+arriveAndCatchUp();
 const ready = () => { window.__bottleReady = true; const p = $('plain'); if (p) p.className = ''; };
 
 if (!scene) {

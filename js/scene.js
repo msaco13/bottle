@@ -91,6 +91,7 @@ uniform vec2 uTan;
 uniform vec4 uBottle;         // x, z, size, how much shadow
 uniform vec3 uRip[3];         // x, z, age in seconds (negative: none)
 uniform float uDim;
+uniform float uLamp;          // 1 when this phone is listening for bottles: a lantern glows on the dry sand
 ${SKY}
 float swash(float x, float t) {
   float ph = fract(t / 7.0 - x * 0.035);
@@ -149,6 +150,9 @@ void main() {
     float fr = pow(1.0 - max(dot(-rd, rn), 0.0), 4.0);
     vec3 wetCol = sand * 0.50 + sky(R) * (0.07 + 0.62 * fr) * (0.45 + 0.55 * film);
     col = mix(sand, wetCol, wet);
+    float lampFlicker = 0.86 + 0.14 * vnoise(vec2(uTime * 7.0, 3.3));
+    float lampAway = length(p.xz - vec2(0.27, 1.16));
+    col += vec3(1.0, 0.60, 0.24) * uLamp * lampFlicker * 0.60 * exp(-lampAway * lampAway * 7.0);      // its pool of light on the sand
     // bubbles the last wave left on the sand
     float lace = fbm(p.xz * 8.0 + vec2(0.0, uTime * 0.25));
     float left = (1.0 - smoothstep(0.0, 0.34, z - zs)) * step(zs, z);
@@ -202,6 +206,12 @@ void main() {
     float bl = length(bd);
     col *= 1.0 - 0.52 * (1.0 - smoothstep(0.35, 1.0, bl)) * uBottle.w;
     if (z < zs) col = mix(col, FOAM + vec3(0.0, 0.30, 0.34) * glow, (1.0 - smoothstep(0.0, 0.28, abs(bl - 1.02))) * uBottle.w * 0.55 * smoothstep(0.45, 0.7, fbm(p.xz * 11.0 + uTime)));
+  }
+  if (uLamp > 0.0) {
+    // the flame itself: a bright point just above the sand, with a soft halo
+    vec3 toLamp = vec3(0.27, 0.10, 1.16) - uCam;
+    float along = dot(toLamp, rd), off = length(toLamp - rd * along);
+    col += vec3(1.0, 0.74, 0.38) * uLamp * (0.86 + 0.14 * vnoise(vec2(uTime * 7.0, 3.3))) * step(0.0, along) * (exp(-off * off * 1400.0) * 1.8 + exp(-off * off * 90.0) * 0.22);
   }
   col *= 1.0 - 0.30 * dot(ndc * 0.62, ndc * 0.62);
   col *= 1.0 - 0.50 * uDim;
@@ -371,6 +381,7 @@ export class Scene {
     this.cam = { pos: [0, 1.22, 2.75], target: [0, 0.0, -1.5], fov: 62 * Math.PI / 180 };
     this._frame = 0;
     this.mood = 0;              // 0 dusk, 1 night, 2 dawn
+    this.lamp = 0;              // 1 when the lantern is lit
   }
 
   _program(vs, fs) {
@@ -477,6 +488,7 @@ export class Scene {
     (s.ripples || []).slice(-3).forEach((r, i) => { rip[i * 3] = r.x; rip[i * 3 + 1] = r.z; rip[i * 3 + 2] = r.age; });
     gl.uniform3fv(u.uRip, rip);
     gl.uniform1f(u.uDim, s.dim || 0);
+    gl.uniform1f(u.uLamp, this.lamp || 0);
     this._quad();
 
     // 2. onto the screen

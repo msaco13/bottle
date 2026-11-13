@@ -6,62 +6,76 @@
 // phone, and the key only ever travels inside links, after the #. The server sees
 // a conversation number and unreadable text. It cannot read a single note.
 //
+// SEALS. A conversation is sealed: only its members may read it or add to it. Each
+// bottle carries one seat (its "claim"). The first phone to open that bottle takes
+// the seat. A link that is forwarded on, and opened by someone else later, finds
+// the seat taken: they can read the one note that is in the link, and nothing else.
+// "Who is asking" is a token made from a secret that never leaves the phone (shore.js).
+//
 // A bottle never NEEDS the server: the note itself is in the link. If the server is
-// slow, asleep or gone, bottles still open and replies still send. Only the shelf of
-// earlier notes goes missing.
+// slow, asleep or gone, bottles still open and replies still send.
 
 export const SERVER = {
   url: 'https://segtizidayglyouweszn.supabase.co',     // the Bottle project. It holds nothing else.
-  // Its publishable key. It is meant to be public: all it can do is call the two functions below.
+  // Its publishable key. It is meant to be public: all it can do is call the functions below.
   key: 'sb_publishable_2XYYYTBW-AEQN6IaXllIjQ_mQkYc4PP',
+  // The public half of the key notifications are signed with. Also meant to be public.
+  push: 'BN4Fq7TPzNUleFeKu7mcCiiu5VQtrmy4sJ2JKRUPJwJwNnPfrSgHIn6lBE2YEZEaSIqL3ns0TDAlJfRuzaRXzIA',
 };
 
-const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
-const unb64 = (str) => { let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; const bin = atob(b), out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
+export const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+export const unb64 = (str) => { let b = str.replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '='; const bin = atob(b), out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; };
 const subtle = () => (globalThis.crypto && globalThis.crypto.subtle) || null;
+const sha = async (text) => new Uint8Array(await subtle().digest('SHA-256', new TextEncoder().encode(text)));
+export const hex = async (text) => Array.from(await sha(text), (b) => b.toString(16).padStart(2, '0')).join('');
+const random = (n) => { const a = new Uint8Array(n); globalThis.crypto.getRandomValues(a); return b64(a); };
 
 /** A new conversation secret: 16 random bytes as 22 link-safe characters. */
-export function newKey() {
-  const a = new Uint8Array(16);
-  globalThis.crypto.getRandomValues(a);
-  return b64(a);
-}
+export function newKey() { return random(16); }
+/** A new seat for one bottle: 12 random bytes as 16 link-safe characters. */
+export function newClaim() { return random(12); }
 
 /** The public number of a conversation. Worked out from the key, and useless for reading anything. */
-export async function threadId(key) {
-  const h = await subtle().digest('SHA-256', new TextEncoder().encode('bottle-thread:' + key));
-  return b64(new Uint8Array(h).subarray(0, 16));
+export async function threadId(key) { return b64((await sha('bottle-thread:' + key)).subarray(0, 16)); }
+/** What the server keeps of a seat: its fingerprint, never the seat itself. */
+export async function claimHash(claim) { return hex('bottle-claim:' + claim); }
+
+async function aes(secret) {
+  return subtle().importKey('raw', await sha('bottle-key:' + secret), 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
-async function aes(key) {
-  const raw = await subtle().digest('SHA-256', new TextEncoder().encode('bottle-key:' + key));
-  return subtle().importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-
-/** Scramble a note for the server. */
-export async function seal(key, note) {
+/** Scramble anything with a secret. */
+export async function box(secret, value) {
   const iv = new Uint8Array(12);
   globalThis.crypto.getRandomValues(iv);
-  const ct = new Uint8Array(await subtle().encrypt({ name: 'AES-GCM', iv }, await aes(key), new TextEncoder().encode(JSON.stringify(note))));
+  const ct = new Uint8Array(await subtle().encrypt({ name: 'AES-GCM', iv }, await aes(secret), new TextEncoder().encode(JSON.stringify(value))));
   const out = new Uint8Array(12 + ct.length);
   out.set(iv); out.set(ct, 12);
   return b64(out);
 }
 
-/** Unscramble one. null if it is not ours or has been tampered with. */
-export async function unseal(key, body) {
+/** Unscramble it. null if the secret is wrong or it has been tampered with. */
+export async function unbox(secret, text) {
   try {
-    const raw = unb64(body);
-    const pt = await subtle().decrypt({ name: 'AES-GCM', iv: raw.subarray(0, 12) }, await aes(key), raw.subarray(12));
-    const v = JSON.parse(new TextDecoder().decode(pt));
-    return v && typeof v.m === 'string' ? v : null;
+    const raw = unb64(text);
+    const pt = await subtle().decrypt({ name: 'AES-GCM', iv: raw.subarray(0, 12) }, await aes(secret), raw.subarray(12));
+    return JSON.parse(new TextDecoder().decode(pt));
   } catch {
     return null;
   }
 }
 
-async function call(fn, args, ms = 6000) {
-  if (!SERVER.url || !subtle()) return null;
+/** Scramble a note for the server. */
+export const seal = (key, note) => box(key, note);
+/** Unscramble one. null if it is not ours or has been tampered with. */
+export async function unseal(key, body) {
+  const v = await unbox(key, body);
+  return v && typeof v.m === 'string' ? v : null;
+}
+
+/** Ask the server something. Resolves to its answer (which may be null), or undefined if it could not be asked. */
+export async function rpc(fn, args, ms = 6000) {
+  if (!SERVER.url || !subtle() || typeof fetch !== 'function') return undefined;
   const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = setTimeout(() => ctl && ctl.abort(), ms);
   try {
@@ -70,30 +84,60 @@ async function call(fn, args, ms = 6000) {
       headers: { 'content-type': 'application/json', apikey: SERVER.key, authorization: 'Bearer ' + SERVER.key },
       body: JSON.stringify(args),
     });
-    if (!r.ok) return null;
-    return await r.json();
+    if (!r.ok) return undefined;
+    const text = await r.text();
+    return text ? JSON.parse(text) : null;
   } catch {
-    return null;                 // no signal, server asleep, blocked: carry on without it
+    return undefined;                 // no signal, server asleep, blocked: carry on without it
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** Put a note in its conversation. note: { m, n, mood, to, id, t }. Resolves true if the server took it. */
-export async function add(key, note) {
-  if (!key || !SERVER.url || !subtle()) return false;
+/** Ask the notification sender to do something. Never waited on by anything that matters. */
+export async function notify(body, ms = 8000) {
+  if (!SERVER.url || typeof fetch !== 'function') return null;
+  const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = setTimeout(() => ctl && ctl.abort(), ms);
   try {
-    const r = await call('add_bottle', { p_thread: await threadId(key), p_body: await seal(key, note) });
-    return r != null;
+    const r = await fetch(`${SERVER.url}/functions/v1/notify`, { method: 'POST', signal: ctl ? ctl.signal : undefined, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return r.ok ? await r.json() : null;
+  } catch { return null; } finally { clearTimeout(timer); }
+}
+
+/**
+ * Open a bottle: take its seat in the conversation, or learn where this phone stands.
+ *   'claimed' this phone just took the seat      'member' it already belongs
+ *   'legacy'  an old conversation, open as before 'none'   the server has never heard of it
+ *   'taken'   another phone opened this bottle first: no earlier notes, no replying into it
+ *   null      the server could not be asked
+ */
+export async function open(auth, key, claim) {
+  if (!key || !auth || !subtle()) return null;
+  try {
+    const r = await rpc('bottle_open', { p_auth: auth, p_thread: await threadId(key), p_claim: claim || null });
+    return typeof r === 'string' ? r : null;
+  } catch { return null; }
+}
+
+/** Put a note in its conversation, with the seat its link will carry. note: { m, n, mood, to, id, t }. Resolves true if the server took it. */
+export async function add(auth, key, note, claim) {
+  if (!key || !auth || !subtle()) return false;
+  try {
+    const thread = await threadId(key);
+    const r = await rpc('bottle_add', { p_auth: auth, p_thread: thread, p_body: await seal(key, note), p_claim: claim ? await claimHash(claim) : null });
+    if (r !== 'ok') return false;
+    notify({ do: 'bottle', auth, thread });          // tell the other side's lantern. Not waited on.
+    return true;
   } catch { return false; }
 }
 
-/** Every note in a conversation, oldest first. Empty if there is no server to ask. */
-export async function list(key) {
-  if (!key || !SERVER.url || !subtle()) return [];
+/** Every note in a conversation this phone belongs to, oldest first. null if the server could not be asked. */
+export async function list(auth, key) {
+  if (!key || !subtle()) return null;
   try {
-    const rows = await call('thread_bottles', { p_thread: await threadId(key) });
-    if (!Array.isArray(rows)) return [];
+    const rows = await rpc('bottle_list', { p_auth: auth || null, p_thread: await threadId(key) });
+    if (!Array.isArray(rows)) return null;
     const out = [], seen = new Set();
     for (const row of rows) {
       const v = await unseal(key, row.body);
@@ -102,5 +146,5 @@ export async function list(key) {
       out.push({ message: v.m, name: v.n || '', mood: v.mood || 'dusk', to: v.to || '', id: v.id, at: Date.parse(row.created_at) || v.t || 0 });
     }
     return out.sort((a, b) => a.at - b.at);
-  } catch { return []; }
+  } catch { return null; }
 }

@@ -14,7 +14,7 @@ const SENT = [
   ['1.WyJObyBuYW1lIG9uIHRoaXMgb25lLiJd', 'No name on this one.', ''],
 ];
 for (const [link, message, name] of SENT) {
-  assert.deepEqual(decode('#' + link), { message, name, mood: 'dusk', to: '', key: '' }, 'an old link no longer opens the same: ' + link.slice(0, 24));
+  assert.deepEqual(decode('#' + link), { message, name, mood: 'dusk', to: '', key: '', claim: '' }, 'an old link no longer opens the same: ' + link.slice(0, 24));
 }
 // The safety-net reader inside index.html must make the same promise, on its own.
 {
@@ -42,11 +42,13 @@ const cases = [
   ['Emoji survive too: \u{1F37E}\u{1F30A} and "quotes" & <tags> #hash ?q=1', 'Ana & Co.', 'dawn', 'Michael', KEY],
   ['A reply with no name and no mood', '', 'dusk', 'Michael', KEY],
   ['x'.repeat(MAX_MESSAGE), 'Long', 'night', 'Someone', KEY],
+  ['A bottle with a seat', 'Ana', 'dusk', 'Michael', KEY, 'aB3_dE6-gH9jK2mN'],
+  ['A seat but no one named', '', 'dusk', '', KEY, 'aB3_dE6-gH9jK2mN'],
 ];
-for (const [m, n, mood, to, key] of cases) {
-  const e = encode(m, n, mood, to, key);
+for (const [m, n, mood, to, key, claim = ''] of cases) {
+  const e = encode(m, n, mood, to, key, claim);
   assert(/^1\.[A-Za-z0-9_-]+$/.test(e), 'only link-safe characters');
-  const want = { message: m, name: n, mood, to, key };
+  const want = { message: m, name: n, mood, to, key, claim };
   assert.deepEqual(decode('#' + e), want);
   assert.deepEqual(decode(e), want);
   assert.deepEqual(decode('#' + encodeURIComponent(e)), want, 'survives being percent-escaped');
@@ -58,10 +60,12 @@ assert.equal(encode('No name on this one.'), SENT[4][0]);
 {
   const bytes = new TextEncoder().encode(JSON.stringify(['from the future', 'Zed', 'zz', 7, { extra: 1 }, 'more']));
   const future = '1.' + btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  assert.deepEqual(decode(future), { message: 'from the future', name: 'Zed', mood: 'dusk', to: '', key: '' });
+  assert.deepEqual(decode(future), { message: 'from the future', name: 'Zed', mood: 'dusk', to: '', key: '', claim: '' });
 }
 // a bad key is dropped rather than trusted
 assert.equal(decode(encode('m', 'n', 'dusk', 't', 'short')).key, '');
+assert.equal(decode(encode('m', 'n', 'dusk', 't', KEY, 'tiny')).claim, '', 'a seat that is not a seat is dropped');
+assert.equal(encode('m', 'n', 'dusk', 't', KEY), encode('m', 'n', 'dusk', 't', KEY, ''), 'no seat, no sixth field: links made before seats read the same');
 const long = linkFor('https://msaco13.github.io/bottle/', { message: 'x'.repeat(MAX_MESSAGE), name: 'N', mood: 'night', to: 'T', key: KEY });
 const typical = linkFor('https://msaco13.github.io/bottle/', { message: cases[0][0], name: 'Michael', mood: 'dusk', to: 'Ana', key: KEY });
 console.log(`longest possible link: ${long.length} characters. A typical reply: ${typical.length}`);
