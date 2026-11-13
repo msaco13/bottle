@@ -2240,10 +2240,13 @@ async function inbox() {
     const sub = document.createElement('span'); sub.className = 'rowSub';
     sub.textContent = f.isNew ? 'A new bottle washed up. Tap to open it' : `${f.count === 1 ? '1 bottle' : f.count + ' bottles'} · ${when(f.at)}`;
     row.append(who, sub);
-    row.onclick = () => { location.href = linkFor(location.origin + location.pathname, { message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k }); };
+    row.onclick = () => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k }); };
     el.appendChild(row);
   }
 }
+
+/** The address of a bottle on this site. A visit that was opened as a test stays a test. */
+const addressOf = (b) => { const l = linkFor(location.origin + location.pathname, b); return qs.has('dev') ? l.replace('#', '?dev#') : l; };
 
 /** A notification was tapped. Bring in the newest bottle of the conversation it named. */
 async function follow(id) {
@@ -2256,7 +2259,7 @@ async function follow(id) {
   const pick = theirs.filter((n) => n.at > (th.s || 0)).pop() || theirs.pop() || all.pop();
   if (!pick) return home();
   count('followed', 'a notification was tapped');
-  location.replace(linkFor(location.origin + location.pathname, { message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k }));
+  location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k }));
 }
 
 /** ctx: { to, key } when sending one back. Empty for a fresh bottle. */
@@ -2438,7 +2441,7 @@ if (!scene) {
   if (scene) { document.documentElement.classList.add('flat'); again([400, 1500, 4000, 10000]); }
 }
 // How the shore is being drawn. If 3D was refused, enough to tell why: was the page on screen, how big, does the browser know 3D at all.
-if (scene) count('view', scene.info() + (scene.flat ? ` | 3D refused: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight} | browser knows 3D: ${typeof WebGLRenderingContext !== 'undefined'}` : ''), true);
+if (scene) setTimeout(() => count('view', scene.info() + (scene.flat ? ` | 3D refused: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight} | browser knows 3D: ${typeof WebGLRenderingContext !== 'undefined'}` : ''), true), 0);
 else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight}`);
 count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
 if (bottle) sky(bottle.mood);
