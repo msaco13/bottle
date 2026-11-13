@@ -28,7 +28,9 @@ const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (
 // What this phone remembers, and nothing leaves it: the conversations it is part of and the notes it wrote.
 const stored = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
 const threads = () => stored('bottle-threads').filter((x) => x && typeof x.k === 'string');
-const isMine = (n) => !!(n && ((n.id && stored('bottle-mine').includes(n.id)) || (n.name && n.name === myName())));
+// A note the server knows is mine only if this phone wrote it. A note known just from its link is guessed from the name on it,
+// until the conversation loads and says for certain (two people can share a name).
+const isMine = (n) => !!n && (n.id ? stored('bottle-mine').includes(n.id) : !!(n.name && n.name === myName()));
 function wrote(id) { try { localStorage.setItem('bottle-mine', JSON.stringify([id, ...stored('bottle-mine')].slice(0, 300))); } catch {} }
 /** Keep a conversation: its key, who it is with, and the newest note already seen (by the server's clock). */
 function remember(k, w, seenAt) {
@@ -72,11 +74,7 @@ function showLetter(instant, note) {
   seal.style.animationDelay = instant ? '0s' : (2.0 + parts.length * per).toFixed(2) + 's';
   sign.style.animationDelay = instant ? '0s' : (1.6 + parts.length * per).toFixed(2) + 's';
   // Sending one back is the obvious next thing, and it is already addressed.
-  const mine = isMine(b);
-  const other = mine ? b.to : b.name;
-  $('reply').textContent = (mine ? 'Send another' : 'Send one back') + (other ? ' to ' + other : '');
-  remember(bottle.key || b.key, other, b.at || 0);
-  $('reply').onclick = () => desk({ to: other || '', key: bottle.key || b.key || '' });
+  address(b);
   $('fresh').onclick = () => desk({});
   letter.classList.add('show');
   $('hint').classList.remove('show'); $('skip').classList.remove('show'); $('finger').style.opacity = 0;
@@ -84,6 +82,15 @@ function showLetter(instant, note) {
   clearTimeout(showLetter.t);
   showLetter.t = setTimeout(() => $('after').classList.add('show'), instant ? 300 : (2.4 + parts.length * per) * 1000);
   if (!note) shelf();
+}
+
+/** Point the reply button at the other person in this note, and keep the conversation on this phone. */
+function address(b) {
+  const mine = isMine(b);
+  const other = mine ? b.to : b.name;
+  $('reply').textContent = (mine ? 'Send another' : 'Send one back') + (other ? ' to ' + other : '');
+  $('reply').onclick = () => desk({ to: other || '', key: bottle.key || b.key || '' });
+  remember(bottle.key || b.key, other, b.at || 0);
 }
 
 // The earlier notes of this conversation, if the server has them. Nothing here is needed to read or reply.
@@ -96,7 +103,7 @@ async function shelf() {
   const all = await list(bottle.key);
   if (!all.length) return;
   const here = all.find((n) => same(n, bottle));
-  if (here) remember(bottle.key, '', here.at);
+  if (here) { bottle.id = here.id; bottle.at = here.at; if (shown === bottle) address(bottle); }      // now it is known for certain whose note this is
   const newer = here ? all.filter((n) => n.at > here.at && !isMine(n)) : [];      // your own notes are not news
   const others = all.filter((n) => !same(n, bottle));
   if (!others.length) return;
