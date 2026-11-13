@@ -61,6 +61,9 @@ What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a
 - A notification's title starts with the name ("Jorge sent you a bottle"), because a phone shows only the start of a long title. It used to read "A bottle from Jorge has washed up" and was cut off before the name.
 - The wax seal now follows the signature in the page's own flow, so on a long note or one with a picture it can never lie over the words.
 - On a phone that has people, the link under a note reads "Back to your shore".
+- In the row of earlier notes, this phone's own are labelled "You".
+- "From" on the desk says "(sign it)", not "(optional)": an unsigned note is what made the question "who sent this?" come up.
+- The note's screen: the paper is never squeezed by what is under it (it used to shrink until the signature was out of sight). The paper and what is under it sit in the middle when they fit, and the page scrolls when they do not.
 
 ## Your shore: people, and sending without texting
 
@@ -92,6 +95,11 @@ The reason to come back. Every bottle sent back and forth leaves something on th
 - Known limit: after 12 bottles the sand stops gaining shells, and after 10 the sky stops gaining stars. The line of words still counts.
 
 ## The lantern (notifications)
+
+**What the page calls it (changed 2026-11-13, at Michael's asking): "notifications", in plain words, everywhere.** The button is "Turn on notifications", with one line under it saying what it does and that a lantern lights on the shore to show it is on. Other people's are "notifications on" beside their name. The lantern is still drawn on the sand, and this document and the code still call the feature the lantern. Once they are on, nothing is said about them under a note: the switch ("Turn notifications off") lives on Your shore and the desk.
+
+An installed copy on Android (the home screen app) asks for notifications again, separately from Chrome: Michael's showed the button until he tapped it there.
+
 
 - `js/lantern.js`, `sw.js`, `ops/notify/`. "Light a lantern, so a bottle can find you" appears under a note, on the "bottle is ready" screen, and on the desk. When it is lit a lantern glows on the sand.
 - Android and computers: one tap, the browser asks, done. The first notification ("Your lantern is lit") is the proof.

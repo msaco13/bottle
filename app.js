@@ -2648,7 +2648,7 @@ async function shelf() {
   for (const n of [...all].reverse()) {
     const chip = document.createElement('button');
     chip.className = 'chip' + (same(n, shown) ? ' on' : '') + (newer.includes(n) ? ' new' : '');
-    chip.textContent = `${n.name || (theirsUnsigned(n) ? withWho() : 'A note')} · ${when(n.at)}`;
+    chip.textContent = `${isMine(n) ? 'You' : n.name || (theirsUnsigned(n) ? withWho() : 'A note')} · ${when(n.at)}`;
     chip.onclick = () => { showLetter(false, n); for (const c of row.children) c.classList.toggle('on', c === chip); };
     row.appendChild(chip);
   }
@@ -2657,7 +2657,7 @@ async function shelf() {
 
 // ---------------------------------------------------------------- the lantern (see lantern.js)
 
-let lanternSaid = '', carriedLost = false, homeBack = '';
+let lanternSaid = '', carriedLost = false, homeBack = '', litHere = false;      // litHere: notifications were turned on during this visit
 
 /** Draw the lantern's line wherever it belongs: under a note, under a new bottle, and on the desk. */
 function lantern() {
@@ -2675,29 +2675,34 @@ function lantern() {
     if (id === 'lanternD') { if (standalone && st !== 'lit') $('home').insertBefore(el, $('people')); else $('newOne').after(el); }
     const say = (t) => { const p = document.createElement('p'); p.className = 'lanternSay'; p.textContent = t; el.appendChild(p); };
     const btn = (t, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = t; b.onclick = fn; el.appendChild(b); return b; };
-    if (id === 'lanternC' && carriedLost && !threads().length) say('If you already have bottles in Safari, they did not come across. To bring them: in Safari, open any bottle, tap "Light a lantern", and add it to the Home Screen again.');
+    if (id === 'lanternC' && carriedLost && !threads().length) say('If you already have bottles in Safari, they did not come across. To bring them: in Safari, open any bottle, tap "Turn on notifications", and add it to the Home Screen again.');
+    // Said in plain words everywhere: it is notifications. The lantern is the picture of it, glowing on the sand.
     if (st === 'lit') {
-      say(lanternSaid || 'Your lantern is lit. This phone will tell you when a bottle washes up.');
-      btn('Put the lantern out', async () => { await douse(); count('lantern', 'put out', true); lantern(); }, 'link');
+      // Under a note there is nothing to say once they are on: the lantern on the sand says it. The switch lives on the shore and the desk.
+      if (onDesk) {
+        say('Notifications are on. Your lantern is lit, and this phone tells you when a bottle arrives.');
+        btn('Turn notifications off', async () => { await douse(); litHere = false; count('lantern', 'put out', true); lantern(); }, 'link');
+      } else if (litHere) say('Notifications are on. Your lantern is lit, and this phone tells you when a bottle arrives.');
     } else if (st === 'blocked') {
       // They said no to notifications. Do not bring it up again, except on the desk where it explains why nothing arrives.
-      if (onDesk) say('Notifications are switched off for this page in your browser settings, so a bottle cannot announce itself here.');
+      if (onDesk) say('Notifications are blocked for this page in your browser\u2019s settings, so this phone cannot tell you when a bottle arrives.');
     } else if (st === 'safari') {
-      say('To be told when a bottle arrives, open this page in Safari and light a lantern there.');
+      say('To get notified when a bottle arrives, open this page in Safari and turn on notifications there.');
     } else if (st === 'home') {
-      btn('Light a lantern, so a bottle can find you', homeCard, 'btn ghost');
+      btn('Turn on notifications', homeCard, 'btn ghost');
+      say('Then this phone tells you when a bottle arrives, and friends can send you one with no link to text. A lantern lights on your shore to show it is on.');
     } else {
-      btn(standalone ? 'Light the lantern' : 'Light a lantern, so a bottle can find you', async (e) => {
+      btn('Turn on notifications', async (e) => {
         const b = e.currentTarget;
-        b.disabled = true; b.textContent = 'Lighting it';
+        b.disabled = true; b.textContent = 'Turning them on';
         const how = await light();                    // the browser asks its one question here
         count('lantern', how, true);
-        lanternSaid = how === 'lit' ? '' : how === 'refused' ? 'No lantern, then. You can light one any time.'
-          : how.startsWith('lit') ? ''
-          : 'The lantern would not light (' + how.replace('failed: ', '') + '). Try again in a minute.';
+        litHere = how.startsWith('lit');
+        lanternSaid = litHere ? '' : how === 'refused' ? 'Notifications stay off. You can turn them on any time.'
+          : 'Notifications could not be turned on (' + how.replace('failed: ', '') + '). Try again in a minute.';
         lantern();
       }, standalone ? 'btn' : 'btn ghost');
-      if (lanternSaid) say(lanternSaid);
+      say(lanternSaid || 'Then this phone tells you when a bottle arrives, and friends can send you one with no link to text. A lantern lights on your shore to show it is on.');
     }
   }
 }
@@ -2828,7 +2833,7 @@ async function people() {
       const who = document.createElement('span'); who.className = 'rowWho'; who.textContent = f.who || 'Someone';
       const sub = document.createElement('span'); sub.className = 'rowSub';
       sub.textContent = f.isNew ? 'A new bottle washed up. Tap to open it'
-        : [f.count ? (f.count === 1 ? '1 bottle' : f.count + ' bottles') : 'No bottles yet', f.count ? when(f.at) : '', reachOf(f.th.k).l ? 'lantern lit' : ''].filter(Boolean).join(' · ');
+        : [f.count ? (f.count === 1 ? '1 bottle' : f.count + ' bottles') : 'No bottles yet', f.count ? when(f.at) : '', reachOf(f.th.k).l ? 'notifications on' : ''].filter(Boolean).join(' · ');
       row.append(who, sub);
       if (picking) {
         row.classList.toggle('picked', picking.has(f.th.k));
@@ -2878,14 +2883,14 @@ function deskWords() {
     const all = deskCtx.many, lit = all.filter((p) => reachOf(p.key).l).length;
     $('deskTitle').textContent = 'A bottle for ' + listed(all.map((p) => p.to || 'someone'));
     $('deskLede').textContent = 'Write one note. Each of them gets their own bottle. '
-      + (lit === all.length ? 'All their lanterns are lit, so there are no links to text.' : lit ? `${lit} of them ${lit === 1 ? 'has a lantern' : 'have lanterns'} lit and will be told. You get a link to text to the ${all.length - lit === 1 ? 'other' : 'others'}.` : 'You get a link to text to each.');
+      + (lit === all.length ? 'All of them have notifications on, so there are no links to text.' : lit ? `${lit} of them ${lit === 1 ? 'has' : 'have'} notifications on and will be told. You get a link to text to the ${all.length - lit === 1 ? 'other' : 'others'}.` : 'You get a link to text to each.');
     $('make').textContent = `Send to ${all.length} people`;
     $('mobileRow').style.display = 'none';
     return;
   }
   const to = deskCtx.to || '', direct = !!(deskCtx.key && reachOf(deskCtx.key).l);
   $('deskTitle').textContent = to ? `A bottle for ${to}` : (deskCtx.key ? 'Another bottle' : 'Message in a bottle');
-  $('deskLede').textContent = direct ? `Write your note. ${Whose(to)} lantern is lit, so your bottle goes straight to ${whose(to)} shore. No link to text.`
+  $('deskLede').textContent = direct ? `Write your note. ${to || 'They'} ${to ? 'has' : 'have'} notifications on, so your bottle goes straight to ${whose(to)} phone. No link to text.`
     : to ? `Write your note. You get a link to text to ${to}, and your bottle washes up on their shore.`
     : 'Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.';
   $('make').textContent = direct ? (to ? `Send to ${to}` : 'Send it') : 'Create bottle';
@@ -2977,7 +2982,7 @@ function sendMany(message, name, pic) {
   const finish = () => {
     if (--left || run !== sendMany.run) return;
     $('madeTitle').textContent = told === who.length ? `Sent to all ${told}` : told ? `${told} sent, ${who.length - told} to text` : 'Your bottles are ready';
-    $('madeLede').textContent = told === who.length ? 'Every lantern was lit, so every phone has been told.' : 'Anyone with a lit lantern has been told. Each of the others needs their own link: one tap each.';
+    $('madeLede').textContent = told === who.length ? 'Everyone has notifications on, so every phone has been told.' : 'Anyone with notifications on has been told. Each of the others needs their own link: one tap each.';
   };
   who.forEach((p, i) => {
     let claim = '';
@@ -3004,7 +3009,7 @@ function sendMany(message, name, pic) {
         row.classList.add('done');
         state.textContent = `Sent. ${Whose(p.to)} phone has been told.`;
       } else {
-        state.textContent = r.ok ? 'No lantern lit, so this one needs its link.' : 'The server could not be reached. The link carries the note.';
+        state.textContent = r.ok ? 'Notifications are off there, so this one needs its link.' : 'The server could not be reached. The link carries the note.';
         const go = document.createElement(number ? 'a' : 'button');
         go.className = 'btn';
         if (number) { go.href = textTo(number, sayWith(p.to) + ' ' + link); go.textContent = `Text it to ${p.to || 'them'}`; go.onclick = () => count('share', 'opened Messages, already addressed', true); }
@@ -3091,12 +3096,12 @@ function wire() {
         // Only said once the other phone's push service has really taken it.
         el.classList.add('direct');
         $('madeTitle').textContent = to ? `Sent to ${to}` : 'Sent';
-        lede.textContent = (direct ? `${Whose(to)} lantern is lit, so ${whose(to)} phone has been told.` : `${Whose(to)} lantern is lit, so ${whose(to)} phone has already been told. No need to text this one.`) + leaves;
+        lede.textContent = (direct ? `${Whose(to)} phone has been told. No link needed.` : `${to || 'They'} ${to ? 'has' : 'have'} notifications on, so ${whose(to)} phone has already been told. No need to text this one.`) + leaves;
       } else if (direct) {
         el.classList.remove('direct');
         $('madeTitle').textContent = 'Your bottle is ready';
         lede.textContent = r.ok
-          ? `It is on ${whose(to)} shore, but the lantern did not answer, so ${whose(to)} phone was not told. It will be waiting when ${to || 'they'} next ${to ? 'opens' : 'open'} Bottle. To be sure, text the link.`
+          ? `It is saved for ${to || 'them'}, but ${whose(to)} phone could not be told this time. It will be waiting when ${to || 'they'} next ${to ? 'opens' : 'open'} Bottle. To be sure, text the link.`
           : `The server could not be reached, so text ${to || 'them'} the link. The note travels inside it.`;
       } else if (r.ok) {
         lede.textContent += ` When ${to ? to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
