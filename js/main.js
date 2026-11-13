@@ -78,6 +78,11 @@ function keepSay() {
 /** Put a sky over the shore: 'dusk', 'night' or 'dawn'. */
 function sky(mood) { if (scene) scene.mood = MOOD[mood] || 0; document.documentElement.dataset.mood = MOOD[mood] ? mood : 'dusk'; }
 
+/** Who the link's conversation is with, as this phone remembers it. '' if it does not know. */
+const withWho = () => { const th = bottle && bottle.key ? threads().find((t) => t.k === bottle.key) : null; return (th && th.w) || ''; };
+/** An unsigned note in a conversation this phone knows: is it the other person's? (One addressed to them is this phone's own.) */
+const theirsUnsigned = (n) => !n.name && !!withWho() && n.to !== withWho() && !isMine(n);
+
 /** Put the picture that came with a note on the paper. The words never wait for it. */
 let picUrl = '', picTurn = 0;
 function showPic(b) {
@@ -133,7 +138,8 @@ function showLetter(instant, note) {
     words.appendChild(s);
   });
   const sign = $('sign');
-  sign.textContent = b.name ? '~ ' + b.name : '';
+  sign.textContent = b.name ? '~ ' + b.name : theirsUnsigned(b) ? `Not signed. From your bottles with ${withWho()}.` : '';
+  sign.classList.toggle('unsigned', !b.name);
   const seal = $('seal');
   seal.textContent = b.name ? Array.from(b.name.trim())[0].toUpperCase() : '';
   seal.style.display = b.name ? '' : 'none';
@@ -142,6 +148,7 @@ function showLetter(instant, note) {
   // Sending one back is the obvious next thing, and it is already addressed.
   address(b);
   $('fresh').onclick = () => desk({});
+  $('fresh').textContent = threads().length ? 'Back to your shore' : 'Write a bottle for someone else';      // a phone with people has a shore to go back to
   letter.classList.add('show');
   $('hint').classList.remove('show'); $('skip').classList.remove('show'); $('finger').style.opacity = 0;
   $('after').classList.remove('show');
@@ -152,8 +159,9 @@ function showLetter(instant, note) {
 
 /** Point the reply button at the other person in this note, and keep the conversation on this phone. */
 function address(b) {
-  const mine = isMine(b);
-  const other = mine ? b.to : b.name;
+  const known = withWho();
+  const mine = isMine(b) || (!b.name && !!known && b.to === known);       // an unsigned note addressed to them is this phone's own
+  const other = (mine ? b.to : b.name) || (theirsUnsigned(b) ? known : '');
   const key = seat === 'taken' ? '' : (bottle.key || b.key || '');       // a taken seat: the reply starts a conversation of its own
   $('reply').textContent = (mine ? 'Send another' : 'Send one back') + (other ? ' to ' + other : '');
   $('reply').onclick = () => desk({ to: other || '', key, fresh: true });
@@ -191,7 +199,7 @@ async function shelf() {
     const go = document.createElement('button');
     go.className = 'btn';
     go.id = 'newest';
-    const from = newer[newer.length - 1].name;
+    const from = newer[newer.length - 1].name || (theirsUnsigned(newer[newer.length - 1]) ? withWho() : '');
     go.textContent = from ? `Read the new bottle from ${from}` : 'Read the newest bottle';
     go.onclick = () => { showLetter(false, newer[newer.length - 1]); go.remove(); $('reply').classList.remove('ghost'); head.textContent = 'Bottles between you (' + all.length + ')'; for (const c of row.children) c.classList.toggle('on', c === row.firstChild); };
     // A new bottle is the first thing to do, so it goes above everything else.
@@ -208,7 +216,7 @@ async function shelf() {
   for (const n of [...all].reverse()) {
     const chip = document.createElement('button');
     chip.className = 'chip' + (same(n, shown) ? ' on' : '') + (newer.includes(n) ? ' new' : '');
-    chip.textContent = `${n.name || 'A note'} · ${when(n.at)}`;
+    chip.textContent = `${n.name || (theirsUnsigned(n) ? withWho() : 'A note')} · ${when(n.at)}`;
     chip.onclick = () => { showLetter(false, n); for (const c of row.children) c.classList.toggle('on', c === chip); };
     row.appendChild(chip);
   }

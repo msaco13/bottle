@@ -73,8 +73,11 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 /* a picture that came in the bottle: on the paper, above the words. A tap shows it larger. */
 #picWrap { display: none; margin: 0 0 16px; }
 #picWrap.on { display: block; }
-#pic { display: none; width: 100%; max-height: 42vh; object-fit: contain; border-radius: 2px; background: rgba(90, 60, 30, 0.10); box-shadow: 0 2px 10px rgba(60, 40, 20, 0.35); cursor: zoom-in; opacity: 0; transition: opacity 0.8s ease; }
+/* It is kept small, like a print slipped in with the letter, so the words and the buttons under them are never crowded out. */
+#pic { display: none; width: auto; height: auto; max-width: 100%; max-height: min(26vh, 220px); margin: 0 auto; padding: 5px; border-radius: 2px; background: #fdfaf2; box-shadow: 0 3px 12px rgba(60, 40, 20, 0.40); transform: rotate(-1.2deg); cursor: zoom-in; opacity: 0; transition: opacity 0.8s ease; }
 #picWrap.got #pic { display: block; opacity: 1; }
+#picHint { display: none; font-family: var(--font); font-size: 12.5px; line-height: 1.3; opacity: 0.6; text-align: center; margin-top: 9px; }
+#picWrap.got #picHint { display: block; }
 #picNote { font-family: var(--font); font-size: 14px; line-height: 1.4; opacity: 0.7; padding: 18px 8px; text-align: center; border: 1px dashed rgba(90, 60, 30, 0.35); border-radius: 2px; }
 #picWrap.got #picNote { display: none; }
 #picBig { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(8, 6, 16, 0.94); cursor: zoom-out; }
@@ -91,13 +94,15 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 #picDrop { padding: 6px 4px; text-shadow: none; }
 #words span { display: inline-block; opacity: 0; animation: ink 0.5s ease forwards; }
 /* a wax seal with the sender's initial, pressed on once the words are down */
-#seal { position: absolute; left: 22px; bottom: 16px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 700; color: rgba(255, 220, 210, 0.85); text-shadow: 0 -1px 0 rgba(60, 0, 0, 0.6); background: radial-gradient(circle at 35% 30%, #d8483a, #8f1d18 62%, #6b1210); box-shadow: 0 3px 8px rgba(60, 10, 0, 0.45), inset 0 0 0 3px rgba(255, 255, 255, 0.07), inset 0 -4px 8px rgba(0, 0, 0, 0.35); opacity: 0; transform: rotate(-12deg) scale(1.7); }
+#seal { position: relative; left: -8px; margin: 6px 0 -52px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 700; color: rgba(255, 220, 210, 0.85); text-shadow: 0 -1px 0 rgba(60, 0, 0, 0.6); background: radial-gradient(circle at 35% 30%, #d8483a, #8f1d18 62%, #6b1210); box-shadow: 0 3px 8px rgba(60, 10, 0, 0.45), inset 0 0 0 3px rgba(255, 255, 255, 0.07), inset 0 -4px 8px rgba(0, 0, 0, 0.35); opacity: 0; transform: rotate(-12deg) scale(1.7); }
 #letter.show #seal { animation: stamp 0.35s cubic-bezier(0.3, 1.5, 0.5, 1) forwards; }
 @keyframes stamp { from { opacity: 0; transform: rotate(-12deg) scale(1.7); } to { opacity: 1; transform: rotate(-12deg) scale(1); } }
 #paper { padding-bottom: 68px; }
 @keyframes ink { from { opacity: 0; filter: blur(2px); } to { opacity: 1; filter: none; } }
 #sign { margin-top: 20px; text-align: right; font-size: 1.05em; opacity: 0; }
 #letter.show #sign { animation: ink 0.9s ease forwards; }
+/* not a signature: the page saying whose conversation an unsigned note came from */
+#sign.unsigned { font-family: var(--font); font-size: 13.5px; line-height: 1.35; text-align: left; color: rgba(58, 38, 22, 0.72); }
 #after { opacity: 0; transition: opacity 1s ease; width: min(100%, 340px); display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #dear { font-size: 0.86em; opacity: 0.72; margin-bottom: 10px; }
 #dear:empty { display: none; }
