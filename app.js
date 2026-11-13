@@ -1759,7 +1759,7 @@ function lantern() {
     const btn = (t, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = t; b.onclick = fn; el.appendChild(b); return b; };
     if (id === 'lanternC' && carriedLost && !threads().length) say('Your bottles did not come across. In Safari, open any bottle, tap "Light a lantern" and add it to the Home Screen again.');
     if (st === 'lit') {
-      say('Your lantern is lit. This phone will tell you when a bottle washes up.');
+      say(lanternSaid || 'Your lantern is lit. This phone will tell you when a bottle washes up.');
       btn('Put the lantern out', async () => { await douse(); count('lantern', 'put out', true); lantern(); }, 'link');
     } else if (st === 'blocked') {
       // They said no to notifications. Do not bring it up again, except on the desk where it explains why nothing arrives.
@@ -1774,7 +1774,9 @@ function lantern() {
         b.disabled = true; b.textContent = 'Lighting it';
         const how = await light();                    // the browser asks its one question here
         count('lantern', how, true);
-        lanternSaid = how === 'lit' ? '' : how === 'refused' ? 'No lantern, then. You can light one any time.' : how.startsWith('lit') ? '' : 'The lantern would not light (' + how.replace('failed: ', '') + '). Try again in a minute.';
+        lanternSaid = how === 'lit' ? '' : how === 'refused' ? 'No lantern, then. You can light one any time.'
+          : how.startsWith('lit') ? 'The lantern is lit, but its first notification did not go through. If none shows up in a minute, put it out and light it again.'
+          : 'The lantern would not light (' + how.replace('failed: ', '') + '). Try again in a minute.';
         lantern();
       }, standalone ? 'btn' : 'btn ghost');
       if (lanternSaid) say(lanternSaid);
