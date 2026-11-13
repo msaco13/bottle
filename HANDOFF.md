@@ -4,7 +4,7 @@ Write a note, get one link, text it to someone. They tap it and a bottle washes 
 
 Live: https://msaco13.github.io/bottle/ (the page with no message is the writing page). Stats: https://msaco13.github.io/bottle/stats.html
 
-Last updated: 2026-11-13, midday. Everything up to "A test visit stays a test" (77dff3f) is published. **Keepsakes (below) are on the branch `claude/bottle-handoff-rw7a7x` and are NOT published until that branch is merged into `main`.** Michael has an Android, no iPhone.
+Last updated: 2026-11-13, midday. Published, keepsakes included (merged 11:11 am Miami, live version `54013169e2`, checked byte for byte against `main`). Michael has an Android, no iPhone.
 
 What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a person): at 6:51 am Miami an "iPhone iOS 18.7 · Safari 27" drew the 3D beach on "Apple GPU" at 57 pictures a second, granted motion, popped the cork by tilt, read the note and took its seat. An Android (Adreno 750) also drew 3D. Chrome dressed as an iPhone does not report "Apple GPU", so these are taken to be real phones. That is the first sign the 3D shaders run on Apple's driver.
 
@@ -38,7 +38,7 @@ What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a
 - The phone also keeps the notes it has already seen (`bottle-notes`), so the history is still there if the server is asleep.
 - Clearing the browser's data makes a new, empty shore. Old links still open.
 
-## Keepsakes: a shore that remembers (not yet published)
+## Keepsakes: a shore that remembers
 
 The reason to come back. Every bottle sent back and forth leaves something on that conversation's beach.
 
@@ -163,7 +163,7 @@ One machine: a Windows PC on the home network.
 - In simulation only: the iPhone card, the parcel carrying a shore into an empty copy, the stranger's view of a taken bottle.
 - **The iPhone suite** (real Chrome made up as an iPhone 15: its name, screen, touch; run against the live site): a healthy iPhone gets 3D and the whole story by touch; 3D refused twice then granted; 3D never available (as in Lockdown Mode) plays the whole story flat; 3D handed over dead; 3D taken away mid-story and given back; a phone that cannot draw into a texture; a phone with half precision only; a phone held at 30 a second keeps its sharpness; a link preview counts as nothing; a person counts. All ten pass.
 
-- Keepsakes (2026-11-13, a cloud Linux machine, Chromium with a software graphics chip, local files, server calls blocked): `test/keeps.test.mjs` checks 300 shores (same on both phones, only ever gaining, every shell on screen above the line of words, none on another). Looked at by eye in 3D and flat, under all three skies, upright and wide, at 3, 4, 7 and 12 bottles, and with `&nokeeps`.
+- Keepsakes (2026-11-13, a cloud Linux machine, Chromium with a software graphics chip, local files, server calls blocked): `test/keeps.test.mjs` checks 300 shores (same on both phones, only ever gaining, every shell on screen above the line of words, none on another). Looked at by eye in 3D and flat, under all three skies, upright and wide, at 3, 4, 7 and 12 bottles, and with `&nokeeps`. After publishing, the live site in the same Chromium: a first-version link opened with one shell and no line of words, and a conversation link built the beach with keepsakes.
 
 ## Not tested (say this out loud)
 
