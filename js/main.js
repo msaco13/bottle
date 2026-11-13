@@ -450,6 +450,7 @@ function run() {
     requestAnimationFrame(loop);
     const raw = (now - last) / 1000;
     last = now;
+    if (window.dev && window.dev.hold) return;          // ?dev only: stand still so a test can step time by hand
     frame(Math.min(0.05, Math.max(0.001, raw)));
     // If the phone cannot keep up, trade a little sharpness for smoothness.
     if (raw < 0.2) { fpsN++; fpsT += raw; }

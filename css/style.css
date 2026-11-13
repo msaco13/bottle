@@ -122,13 +122,17 @@ textarea, input[type=text] {
 }
 textarea { font-family: var(--hand); font-size: 21px; resize: none; min-height: 132px; }
 textarea:focus, input[type=text]:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255, 201, 138, 0.25); }
-#link { font-size: 13.5px; color: #4a3a2a; }
+#link { font-size: 16px; color: #4a3a2a; }   /* 16px or more: an iPhone zooms the whole page when a smaller field is tapped */
 .count { font-size: 12.5px; color: var(--dim); text-align: right; margin-top: -4px; }
 .btn {
   appearance: none; display: block; width: 100%; text-align: center; text-decoration: none; border: 0; border-radius: 16px; padding: 15px 18px; margin-top: 6px;
   font: inherit; font-size: 17px; font-weight: 600; color: #2b1a0c; background: linear-gradient(180deg, #ffe0b4, #ffc07a); box-shadow: 0 10px 26px rgba(255, 170, 90, 0.28); cursor: pointer;
 }
 .btn:active { transform: scale(0.985); }
+/* The button that makes the bottle never leaves the screen, however short the phone or however long the page */
+#make { position: sticky; bottom: 10px; z-index: 2; box-shadow: 0 10px 26px rgba(255, 170, 90, 0.28), 0 0 0 7px rgba(34, 24, 42, 0.6); }
+@media (max-height: 700px) { #deskLede { display: none; } #desk { padding-top: 18px; gap: 8px; } }
+@media (max-height: 600px) { textarea { min-height: 96px; } }
 #names { display: flex; gap: 10px; }
 #names > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 /* The sky picker */
