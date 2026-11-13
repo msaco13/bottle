@@ -267,6 +267,28 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('a picture that cannot be fetched says so, and the words are there all the same', (await lost.text('words')) === 'Remember this place?' && (await lost.text('picNote')).includes('Tap here to try again'));
   await lost.ctx.close();
 }
+// 9. a note nobody signed, in a conversation this phone knows: it still says who it is from
+{
+  const { linkFor } = await import('../js/code.js');
+  const to = (b) => linkFor('http://localhost:8899/', b).replace('http://localhost:8899/', '').replace('#', '?dev#');
+  const read = async (b) => {
+    const p = await phone({ seed: jorge, at: to(b) });
+    await p.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(1); window.dev.hold = true; });
+    await p.page.waitForTimeout(1500);
+    const got = [await p.text('sign'), await p.text('reply'), await p.text('fresh')];
+    await p.ctx.close();
+    return got;
+  };
+  let got = await read({ message: 'ha', name: '', mood: 'night', to: 'Mike', key: KEY });
+  check('an unsigned note says whose conversation it came from', got[0] === 'Not signed. From your bottles with Jorge.' && got[1] === 'Send one back to Jorge', got.join(' | '));
+  check('and a phone with people is offered the way back to its shore', got[2] === 'Back to your shore');
+  got = await read({ message: 'my own, unsigned', name: '', mood: 'dusk', to: 'Jorge', key: KEY });
+  check('this phone\u2019s own unsigned note is not put down to the other person', got[0] === '' && got[1] === 'Send another to Jorge', got.join(' | '));
+  got = await read({ message: 'signed', name: 'Jorge', mood: 'dusk', to: 'Mike', key: KEY });
+  check('a signed note is signed as before', got[0] === '~ Jorge' && got[1] === 'Send one back to Jorge', got.join(' | '));
+  got = await read({ message: 'from nowhere', name: '', mood: 'dusk', to: '', key: 'zzzzzzzzzzzzzzzzzzzzzz' });
+  check('an unsigned note from a conversation this phone does not know says nothing it cannot know', got[0] === '' && got[1] === 'Send one back', got.join(' | '));
+}
 await browser.close();
 const bad = results.filter((r) => !r[0]);
 console.log(bad.length ? `\n${bad.length} WRONG` : `\nall ${results.length} ok`);

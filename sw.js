@@ -28,7 +28,8 @@ self.addEventListener('push', (e) => {
       const map = r ? await r.json() : {};
       who = (d.t && map[d.t]) || '';
     } catch (err) { who = ''; }
-    let title = who ? 'A bottle from ' + who + ' has washed up' : 'A bottle has washed up for you';
+    // The name comes first: a phone shows only the start of a long title, and who it is from is the part that matters.
+    let title = who ? who + ' sent you a bottle' : 'A bottle washed up for you';
     let body = 'Tap to bring it in.';
     let url = d.t ? './#n.' + d.t : './';
     if (kind === 'lit') { title = 'Your lantern is lit'; body = 'This is how a bottle will find you.'; url = './'; }
