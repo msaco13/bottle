@@ -243,6 +243,7 @@ function run() {
     if (raw > 0.024 && raw < 0.2) slow++; else slow = Math.max(0, slow - 0.25);
     if (slow > 40 && quality > 0.5) { quality *= 0.82; slow = 0; layout(true); }
   }
+  ready();                      // everything loaded and the shaders built: the safety net can stand down
   requestAnimationFrame(loop);
 
   // For looking at it by hand while building (add ?dev to the address).
