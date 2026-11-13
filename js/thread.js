@@ -136,8 +136,8 @@ export async function add(auth, key, note, claim) {
     const thread = await threadId(key);
     const r = await rpc('bottle_add', { p_auth: auth, p_thread: thread, p_body: await seal(key, note), p_claim: claim ? await claimHash(claim) : null });
     if (r !== 'ok') return no;
-    // A lantern lit for someone (note.k === 'l') says so to the sender, so the other phone can be told what it is. Nothing else about a note is ever passed on.
-    return { ok: true, told: notify({ do: 'bottle', auth, thread, ...(note && note.k === 'l' ? { k: 'l' } : {}) }).then((n) => (n && n.sent > 0 ? n.sent : 0), () => 0) };
+    // A lantern lit for someone (note.k === 'l'), or something written in the sand ('s'), says so to the sender, so the other phone can be told what it is. Nothing else about a note is ever passed on.
+    return { ok: true, told: notify({ do: 'bottle', auth, thread, ...(note && (note.k === 'l' || note.k === 's') ? { k: note.k } : {}) }).then((n) => (n && n.sent > 0 ? n.sent : 0), () => 0) };
   } catch { return no; }
 }
 
@@ -184,7 +184,7 @@ export async function list(auth, key) {
       seen.add(v.id);
       const note = { message: v.m, name: v.n || '', mood: v.mood || 'dusk', to: v.to || '', id: v.id, at: Date.parse(row.created_at) || v.t || 0 };
       if (typeof v.p === 'string' && /^[A-Za-z0-9_-]{22}$/.test(v.p)) note.pic = v.p;
-      if (v.k === 'l') note.kind = 'l';             // not a bottle: a lantern lit for the other person, with no words
+      if (v.k === 'l' || v.k === 's') note.kind = v.k;        // not a bottle: 'l' a lantern lit for the other person, 's' something written in the sand
       out.push(note);
     }
     return out.sort((a, b) => a.at - b.at);

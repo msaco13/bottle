@@ -16,6 +16,7 @@
 //        g     this link is not one note but a beach many people are filling for one person (the key is the beach's).
 //              "i": the invitation, where a bottle is added.   "o": the beach itself, for the person it is for.
 //              message is what it is for ("Happy 40th"; may be empty), name is who started it, to is who it is for.
+//              "s": not a bottle at all, but something written in the sand (see sand.js). pic is the secret of what was written.
 // Plain base64 on purpose (no compression): it opens on every phone, old or new.
 //
 // PROMISE: every link ever made must keep opening. New things may only be added
@@ -37,7 +38,7 @@ export function encode(message, name = '', mood = 'dusk', to = '', key = '', cla
     /^[A-Za-z0-9_-]{16,32}$/.test(key || '') ? key : '',
     /^[A-Za-z0-9_-]{8,32}$/.test(claim || '') ? claim : '',
     /^[A-Za-z0-9_-]{22}$/.test(pic || '') ? pic : '',
-    g === 'i' || g === 'o' ? g : '',
+    g === 'i' || g === 'o' || g === 's' ? g : '',
   ];
   while (list.length > 1 && list[list.length - 1] === '') list.pop();   // old-style links stay exactly as they were
   const bytes = new TextEncoder().encode(JSON.stringify(list));
@@ -61,7 +62,7 @@ export function decode(hash) {
     const v = JSON.parse(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
     const str = (x) => (typeof x === 'string' ? x : '');
     const pic = Array.isArray(v) && /^[A-Za-z0-9_-]{22}$/.test(str(v[6])) ? v[6] : '';
-    const g = Array.isArray(v) && (v[7] === 'i' || v[7] === 'o') && /^[A-Za-z0-9_-]{16,32}$/.test(str(v[4])) ? v[7] : '';
+    const g = Array.isArray(v) && (v[7] === 'i' || v[7] === 'o') && /^[A-Za-z0-9_-]{16,32}$/.test(str(v[4])) ? v[7] : (Array.isArray(v) && v[7] === 's' && pic ? 's' : '');
     if (!Array.isArray(v) || typeof v[0] !== 'string' || (!v[0].trim() && !pic && !g)) return null;      // a bottle has words, or a picture, or both. A beach needs neither.
     return {
       message: v[0].slice(0, MAX_MESSAGE),

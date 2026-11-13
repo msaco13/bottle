@@ -15,7 +15,7 @@ import { SERVER, b64 } from './thread.js';
 
 export const MAX_GIF = 3500000;          // a GIF is sent whole: this is the most the server will take, less a little
 const LONG_SIDE = 1600;                  // a photo's longer side, in dots, after it is made smaller
-const TYPES = ['application/octet-stream', 'image/jpeg', 'image/gif', 'image/png', 'image/webp'];
+const TYPES = ['application/octet-stream', 'image/jpeg', 'image/gif', 'image/png', 'image/webp', 'bottle/sand'];        // the last is not a picture: something written in the sand (sand.js)
 const subtle = () => (globalThis.crypto && globalThis.crypto.subtle) || null;
 const sha = async (text) => new Uint8Array(await subtle().digest('SHA-256', new TextEncoder().encode(text)));
 

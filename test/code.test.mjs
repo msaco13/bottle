@@ -103,4 +103,12 @@ assert.equal(decode('#' + e.slice(0, 20) + '\n ' + e.slice(20)).name, 'Sam');
   assert.equal(encode('m', 'n', 'dusk', 't', KEY, 'seatseatseatseat', 'pppppppppppppppppppppp'), encode('m', 'n', 'dusk', 't', KEY, 'seatseatseatseat', 'pppppppppppppppppppppp', ''), 'no beach, no eighth field');
   assert.equal(decode(linkFor('https://a.test/', { message: 'Farewell', name: 'Mike', to: 'Ana', key: KEY, g: 'i' }).split('#')[1]).g, 'i');
 }
+// written in the sand: the same eighth field, and it needs the secret of what was written
+{
+  const PIC = 'pppppppppppppppppppppp';
+  assert.deepEqual(decode(encode('', 'Mike', 'night', 'Ana', KEY, 'seatseatseatseat', PIC, 's')), { message: '', name: 'Mike', mood: 'night', to: 'Ana', key: KEY, claim: 'seatseatseatseat', pic: PIC, g: 's' });
+  assert.equal(decode(encode('', 'Mike', 'dusk', 'Ana', '', '', PIC, 's')).g, 's', 'it needs no conversation');
+  assert.equal(decode(encode('', 'Mike', 'dusk', 'Ana', KEY, '', '', 's')), null, 'but nothing was written without its secret');
+  assert.equal('g' in decode(encode('words', 'Mike', 'dusk', 'Ana', KEY, '', '', 's')), false);
+}
 console.log('code ok');

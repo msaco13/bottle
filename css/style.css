@@ -86,6 +86,29 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 #picBig { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; background: rgba(8, 6, 16, 0.94); cursor: zoom-out; }
 #picBig.show { display: flex; }
 #picBigImg { max-width: 100%; max-height: 100%; object-fit: contain; }
+/* written in the sand: the pad to write on, the same sand at the other end, and the card that follows the wave */
+#sand { position: absolute; inset: 0; z-index: 7; display: none; touch-action: none; }
+#sand.show { display: block; }
+#sandCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; transition: opacity 0.9s ease; touch-action: none; }
+#sand.wait #sandCanvas { opacity: 0; }                 /* before the touch, the live beach shows through */
+#sandSay { position: absolute; left: 6%; right: 6%; top: calc(var(--top) + 16px); text-align: center; font-size: 17px; line-height: 1.35; color: var(--ink); text-shadow: 0 2px 16px rgba(0, 0, 0, 0.8); pointer-events: none; }
+#sand.wait #sandSay { top: 42%; font-size: clamp(22px, 6.4vmin, 32px); font-weight: 300; animation: breathe 3.2s ease-in-out infinite; }
+#sandSay:empty { display: none; }
+#sandBar { position: absolute; left: 5%; right: 5%; bottom: calc(var(--bottom) + 10px); display: none; gap: 10px; }
+#sand.pad #sandBar { display: flex; }
+#sandBar .btn { margin-top: 0; }
+#sandCard { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(90%, 420px); padding: 24px 22px 20px; border-radius: 24px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5); display: none; flex-direction: column; gap: 10px; }
+#sand.card #sandCard { display: flex; }
+#sandRow { display: flex; flex-direction: column; gap: 8px; }
+#sandAdd { flex: none; padding: 11px 14px; }
+#sandShow { display: none; align-items: center; gap: 10px; }
+#sandRow.has #sandShow { display: flex; }
+#sandRow.has #sandAdd { display: none; }
+#sandThumb { width: 56px; height: 56px; border-radius: 10px; border: 1px solid var(--line); }
+#sandNote { flex: 1; min-width: 0; font-size: 14px; line-height: 1.35; color: var(--dim); }
+#sandDrop { padding: 6px 4px; text-shadow: none; }
+/* a message written in the sand has no typed words and no picture */
+#desk.sand #msg, #desk.sand .count, #desk.sand #picRow, #desk.sand label[for=msg] { display: none; }
 /* on the desk: choosing one, and the small copy that shows it is tucked in */
 #picRow { display: flex; flex-direction: column; gap: 8px; }
 #picAdd { flex: none; padding: 11px 14px; }

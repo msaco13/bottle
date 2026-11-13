@@ -469,6 +469,79 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('someone who has not opened a bottle yet is not offered a lantern', !(await a.page.evaluate(() => !!document.querySelector('#people .peek.lamp'))));
   await a.ctx.close();
 }
+// 13. written in the sand: traced with a finger, seen once at the other end, and taken by a wave
+{
+  const { decode } = await import('../js/code.js');
+  shelf.clear();
+  const p = await phone({ seed: jorge, sent: 1 });
+  await p.page.waitForTimeout(700);
+  await p.page.click('#people .row'); await p.page.waitForTimeout(300);
+  check('the desk offers the sand', await p.shown('sandAdd') && (await p.text('sandAdd')) === 'Or write it in the sand');
+  await p.page.click('#sandAdd'); await p.page.waitForTimeout(300);
+  check('the wet sand opens to write on', await p.page.evaluate(() => document.getElementById('sand').className === 'show pad') && await p.shown('sandDone') && (await p.text('sandSay')).startsWith('Write or draw with a finger.'));
+  const stroke = async (pts) => { await p.page.mouse.move(pts[0][0], pts[0][1]); await p.page.mouse.down(); for (const [x, y] of pts.slice(1)) await p.page.mouse.move(x, y, { steps: 4 }); await p.page.mouse.up(); };
+  await stroke([[80, 300], [80, 420], [80, 360], [150, 360], [150, 300], [150, 420]]);       // H
+  await stroke([[210, 300], [210, 420]]);                                                     // I
+  await stroke([[210, 270], [211, 270]]);
+  await p.shot('13-pad');
+  await p.page.click('#sandDone'); await p.page.waitForTimeout(300);
+  check('what was written is shown small on the desk, in place of the words', await p.page.evaluate(() => document.getElementById('desk').classList.contains('sand')) && await p.shown('sandThumb') && !(await p.shown('msg')) && !(await p.shown('picAdd')));
+  await p.page.click('#make');
+  await p.page.waitForFunction(() => document.getElementById('compose').classList.contains('done'), null, { timeout: 20000 });
+  await p.page.waitForTimeout(1200);
+  const link = await p.page.evaluate(() => document.getElementById('link').value), b = decode(link.slice(link.indexOf('#')));
+  check('it is sent as something written in the sand, not as a bottle', b && b.g === 's' && /^[A-Za-z0-9_-]{22}$/.test(b.pic) && b.message === '' && (await p.text('madeTitle')) === 'Sent to Jorge', (await p.text('madeTitle')) + ' | ' + (await p.text('madeLede')));
+  check('what left the phone is scrambled and small', shelf.size === 1 && [...shelf.values()][0].length < 2000, String([...shelf.values()][0].length));
+  check('the sender is told it is sand, so the other phone can say so', p.calls.includes('notify:bottle:s'));
+  const mine = await p.page.evaluate((k) => JSON.parse(localStorage.getItem('bottle-notes'))[k].slice(-1)[0], KEY);
+  check('this phone keeps it as sand', mine.kind === 's' && mine.pic === b.pic);
+  await p.page.click('#again'); await p.page.waitForTimeout(500);
+  check('sand is not counted as a bottle', (await p.text('people')).includes('2 bottles'), await p.text('people'));
+  await p.ctx.close();
+  const rel = (q) => link.replace('http://localhost:8899/', '').replace('#', q + '#');
+  // the other phone, at the real pace, for a look
+  const v = await phone({ at: rel('?dev') });
+  await v.page.evaluate(() => { window.dev.hold = false; });
+  check('the beach waits, and says who wrote', (await v.page.evaluate(() => document.getElementById('sand').className)) === 'show view wait' && (await v.text('sandSay')) === 'Mike wrote in the sand for you. Touch the sand');
+  await v.page.click('#sand'); await v.page.waitForTimeout(2600);
+  await v.shot('13-written');
+  await v.page.waitForTimeout(2500);
+  await v.shot('13-wave');
+  await v.page.waitForFunction(() => document.getElementById('sand').classList.contains('card'), null, { timeout: 30000 });
+  check('then the tide takes it', (await v.text('sandTitle')) === 'The tide took it' && (await v.text('sandBack')) === 'Write back to Mike in the sand' && (await v.text('sandLede')).startsWith('Mike wrote that in the sand for you.'));
+  check('this phone remembers that it is gone', (await v.page.evaluate(() => JSON.parse(localStorage.getItem('bottle-washed')))).includes(b.pic));
+  await v.shot('13-gone');
+  await v.page.goto('http://localhost:8899/' + rel('?dev&quick')); await v.page.waitForTimeout(1500);
+  await v.page.waitForFunction(() => window.__bottleReady && document.getElementById('sand').classList.contains('card'), null, { timeout: 20000 });
+  check('opened again, it says the tide has been', (await v.text('sandTitle')) === 'The tide already took this one');
+  await v.page.click('#sandBack'); await v.page.waitForTimeout(400);
+  check('writing back opens the sand, addressed to them', (await v.page.evaluate(() => document.getElementById('sand').className)) === 'show pad' && (await v.text('deskTitle')) === 'A bottle for Mike');
+  check('no errors', !v.errs.length, v.errs.join(' ; '));
+  await v.ctx.close();
+  // the writer looking at their own does not use it up
+  const w = await phone({ at: rel('?dev&quick&see') });
+  await w.page.evaluate(() => { window.dev.hold = false; });
+  await w.page.click('#sand');
+  await w.page.waitForFunction(() => document.getElementById('sand').classList.contains('card'), null, { timeout: 20000 });
+  check('the writer looking at their own does not use it up', !(await w.page.evaluate(() => localStorage.getItem('bottle-washed'))));
+  await w.ctx.close();
+  // nothing written
+  const e = await phone({ seed: jorge });
+  await e.page.waitForTimeout(600);
+  await e.page.click('#people .row'); await e.page.waitForTimeout(300);
+  await e.page.click('#sandAdd'); await e.page.waitForTimeout(200);
+  await e.page.click('#sandDone'); await e.page.waitForTimeout(200);
+  check('nothing written leaves the desk as it was', !(await e.page.evaluate(() => document.getElementById('desk').classList.contains('sand'))) && await e.shown('msg'));
+  await e.ctx.close();
+  // it cannot be fetched
+  shelf.clear();
+  const x = await phone({ at: rel('?dev&quick') });
+  await x.page.evaluate(() => { window.dev.hold = false; });
+  await x.page.click('#sand');
+  await x.page.waitForFunction(() => document.getElementById('sand').classList.contains('card'), null, { timeout: 40000 });
+  check('what cannot be fetched says so, and is not marked as gone', (await x.text('sandTitle')) === 'It could not be brought in' && (await x.text('sandBack')) === 'Try again' && !(await x.page.evaluate(() => localStorage.getItem('bottle-washed'))));
+  await x.ctx.close();
+}
 await browser.close();
 const bad = results.filter((r) => !r[0]);
 console.log(bad.length ? `\n${bad.length} WRONG` : `\nall ${results.length} ok`);
