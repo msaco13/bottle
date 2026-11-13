@@ -114,6 +114,18 @@ void main() {
     vec2 sg = rd.xz / max(rd.y, 0.05) * 42.0;
     float star = step(pickf(0.992, 0.965, 2.0), hash(floor(sg))) * smoothstep(pickf(0.30, 0.04, 0.30), pickf(0.65, 0.28, 0.65), rd.y) * (1.0 - mask) * pickf(1.0, 1.25, 0.0);   // a few at dusk, a sky full at night, none at dawn
     col += vec3(0.9, 0.92, 1.0) * star * (1.0 - smoothstep(0.0, 0.35, length(fract(sg) - 0.5))) * (0.6 + 0.4 * sin(uTime * 2.0 + hash(floor(sg)) * 40.0));
+    // at night, a shooting star every so often
+    if (uMood > 0.5 && uMood < 1.5) {
+      float k = floor(uTime / 11.0), ph = uTime - k * 11.0;
+      if (ph < 0.9) {
+        vec2 o = vec2(hash(vec2(k, 1.0)) * 0.42 - 0.34, 0.17 + 0.15 * hash(vec2(k, 2.0)));
+        vec2 dir = normalize(vec2(0.86, -0.42));
+        vec2 q = rd.xy - o - dir * ph * 0.30;
+        float along = dot(q, dir), across = length(q - dir * along);
+        float tail = smoothstep(-0.11, 0.0, along) * step(along, 0.0);
+        col += vec3(0.85, 0.92, 1.0) * tail * (1.0 - smoothstep(0.0, 0.0035, across)) * sin(ph / 0.9 * 3.14159) * 1.5 * (1.0 - mask);
+      }
+    }
   } else {
     float tt = -uCam.y / rd.y;
     vec3 p = uCam + rd * tt;

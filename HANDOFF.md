@@ -40,6 +40,25 @@ Last updated: 2026-11-12. Published. Not yet opened on a real phone by anyone.
 - `node test/live.test.mjs` checks the real database by hand (round trip, isolation, brakes, locked table). It leaves a few test rows. There are also a handful of test rows from building this. They are scrambled and harmless.
 - **Free projects pause after about a week with no activity.** Supabase emails the owner first. Restoring is one button in the Supabase dashboard. While paused, bottles open and replies send as normal; the earlier-notes row and "Your bottles" are simply absent.
 
+## The counter (how failures on other people's phones get seen)
+
+- `js/count.js` sends small events to the Bottle database: story steps (`s_open`, `s_touch`, `s_held`, `s_cork`, `s_read`), `skip`, `made`, `share`, `copy`, `motion`, and failures (`f_plain` the safety net stepped in, `f_nogl` no 3D, `f_error` something broke, `f_ctx` the phone took the 3D away, `f_save` the server did not take a note).
+- Each event is a kind, a short detail (an error message, a frame rate, what the share sheet did), a device family such as "iPhone iOS 18.1 · Safari 18", and the app version. **Never** the note, a name, a key or a link.
+- Table `public.events`, locked like `bottles`. Functions `log_event(...)` (brake: 600 a minute, keeps 90 days) and `event_stats(p_days, p_test)`.
+- **The stats page: https://msaco13.github.io/bottle/stats.html** Plain language. Anyone with the address can see the counts. It holds nothing private.
+- Building on this computer counts nothing (add `?count` to count from localhost). Anything opened with `?dev` is marked as a test and only shows under "Show my own test visits".
+- The safety-net script in `index.html` reports on its own, so a phone that never loads the app is still counted. The build copies the server address into `index.html` and `stats.html` from `js/thread.js`. Change it in `js/thread.js` only.
+
+## The watch (the alarm)
+
+- `npm run watch` (`test/watch.mjs`) checks the live page, the app file, an old link in the live code, the database, and what phones reported in the last 24 hours. It fails if any of those is wrong, or if phones reported 3 or more problems.
+- `ops/watch.yml` runs it on GitHub twice a day, free. When a run fails, GitHub emails the repo owner. Each run also touches the database, which keeps the free project from pausing for being idle.
+- **Not switched on yet.** GitHub refuses a workflow file pushed from a sign-in without the `workflow` permission. To switch on:
+  1. Michael runs `gh auth refresh -h github.com -s workflow` and approves in the browser.
+  2. Copy `ops/watch.yml` to `.github/workflows/watch.yml`, commit, push.
+  3. Prove the alarm: `gh workflow run watch.yml -f drill=true`, then check that GitHub's "run failed" email arrived. Until that email has been seen, the alarm is not proven.
+- GitHub turns scheduled jobs off after 60 days with no commits, and emails first.
+
 ## The story, and what the person does
 
 1. "Touch the water": one tap. This is also the tap that asks iPhone for motion access and starts sound.
@@ -50,7 +69,7 @@ Last updated: 2026-11-12. Published. Not yet opened on a real phone by anyone.
 
 Every step works by touch alone. Tilt and shake are extra. If someone hesitates for 5 seconds a ghost finger shows the move. After 16 seconds without progress a "Skip to the note" link appears. The view follows small tilts of the phone.
 
-Three skies, picked by the sender on the desk: dusk, a moonlit night with glowing surf, and dawn. The desk shows the chosen sky behind the form.
+Three skies, picked by the sender on the desk: dusk, a moonlit night with glowing surf (and a shooting star now and then), and dawn. The desk shows the chosen sky behind the form. The cork comes out with a spray of drops.
 
 ## Safety nets
 
@@ -71,13 +90,16 @@ js/scene.js       the shoreline shader, the three skies, the glass, cork and not
 js/story.js       the story as a state machine (pure, tested)
 js/audio.js       surf and effects, synthesised
 js/thread.js      conversations: keys, encryption, the two server calls
+js/count.js       the counter
+stats.html        the stats page
+ops/watch.yml     the GitHub schedule for the watch (not switched on yet)
 js/main.js        wiring: touch, tilt, shake, the letter, the desk, "Your bottles"
 og.jpg            the picture chat apps show for the link
 dev-server.mjs    local server for building. Not part of the published page.
-test/             code, story, thread (run by npm test), live (by hand)
+test/             code, story, thread (run by npm test), live (by hand), watch (npm run watch)
 ```
 
-Run locally: `npm start`, then the address it prints. Add `?dev` for a console handle (`dev.run(seconds)`, `dev.shot(name)`, `dev.story`, `dev.scene`), `?nogl` to pretend there is no 3D, and `/broken.html` to pretend a file failed to load.
+Run locally: `npm start`, then the address it prints. Add `?dev` for a console handle (`dev.run(seconds)`, `dev.shot(name)`, `dev.story`, `dev.scene`, and `dev.hold = true` to stop the clock so a test can step time by hand), `?nogl` to pretend there is no 3D, and `/broken.html` to pretend a file failed to load.
 
 ## Publishing
 
@@ -93,6 +115,9 @@ All of this was on one machine: Chromium on a Windows PC (AMD Radeon built-in gr
 - Two people with the same name in one conversation.
 - Crypto: round trip, wrong key, tampering. A dead server does not hang the page.
 - The database: direct table access refused, the brakes work.
+- The counter, on the live site: a full story, a forced safety-net drill and the stats page all showed up under test visits.
+- Phone emulation in the same browser (Android user agent, touch, 2x screen, 375 x 812): the whole story under the night sky. The writing desk at 375 x 667 and 320 x 568: "Create bottle" stays on screen.
+- Cork spray: 14 drops are made at the cork and cleaned up. Not seen in mid-air, because the test browser's screenshots lag.
 
 ## Not tested (say this out loud)
 
@@ -107,7 +132,7 @@ All of this was on one machine: Chromium on a Windows PC (AMD Radeon built-in gr
 
 ## Known gaps
 
-- Nothing reports back. If it fails on someone's phone, or the server pauses, nobody is told (apart from Supabase's own email).
+- Failures are now counted and shown on the stats page, but nothing pushes them to Michael until the watch is switched on and its email has been seen once.
 - No notifications. A reply is found by the text that carries its link, or by opening the page again.
 - Anyone who has a link can read that whole conversation and add to it under any name. That is the price of no sign-in.
 - Plain SMS (green bubble, no data) can split a very long link.
@@ -115,6 +140,6 @@ All of this was on one machine: Chromium on a Windows PC (AMD Radeon built-in gr
 
 ## Next ideas, not started
 
-- A tiny "something went wrong" counter in the Bottle database, so failures on phones are visible.
-- Water drops and a glint on the glass, a torn paper edge, gulls and wind in the sound.
+- Read the stats page after the first real phones have used it. The frame rates, the share sheet results and the "asked: granted or denied" motion rows answer most of the "not tested" list above.
+- A glint on the glass, a torn paper edge, gulls and wind in the sound.
 - Crickets or a quieter surf at night.

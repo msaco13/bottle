@@ -384,10 +384,35 @@ function run() {
   const speed = () => `${fpsT > 0 ? Math.round(fpsN / fpsT) : 0} fps, ${Math.round(W * scene.scale)}x${Math.round(H * scene.scale)}, quality ${quality.toFixed(2)}`;
   $('gl').addEventListener('webglcontextlost', () => count('f_ctx', 'the phone took the 3D away at: ' + story.state));
 
+  // The cork comes out with a little spray of sea water.
+  function spray() {
+    try {
+      const p = story.onScreen([0, 0.5, 0]);
+      if (!p || !stage.animate) return;
+      const night = scene.mood === 1;
+      for (let i = 0; i < 14; i++) {
+        const d = document.createElement('i');
+        d.className = 'drop';
+        const size = 3 + Math.random() * 5;
+        d.style.cssText = `left:${p.x}px;top:${p.y}px;width:${size}px;height:${size}px;` + (night ? 'background:#9ff3ff;box-shadow:0 0 8px #4fe3f5;' : '');
+        stage.appendChild(d);
+        const dx = (Math.random() - 0.5) * 150, up = -(40 + Math.random() * 90);
+        const a = d.animate([
+          { transform: 'translate(-50%, -50%)', opacity: 0.95 },
+          { transform: `translate(calc(-50% + ${dx * 0.6}px), calc(-50% + ${up}px))`, opacity: 0.9, offset: 0.4 },
+          { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${up * 0.2 + 70}px)) scale(0.5)`, opacity: 0 },
+        ], { duration: 650 + Math.random() * 350, easing: 'cubic-bezier(0.2, 0.6, 0.5, 1)', fill: 'forwards' });
+        a.onfinish = () => d.remove();
+        setTimeout(() => d.remove(), 1500);          // and if the animation never reports back
+      }
+    } catch {}
+  }
+
   function frame(dt) {
     if (reading) story.update(dt); else story.t += dt;
     for (const ev of story.events) {
       if (ev === 'reveal') showLetter(false);
+      if (ev === 'pop') spray();
       const touched = !navigator.userActivation || navigator.userActivation.hasBeenActive;
       if (ev === 'pop' && navigator.vibrate && touched) navigator.vibrate([18, 30, 40]);
       if ((ev === 'grab' || ev === 'clink') && navigator.vibrate && touched) navigator.vibrate(10);

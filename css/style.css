@@ -30,6 +30,8 @@ html, body {
   opacity: 0; transition: opacity 0.6s ease; pointer-events: none;
 }
 #hint.show { opacity: 1; }
+/* drops of sea water when the cork comes out */
+.drop { position: absolute; border-radius: 50%; background: rgba(255, 244, 230, 0.92); box-shadow: 0 0 6px rgba(255, 220, 180, 0.7); pointer-events: none; z-index: 2; }
 /* Dawn is bright: the first words and the skip link turn dark so they can be read against it */
 [data-mood=dawn] #hint.big { color: #35233c; font-weight: 400; text-shadow: 0 1px 18px rgba(255, 250, 240, 0.9); }
 [data-mood=dawn] #skip { color: #35233c; }
