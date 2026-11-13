@@ -4,7 +4,7 @@ Write a note, get one link, text it to someone. They tap it and a bottle washes 
 
 Live: https://msaco13.github.io/bottle/ (the page with no message is the writing page). Stats: https://msaco13.github.io/bottle/stats.html
 
-Last updated: 2026-11-13, afternoon. Keepsakes are published (live version `54013169e2`). **"Your shore" (the people list and sending without texting, below) is on the branch `claude/bottle-handoff-rw7a7x` and is NOT published until that branch is merged into `main`. Its server function `bottle_reach` is NOT yet applied to the database** (`ops/sql/bottle_reach.sql`); the page works without it. Michael has an Android, no iPhone.
+Last updated: 2026-11-13, afternoon. Published, "Your shore" included (merged 12:07 pm Miami, live version `376ed2fde5`, checked byte for byte against `main`). Its server function `bottle_reach` was applied to the Bottle database the same afternoon and passes `test/live.test.mjs`. Michael has an Android, no iPhone. On 2026-11-13 he cleared the assistant to merge this repository's pull requests and to change the Bottle database without asking each time; staying at $0 and touching no other Supabase project still hold.
 
 Keepsakes on a real phone, 2026-11-13: Michael's Android (Adreno 750) drew the 3D beach with keepsakes at 65 pictures a second, and the twelve-shell night shore at 71, both at full sharpness (his screenshots, and the counter).
 
@@ -40,7 +40,7 @@ What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a
 - The phone also keeps the notes it has already seen (`bottle-notes`), so the history is still there if the server is asleep.
 - Clearing the browser's data makes a new, empty shore. Old links still open.
 
-## Your shore: people, and sending without texting (not yet published)
+## Your shore: people, and sending without texting
 
 What turns it from a link maker into something you open to send. No accounts, no phone numbers on the server, nothing paid.
 
@@ -48,7 +48,7 @@ What turns it from a link maker into something you open to send. No accounts, no
 - **The first bottle to someone still goes by link.** That is what joins the two phones (the seat). If a mobile number was given, one button opens the phone's own Messages already addressed and written (`sms:` link; an iPhone wants `&body=`, Android `?body=`). The phone sends the text. Nothing here can send one, and never will at $0. On Android Chrome a "Contacts" button fills the name and number from the phone's own contact picker.
 - **After that, if their lantern is lit, there is no link to text.** The button says "Send to Jorge". The note is saved to the conversation, the sender tells their lantern, and the page says "Sent to Jorge" only once the push service has really taken it. The link is still one tap away ("Text the link as well").
 - **Every fallback ends in the link**, which never needs the server: lantern silent ("It is on Jorge's shore, but the lantern did not answer... To be sure, text the link"), server down, no lantern.
-- **How the page knows a lantern is lit**: `bottle_reach` (new, `ops/sql/bottle_reach.sql`) tells a member two counts: how many other phones have joined, how many of those have a lantern. Until it is applied the page asks once per visit, gets no answer, and instead learns from each send (the sender already answers how many phones it told). So the first send after a lantern is lit still opens the share sheet, and then says no text was needed.
+- **How the page knows a lantern is lit**: `bottle_reach` (`ops/sql/bottle_reach.sql`, applied) tells a member two counts: how many other phones have joined, how many of those have a lantern. A stranger is told zeros. If the server cannot answer, the page asks once per visit and then learns from each send instead (the sender already answers how many phones it told).
 - The number is kept with the person in this phone's list, which is scrambled before its copy goes to the server, like the names. What is known of each lantern (`bottle-reach`) stays on the phone.
 - Android: "Put Bottle on your home screen" appears on the shore when Chrome offers to install it.
 - Sending results are counted under "Lantern (notifications)" on the stats page, as "sending: went straight to their lit lantern" and so on.
@@ -84,7 +84,7 @@ The reason to come back. Every bottle sent back and forth leaves something on th
 
 - Project `bottle`, ref `segtizidayglyouweszn`, us-east-1, free plan, $0. It holds nothing else. Never touch the other projects in the account.
 - Tables, all locked (row security on, no policies): `bottles`, `threads`, `members`, `shores`, `push_subs`, `handoffs`, `events`, and `private.settings`.
-- Everything goes through functions. Open to the page: `bottle_reach` (once applied), `bottle_open`, `bottle_list`, `bottle_add`, `shore_get`, `shore_put`, `handoff_put`, `handoff_take`, `push_save`, `push_drop`, `push_key`, `alerts_set`, `log_event`, `event_stats`, and the two old ones `thread_bottles` and `add_bottle` (old open conversations only). Only the notification sender may call `vapid_init`, `push_plan`, `push_self`, `push_gone`, `watch_plan`.
+- Everything goes through functions. Open to the page: `bottle_reach`, `bottle_open`, `bottle_list`, `bottle_add`, `shore_get`, `shore_put`, `handoff_put`, `handoff_take`, `push_save`, `push_drop`, `push_key`, `alerts_set`, `log_event`, `event_stats`, and the two old ones `thread_bottles` and `add_bottle` (old open conversations only). Only the notification sender may call `vapid_init`, `push_plan`, `push_self`, `push_gone`, `watch_plan`.
 - Brakes: 400 notes per conversation, one a second per conversation, 300 a minute overall, 600 counter events a minute.
 - The address, publishable key and public notification key are in `js/thread.js`. All three are meant to be public. No secret is in the repo.
 - Every hour the database itself calls the sender (`pg_cron` job `bottle-watch`). That checks for problems (see "The alarm") and keeps the project from sitting idle. **Not proven**: whether that inside-out call counts as activity to Supabase's one-week pause. If the project does pause, Supabase emails first, Restore is one button, and nothing is lost. While paused: bottles open, replies send, the history each phone has already seen is still shown, and new notifications do not go out.
@@ -177,7 +177,7 @@ One machine: a Windows PC on the home network.
 
 - Chromium inside the Claude app, 390 x 844, real clicks and drags, on the live site after the last publish: a first-version link end to end; a conversation link from before seals still showing its conversation.
 - **A real Chrome window, on the live site**: lit the lantern with a real click, the first notification arrived and Chrome agreed to show it; a second "phone" opened the bottle, took its seat and replied; that notification arrived, named, and following it opened the reply.
-- The real database (`test/live.test.mjs`): a stranger with a forwarded link sees nothing and can add nothing, by the new door or the old; replies are sealed too; old conversations still open; the parcel opens once; tables and private functions are locked.
+- The real database (`test/live.test.mjs`, run again 2026-11-13 from a cloud machine with `NODE_USE_ENV_PROXY=1`): a member is told who has joined and whose lantern is lit, and a stranger is told nothing; a stranger with a forwarded link sees nothing and can add nothing, by the new door or the old; replies are sealed too; old conversations still open; the parcel opens once; tables and private functions are locked.
 - Web Push: what the sender scrambles, a browser's side of the standard opens (`test/push.test.mjs`), and real Chrome accepted it.
 - In simulation only: the iPhone card, the parcel carrying a shore into an empty copy, the stranger's view of a taken bottle.
 - **The iPhone suite** (real Chrome made up as an iPhone 15: its name, screen, touch; run against the live site): a healthy iPhone gets 3D and the whole story by touch; 3D refused twice then granted; 3D never available (as in Lockdown Mode) plays the whole story flat; 3D handed over dead; 3D taken away mid-story and given back; a phone that cannot draw into a texture; a phone with half precision only; a phone held at 30 a second keeps its sharpness; a link preview counts as nothing; a person counts. All ten pass.

@@ -1,6 +1,6 @@
 // Against the real Bottle database, by hand: node test/live.test.mjs
 // It proves the promises about who can read what. It leaves a few scrambled test rows behind.
-import { newKey, newClaim, threadId, seal, add, list, open, rpc, notify, box, unbox, hex, b64, SERVER } from '../js/thread.js';
+import { newKey, newClaim, threadId, seal, add, list, open, reach, rpc, notify, box, unbox, hex, b64, SERVER } from '../js/thread.js';
 import assert from 'node:assert';
 
 const person = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return b64(a); };     // what the server is shown for one phone
@@ -17,6 +17,7 @@ assert.equal((await list(dad, key)).length, 1);
 assert.deepEqual(await list(mike, key), [], 'before opening the bottle, even the right person sees nothing');
 assert.deepEqual(await list(null, key), []);
 assert.equal(await open(dad, key, seat1), 'member', 'the writer looking at his own bottle does not use up its seat');
+assert.deepEqual(await reach(dad, key), { others: 0, lit: 0 }, 'nobody has joined yet, so the next bottle still needs its link');
 say('a new conversation belongs to its writer');
 
 // Mike opens it: he takes the seat.
@@ -42,6 +43,21 @@ assert.equal((await list(dad, key)).length, 2);
 assert.equal(await open(stranger, key, seat2), 'taken', 'a reply forwarded on after it was read has no free seat either');
 assert.deepEqual(await list(stranger, key), []);
 say('replies are sealed the same way');
+
+// Who can be reached: a member learns that the other phone has joined, and whether its lantern is lit. Nobody else learns anything.
+assert.deepEqual(await reach(dad, key), { others: 1, lit: 0 }, 'Mike has joined, with no lantern');
+assert.deepEqual(await reach(mike, key), { others: 1, lit: 0 });
+assert.deepEqual(await reach(stranger, key), { others: 0, lit: 0 }, 'a stranger is told nothing');
+assert.deepEqual(await rpc('bottle_reach', { p_auth: null, p_thread: await threadId(key) }), { others: 0, lit: 0 });
+assert.deepEqual(await rpc('bottle_reach', { p_auth: dad, p_thread: 'not a conversation' }), { others: 0, lit: 0 });
+const lamp = 'https://fcm.googleapis.com/fcm/send/live-test-' + person();
+assert.equal(await rpc('push_save', { p_auth: mike, p_endpoint: lamp, p_p256dh: 'B'.repeat(87), p_key: 'a'.repeat(22) }), 'ok');
+assert.deepEqual(await reach(dad, key), { others: 1, lit: 1 }, 'Mike lit a lantern: Dad can send straight to it');
+assert.deepEqual(await reach(mike, key), { others: 1, lit: 0 }, 'and Mike is not told his own lantern is someone else\'s');
+assert.deepEqual(await reach(stranger, key), { others: 0, lit: 0 });
+await rpc('push_drop', { p_auth: mike, p_endpoint: lamp });
+assert.deepEqual(await reach(dad, key), { others: 1, lit: 0 }, 'the lantern is out again');
+say('a member is told who can be reached, and a stranger is told nothing');
 
 // Conversations from before seals stay as they were: the key alone opens them.
 const old = newKey();
