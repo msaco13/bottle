@@ -2152,7 +2152,7 @@ function lantern() {
     if (id === 'lanternC') { if (standalone && st !== 'lit') $('desk').insertBefore(el, $('desk').firstChild); else $('make').after(el); }
     const say = (t) => { const p = document.createElement('p'); p.className = 'lanternSay'; p.textContent = t; el.appendChild(p); };
     const btn = (t, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = t; b.onclick = fn; el.appendChild(b); return b; };
-    if (id === 'lanternC' && carriedLost && !threads().length) say('Your bottles did not come across. In Safari, open any bottle, tap "Light a lantern" and add it to the Home Screen again.');
+    if (id === 'lanternC' && carriedLost && !threads().length) say('If you already have bottles in Safari, they did not come across. To bring them: in Safari, open any bottle, tap "Light a lantern", and add it to the Home Screen again.');
     if (st === 'lit') {
       say(lanternSaid || 'Your lantern is lit. This phone will tell you when a bottle washes up.');
       btn('Put the lantern out', async () => { await douse(); count('lantern', 'put out', true); lantern(); }, 'link');
@@ -2352,7 +2352,7 @@ async function arriveAndCatchUp() {
     if (!bottle && !deskCtx.to) { inbox(); lantern(); }
   }
   // The Home Screen copy opened without its parcel code (the phone did not keep it in the address) and has nothing of its own: say how to bring the bottles over.
-  if (standalone && !code && !threads().length) { carriedLost = true; count('carried', 'no code in the address'); if (!bottle && !deskCtx.to) lantern(); }
+  if (ios && standalone && !code && !threads().length) { carriedLost = true; count('carried', 'no code in the address'); if (!bottle && !deskCtx.to) lantern(); }
   if (hop) return follow(hop[1]);
   if (await pull() && !bottle && !deskCtx.to) { inbox(); lantern(); }
   tend();
