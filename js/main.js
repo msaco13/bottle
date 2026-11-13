@@ -8,6 +8,7 @@ import { Scene, swash, DRY_LINE, MOOD } from './scene.js';
 import { Story } from './story.js';
 import { Shore } from './audio.js';
 import { newKey, add, list } from './thread.js';
+import { count } from './count.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -207,7 +208,8 @@ function desk(ctx) {
   msg.addEventListener('input', count);
 
   const share = async () => {
-    try { await navigator.share({ title: 'A message in a bottle', text: madeTo ? `${madeTo}, a bottle washed up for you.` : 'Something washed ashore for you.', url: madeLink }); return true; } catch { return false; }
+    try { await navigator.share({ title: 'A message in a bottle', text: madeTo ? `${madeTo}, a bottle washed up for you.` : 'Something washed ashore for you.', url: madeLink }); count('share', 'sent', true); return true; }
+    catch (e) { count('share', (e && e.name) === 'AbortError' ? 'closed without sending' : 'failed: ' + ((e && e.name) || ''), true); return false; }
   };
   $('desk').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -228,13 +230,15 @@ function desk(ctx) {
     compose.classList.add('done');
     compose.scrollTop = 0;
     // The share sheet opens straight away, while this is still the same tap.
-    if (navigator.share) share();
+    count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters`, true);
+    if (navigator.share) share(); else count('share', 'no share sheet on this browser', true);
     // Keep a scrambled copy with the conversation, so either of you can find it again. Not needed for the link to work.
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(key, b.to, 0);
     add(key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now() }).then((ok) => {
       // Only promised once the server has really taken it.
+      if (!ok) count('f_save', 'the server did not take the note', true);
       if (ok && madeLink === link) $('madeLede').textContent += ` When ${b.to ? b.to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
     });
   });
@@ -245,6 +249,7 @@ function desk(ctx) {
     try { await navigator.clipboard.writeText(madeLink); ok = true; } catch {
       try { $('link').select(); ok = document.execCommand('copy'); } catch {}
     }
+    count('copy', ok ? 'copied' : 'could not copy', true);
     $('copy').textContent = ok ? 'Copied. Now paste it in a text.' : 'Press and hold the link above to copy it';
     setTimeout(() => { $('copy').textContent = 'Copy the link'; }, 3500);
   });
@@ -256,7 +261,9 @@ function desk(ctx) {
 // ---------------------------------------------------------------- the shore
 
 let scene = null;
-try { scene = qs.has('nogl') ? null : new Scene($('gl')); } catch (e) { scene = null; }   // ?nogl pretends there is no 3D, to test the fallback
+try { scene = qs.has('nogl') ? null : new Scene($('gl')); } catch (e) { scene = null; count('f_nogl', String((e && e.message) || 'no 3D').replace(/\s+/g, ' ')); }
+if (!scene) count('f_nogl', 'no 3D was asked for');      // only reached with ?nogl: a real failure was counted above, and each kind counts once
+count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');   // ?nogl pretends there is no 3D, to test the fallback
 if (bottle) sky(bottle.mood);
 const ready = () => { window.__bottleReady = true; const p = $('plain'); if (p) p.className = ''; };
 
@@ -329,14 +336,15 @@ function run() {
   async function askMotion() {
     try {
       const DM = window.DeviceMotionEvent;
-      if (!DM) return;
+      if (!DM) { count('motion', 'none on this device'); return; }
       if (typeof DM.requestPermission === 'function') {
         const res = await DM.requestPermission();
+        count('motion', 'asked: ' + res);
         if (res !== 'granted') return;                 // fine: everything still works by touch
-      }
+      } else count('motion', 'no need to ask');
       addEventListener('devicemotion', onMotion);
       addEventListener('deviceorientation', onOrient);
-    } catch {}
+    } catch (e) { count('motion', 'error: ' + ((e && e.message) || '')); }
   }
 
   // ---- touch
@@ -346,6 +354,7 @@ function run() {
     // The first touch has to be a real click for iPhone to allow sound and motion.
     cv.addEventListener('click', (e) => {
       if (story.state !== 'arrive') return;
+      count('s_touch');
       audio.unlock();
       askMotion();
       if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {});
@@ -361,7 +370,7 @@ function run() {
     const up = () => { if (story.state !== 'arrive') story.up(); };
     cv.addEventListener('pointerup', up);
     cv.addEventListener('pointercancel', up);
-    $('skip').addEventListener('click', () => { audio.unlock(); audio.play('reveal'); story.state = 'reading'; story.seen = true; story.lift = 1; showLetter(false); });
+    $('skip').addEventListener('click', () => { count('skip', 'stuck at: ' + story.state); audio.unlock(); audio.play('reveal'); story.state = 'reading'; story.seen = true; story.lift = 1; showLetter(false); });
   }
   addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('visibilitychange', () => { if (audio.ctx && document.visibilityState === 'visible') audio.ctx.resume(); });
@@ -371,6 +380,9 @@ function run() {
   const look = [0, 0], rest = [0, 1];
   let camY = reading ? 0.44 : 0.1;
   let hintText = null, cueT = 0, slow = 0, last = performance.now(), started = false;
+  let was = '', fpsN = 0, fpsT = 0, tilted = false;
+  const speed = () => `${fpsT > 0 ? Math.round(fpsN / fpsT) : 0} fps, ${Math.round(W * scene.scale)}x${Math.round(H * scene.scale)}, quality ${quality.toFixed(2)}`;
+  $('gl').addEventListener('webglcontextlost', () => count('f_ctx', 'the phone took the 3D away at: ' + story.state));
 
   function frame(dt) {
     if (reading) story.update(dt); else story.t += dt;
@@ -382,6 +394,13 @@ function run() {
       audio.play(ev);
     }
     story.events.length = 0;
+    if (reading && story.state !== was) {
+      was = story.state;
+      if (was === 'held') count('s_held', speed());
+      if (was === 'open') count('s_cork', story.motion ? 'tilt on' : 'touch only');
+      if (was === 'reading') count('s_read', speed());
+    }
+    if (story.motion && !tilted) { tilted = true; count('motion_live'); }
     const t = story.t;
     audio.surf((swash(0, t + 0.05) - swash(0, t)) / 0.05, (swash(0, t) + 0.72) / 1.6);
 
@@ -433,6 +452,7 @@ function run() {
     last = now;
     frame(Math.min(0.05, Math.max(0.001, raw)));
     // If the phone cannot keep up, trade a little sharpness for smoothness.
+    if (raw < 0.2) { fpsN++; fpsT += raw; }
     if (raw > 0.024 && raw < 0.2) slow++; else slow = Math.max(0, slow - 0.25);
     if (slow > 40 && quality > 0.5) { quality *= 0.82; slow = 0; layout(true); }
   }

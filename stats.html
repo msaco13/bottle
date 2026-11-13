@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Bottle: how it is doing</title>
+<style>
+  :root { --bg: #14121f; --panel: #1f1c2e; --line: #343047; --ink: #f1ebe2; --dim: #a39db3; --gold: #ffc98a; --good: #7fd6a3; --bad: #ff8a7a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 20px 16px 60px; }
+  main { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); margin: 28px 0 10px; font-weight: 600; }
+  p { margin: 0 0 8px; color: var(--dim); }
+  #verdict { margin: 16px 0 0; padding: 16px 18px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); font-size: 19px; font-weight: 600; }
+  #verdict.good { border-color: var(--good); color: var(--good); }
+  #verdict.bad { border-color: var(--bad); color: var(--bad); }
+  #verdict small { display: block; font-size: 14px; font-weight: 400; color: var(--dim); margin-top: 4px; }
+  .steps { display: grid; gap: 6px; }
+  .step { display: grid; grid-template-columns: 11em 1fr 5.5em; align-items: center; gap: 10px; font-size: 15px; }
+  .bar { height: 14px; border-radius: 7px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--gold); border-radius: 7px; }
+  .step b { text-align: right; font-variant-numeric: tabular-nums; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--dim); font-weight: 500; }
+  td.bad { color: var(--bad); font-weight: 600; }
+  td.wrap { white-space: normal; text-align: left; min-width: 14em; }
+  .none { color: var(--dim); padding: 10px 0; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  button { appearance: none; font: inherit; font-size: 14.5px; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 9px 14px; cursor: pointer; }
+  button.on { border-color: var(--gold); color: var(--gold); }
+  a { color: var(--gold); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Message in a bottle: how it is doing</h1>
+  <p>Counted on people's own phones. No notes, names or links are ever sent here. Times are Miami time.</p>
+  <div id="verdict">Loading…</div>
+  <div class="row">
+    <button id="d1" data-days="1">Last 24 hours</button>
+    <button id="d14" data-days="14" class="on">Last 14 days</button>
+    <button id="d90" data-days="90">Last 90 days</button>
+    <button id="test">Show my own test visits instead</button>
+    <button id="again">Refresh</button>
+  </div>
+
+  <h2>How far people get</h2>
+  <div class="steps" id="steps"></div>
+
+  <h2>Sending</h2>
+  <div class="steps" id="sending"></div>
+
+  <h2>Sharing, tilt and skipping</h2>
+  <div class="scroll" id="ways"></div>
+
+  <h2>Problems, newest first</h2>
+  <div class="scroll" id="problems"></div>
+
+  <h2>How smoothly it ran, newest first</h2>
+  <div class="scroll" id="speed"></div>
+
+  <h2>Day by day</h2>
+  <div class="scroll" id="days"></div>
+
+  <h2>By phone and browser</h2>
+  <div class="scroll" id="devices"></div>
+
+  <p style="margin-top:28px">Back to <a href="./">the writing page</a>.</p>
+</main>
+<script>
+(function () {
+  var SERVER = ["https://segtizidayglyouweszn.supabase.co", "sb_publishable_2XYYYTBW-AEQN6IaXllIjQ_mQkYc4PP"];
+  var days = 14, test = false;
+  var PROBLEM = {
+    f_plain: "The page did not load. The note was shown as plain text",
+    f_nogl: "No 3D on this phone. The note was shown without the beach",
+    f_error: "Something broke on the page",
+    f_ctx: "The phone took the 3D away part way through",
+    f_save: "The server did not keep a copy of a new note"
+  };
+  function $(id) { return document.getElementById(id); }
+  function el(tag, text, cls) { var e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
+  function when(iso) { try { return new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); } catch (e) { return iso; } }
+
+  function steps(into, rows, top) {
+    into.textContent = "";
+    rows.forEach(function (r) {
+      var d = el("div", null, "step"), bar = el("div", null, "bar"), fill = el("i");
+      fill.style.width = (top > 0 ? Math.min(100, Math.round(r[1] / top * 100)) : 0) + "%";
+      bar.appendChild(fill);
+      d.appendChild(el("span", r[0])); d.appendChild(bar);
+      d.appendChild(el("b", r[1] + (r[2] && top > 0 ? "  (" + Math.round(r[1] / top * 100) + "%)" : "")));
+      into.appendChild(d);
+    });
+  }
+  function table(into, head, rows, empty) {
+    into.textContent = "";
+    if (!rows.length) { into.appendChild(el("div", empty, "none")); return; }
+    var t = el("table"), tr = el("tr");
+    head.forEach(function (h) { tr.appendChild(el("th", h)); });
+    t.appendChild(tr);
+    rows.forEach(function (r) {
+      var row = el("tr");
+      r.forEach(function (c) { var td = el("td", typeof c === "object" ? c.t : String(c)); if (typeof c === "object" && c.c) td.className = c.c; row.appendChild(td); });
+      t.appendChild(row);
+    });
+    into.appendChild(t);
+  }
+
+  function show(s) {
+    var total = {}, byDay = {}, shares = {};
+    s.days.forEach(function (r) {
+      total[r.kind] = (total[r.kind] || 0) + r.n;
+      (byDay[r.day] = byDay[r.day] || {})[r.kind] = r.n;
+    });
+    function n(k) { return total[k] || 0; }
+    function fails(o) { var f = 0; for (var k in o) if (k.slice(0, 2) === "f_") f += o[k]; return f; }
+
+    var bad24 = fails(s.last24), open24 = s.last24.s_open || 0, read24 = s.last24.s_read || 0;
+    var v = $("verdict");
+    v.className = bad24 ? "bad" : "good";
+    v.textContent = bad24 ? bad24 + (bad24 === 1 ? " problem" : " problems") + " in the last 24 hours" : "No problems in the last 24 hours";
+    v.appendChild(el("small", open24 + " opened and " + read24 + " read in the last 24 hours" + (test ? ". Showing test visits only." : ".")));
+
+    steps($("steps"), [
+      ["Opened a bottle", n("s_open")],
+      ["Touched the water", n("s_touch"), 1],
+      ["Got it onto the sand", n("s_held"), 1],
+      ["Pulled the cork", n("s_cork"), 1],
+      ["Read the note", n("s_read"), 1],
+      ["Used Skip to the note", n("skip"), 1]
+    ], n("s_open"));
+    steps($("sending"), [
+      ["Opened the writing page", n("desk")],
+      ["Made a bottle", n("made")],
+      ["Share sheet or copy used", n("share") + n("copy")]
+    ], Math.max(n("desk"), n("made")));
+
+    table($("problems"), ["When", "What", "Detail", "Phone and browser", "Version"], s.recent.map(function (r) {
+      return [when(r.at), { t: PROBLEM[r.kind] || r.kind, c: "wrap" }, { t: r.detail, c: "wrap" }, r.ua, r.ver];
+    }), "None in this period.");
+
+    var WAY = { share: "Share sheet", copy: "Copy the link", motion: "Tilt and shake", skip: "Skip to the note", s_cork: "Cork pulled with" };
+    table($("ways"), ["What", "How it went", "Times"], (s.ways || []).map(function (r) { return [WAY[r.kind] || r.kind, { t: r.detail, c: "wrap" }, r.n]; }), "Nothing counted in this period yet.");
+    table($("speed"), ["When", "Speed", "Phone and browser"], (s.speed || []).map(function (r) { return [when(r.at), { t: r.detail, c: "wrap" }, r.ua]; }), "Nobody has finished the story in this period yet.");
+
+    table($("days"), ["Day", "Opened", "Read", "Skipped", "Made", "Problems"], Object.keys(byDay).sort().reverse().map(function (d) {
+      var o = byDay[d], f = fails(o);
+      return [d, o.s_open || 0, o.s_read || 0, o.skip || 0, o.made || 0, { t: String(f), c: f ? "bad" : "" }];
+    }), "Nothing counted in this period yet.");
+
+    var dev = {};
+    s.devices.forEach(function (r) { var o = dev[r.ua] = dev[r.ua] || { open: 0, read: 0, bad: 0 }; if (r.kind === "s_open") o.open += r.n; else if (r.kind === "s_read") o.read += r.n; else o.bad += r.n; });
+    table($("devices"), ["Phone and browser", "Opened", "Read", "Problems"], Object.keys(dev).sort(function (a, b) { return dev[b].open + dev[b].bad - dev[a].open - dev[a].bad; }).map(function (k) {
+      return [k, dev[k].open, dev[k].read, { t: String(dev[k].bad), c: dev[k].bad ? "bad" : "" }];
+    }), "Nothing counted in this period yet.");
+  }
+
+  function load() {
+    var v = $("verdict");
+    fetch(SERVER[0] + "/rest/v1/rpc/event_stats", {
+      method: "POST",
+      headers: { "content-type": "application/json", apikey: SERVER[1], authorization: "Bearer " + SERVER[1] },
+      body: JSON.stringify({ p_days: days, p_test: test })
+    }).then(function (r) { if (!r.ok) throw new Error("the server answered " + r.status); return r.json(); }).then(show).catch(function (e) {
+      v.className = "bad";
+      v.textContent = "Could not reach the counter";
+      v.appendChild(el("small", "The Bottle database may be paused or unreachable from this network (" + e.message + "). Bottles still open and send without it. To wake it, open the project named bottle in Supabase and press Restore."));
+    });
+  }
+  ["d1", "d14", "d90"].forEach(function (id) {
+    $(id).onclick = function () { days = +this.dataset.days; ["d1", "d14", "d90"].forEach(function (o) { $(o).className = o === id ? "on" : ""; }); load(); };
+  });
+  $("test").onclick = function () { test = !test; this.className = test ? "on" : ""; load(); };
+  $("again").onclick = load;
+  load();
+})();
+</script>
+</body>
+</html>

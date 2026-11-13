@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 
-const ORDER = ['code', 'scene', 'story', 'audio', 'thread', 'main'];   // each may only use the ones before it
+const ORDER = ['code', 'scene', 'story', 'audio', 'thread', 'count', 'main'];   // each may only use the ones before it
 let out = "/* Message in a bottle. Built from js/ by build.mjs. Do not edit: edit js/ and rebuild. */\n(function () {\n'use strict';\nconst __m = {};\n";
 for (const name of ORDER) {
   let src = fs.readFileSync(new URL(`./js/${name}.js`, import.meta.url), 'utf8');
@@ -31,6 +31,16 @@ let html = fs.readFileSync(htmlUrl, 'utf8');
 const before = html;
 html = html.replace(/<script (?:type="module" src="js\/main\.js"|defer src="app\.js\?v=\w+")><\/script>/, `<script defer src="app.js?v=${v}"></script>`);
 html = html.replace(/href="css\/style\.css(?:\?v=\w+)?"/, `href="css/style.css?v=${v}"`);
+{
+  const th = fs.readFileSync(new URL('./js/thread.js', import.meta.url), 'utf8');
+  const url = (th.match(/url: '([^']*)'/) || [])[1], key = (th.match(/key: '([^']*)'/) || [])[1];
+  if (!url || !key || !/var SERVER = \[[^\]]*\];/.test(html)) throw new Error('could not copy the server address into index.html');
+  html = html.replace(/var SERVER = \[[^\]]*\];/, `var SERVER = [${JSON.stringify(url)}, ${JSON.stringify(key)}];`);
+  // the stats page talks to the same server
+  const statsUrl = new URL('./stats.html', import.meta.url);
+  const st = fs.readFileSync(statsUrl, 'utf8'), st2 = st.replace(/var SERVER = \[[^\]]*\];/, `var SERVER = [${JSON.stringify(url)}, ${JSON.stringify(key)}];`);
+  if (st2 !== st) fs.writeFileSync(statsUrl, st2);
+}
 if (!html.includes(`app.js?v=${v}`) || !html.includes(`style.css?v=${v}`)) throw new Error('could not stamp index.html');
 if (html !== before) fs.writeFileSync(htmlUrl, html);
 console.log(`built app.js (${(out.length / 1024).toFixed(0)} KB before compression), version ${v}`);

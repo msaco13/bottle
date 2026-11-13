@@ -5,6 +5,7 @@
   "scripts": {
     "build": "node build.mjs",
     "test": "node build.mjs && node test/code.test.mjs && node test/story.test.mjs && node test/thread.test.mjs",
-    "start": "node build.mjs && node dev-server.mjs"
+    "start": "node build.mjs && node dev-server.mjs",
+    "watch": "node test/watch.mjs"
   }
 }

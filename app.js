@@ -1151,6 +1151,86 @@ async function list(key) {
 return { SERVER, newKey, threadId, seal, unseal, add, list };
 })();
 
+// ---------------------------------------------------------------- count.js
+__m.count = (function () {
+// The counter. It tells Michael how the page is doing on real phones: how far people
+// get through the story, and what goes wrong. It is the only way a failure on
+// someone else's phone is ever seen.
+//
+// What is sent: a short word for what happened, a short detail (an error message,
+// a frame rate), a device family ("iPhone iOS 18.1 · Safari 18") and the app version.
+// What is never sent: the note, a name, a key, a link.
+//
+// Nothing waits on it and nothing breaks without it.
+
+const { SERVER } = __m.thread;
+const has = typeof window !== 'undefined' && typeof document !== 'undefined';
+const local = has && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+const search = has ? location.search : '';
+// Building on this computer counts nothing, unless asked to with ?count. Anything opened with ?dev is marked as a test.
+const on = has && (!local || /[?&]count\b/.test(search));
+const testing = /[?&]dev\b/.test(search);
+
+/** "iPhone iOS 18.1 · Safari 18": enough to tell phones apart, not enough to tell people apart. */
+function device(u = (has && navigator.userAgent) || '', touch = (has && navigator.maxTouchPoints) || 0) {
+  let os = 'Other', br = 'Browser', m;
+  if ((m = u.match(/iPhone OS (\d+)[_.](\d+)/))) os = `iPhone iOS ${m[1]}.${m[2]}`;
+  else if ((m = u.match(/iPad; CPU OS (\d+)[_.](\d+)/))) os = `iPad iOS ${m[1]}.${m[2]}`;
+  else if (/Macintosh/.test(u) && touch > 1) os = 'iPad';
+  else if ((m = u.match(/Android (\d+)/))) os = `Android ${m[1]}`;
+  else if (/CrOS/.test(u)) os = 'Chromebook';
+  else if (/Windows/.test(u)) os = 'Windows';
+  else if (/Macintosh/.test(u)) os = 'Mac';
+  else if (/Linux/.test(u)) os = 'Linux';
+  // apps that open links in their own browser come first: they are the ones that behave differently
+  if (/Instagram/.test(u)) br = 'Instagram';
+  else if (/FBAN|FBAV|FB_IAB/.test(u)) br = 'Facebook';
+  else if (/musical_ly|TikTok|Bytedance/i.test(u)) br = 'TikTok';
+  else if (/Snapchat/.test(u)) br = 'Snapchat';
+  else if (/WhatsApp/.test(u)) br = 'WhatsApp';
+  else if (/\bLine\//.test(u)) br = 'Line';
+  else if (/GSA\//.test(u)) br = 'Google app';
+  else if ((m = u.match(/CriOS\/(\d+)/))) br = `Chrome ${m[1]}`;
+  else if ((m = u.match(/FxiOS\/(\d+)/))) br = `Firefox ${m[1]}`;
+  else if ((m = u.match(/(?:EdgiOS|EdgA|Edg)\/(\d+)/))) br = `Edge ${m[1]}`;
+  else if ((m = u.match(/SamsungBrowser\/(\d+)/))) br = `Samsung ${m[1]}`;
+  else if ((m = u.match(/Firefox\/(\d+)/))) br = `Firefox ${m[1]}`;
+  else if (/; wv\)/.test(u)) br = 'in-app browser';
+  else if ((m = u.match(/Chrome\/(\d+)/))) br = `Chrome ${m[1]}`;
+  else if ((m = u.match(/Version\/(\d+).*Safari/))) br = `Safari ${m[1]}`;
+  else if (/AppleWebKit/.test(u) && /Mobile\//.test(u)) br = 'in-app browser';
+  return `${os} · ${br}`;
+}
+
+const version = () => { try { const s = document.querySelector('script[src*="app.js?v="]'); return s ? s.src.split('v=')[1].slice(0, 12) : 'source'; } catch { return ''; } };
+const said = new Set();
+let sent = 0;
+
+/** Count something. Each kind is counted once per visit unless again is true. Never throws, never waits. */
+function count(kind, detail = '', again = false) {
+  try {
+    if (!on || !SERVER.url || typeof fetch !== 'function') return;
+    if (!again) { if (said.has(kind)) return; said.add(kind); }
+    if (++sent > 40) return;
+    fetch(`${SERVER.url}/rest/v1/rpc/log_event`, {
+      method: 'POST', keepalive: true,
+      headers: { 'content-type': 'application/json', apikey: SERVER.key, authorization: 'Bearer ' + SERVER.key },
+      body: JSON.stringify({ p_kind: kind, p_detail: String(detail == null ? '' : detail).slice(0, 300), p_ua: testing ? 'test' : device(), p_ver: version() }),
+    }).catch(() => {});
+  } catch {}
+}
+
+// Anything that breaks while the page is running. At most three a visit: one broken thing can throw every frame.
+if (has) {
+  let n = 0;
+  const where = (f) => String(f || '').split('/').pop().split('?')[0];
+  addEventListener('error', (e) => { if (e && e.message && n++ < 3) count('f_error', `${e.message} @ ${where(e.filename)}:${e.lineno || 0}:${e.colno || 0}`, true); });
+  addEventListener('unhandledrejection', (e) => { if (n++ < 3) count('f_error', 'promise: ' + String((e && e.reason && (e.reason.message || e.reason)) || ''), true); });
+}
+
+return { device, count };
+})();
+
 // ---------------------------------------------------------------- main.js
 __m.main = (function () {
 // Message in a bottle. One page, two faces:
@@ -1163,6 +1243,7 @@ const { Scene, swash, DRY_LINE, MOOD } = __m.scene;
 const { Story } = __m.story;
 const { Shore } = __m.audio;
 const { newKey, add, list } = __m.thread;
+const { count } = __m.count;
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const bottle = decode(location.hash) || decode(qs.get('b'));
@@ -1361,7 +1442,8 @@ function desk(ctx) {
   msg.addEventListener('input', count);
 
   const share = async () => {
-    try { await navigator.share({ title: 'A message in a bottle', text: madeTo ? `${madeTo}, a bottle washed up for you.` : 'Something washed ashore for you.', url: madeLink }); return true; } catch { return false; }
+    try { await navigator.share({ title: 'A message in a bottle', text: madeTo ? `${madeTo}, a bottle washed up for you.` : 'Something washed ashore for you.', url: madeLink }); count('share', 'sent', true); return true; }
+    catch (e) { count('share', (e && e.name) === 'AbortError' ? 'closed without sending' : 'failed: ' + ((e && e.name) || ''), true); return false; }
   };
   $('desk').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1382,13 +1464,15 @@ function desk(ctx) {
     compose.classList.add('done');
     compose.scrollTop = 0;
     // The share sheet opens straight away, while this is still the same tap.
-    if (navigator.share) share();
+    count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters`, true);
+    if (navigator.share) share(); else count('share', 'no share sheet on this browser', true);
     // Keep a scrambled copy with the conversation, so either of you can find it again. Not needed for the link to work.
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(key, b.to, 0);
     add(key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now() }).then((ok) => {
       // Only promised once the server has really taken it.
+      if (!ok) count('f_save', 'the server did not take the note', true);
       if (ok && madeLink === link) $('madeLede').textContent += ` When ${b.to ? b.to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
     });
   });
@@ -1399,6 +1483,7 @@ function desk(ctx) {
     try { await navigator.clipboard.writeText(madeLink); ok = true; } catch {
       try { $('link').select(); ok = document.execCommand('copy'); } catch {}
     }
+    count('copy', ok ? 'copied' : 'could not copy', true);
     $('copy').textContent = ok ? 'Copied. Now paste it in a text.' : 'Press and hold the link above to copy it';
     setTimeout(() => { $('copy').textContent = 'Copy the link'; }, 3500);
   });
@@ -1410,7 +1495,9 @@ function desk(ctx) {
 // ---------------------------------------------------------------- the shore
 
 let scene = null;
-try { scene = qs.has('nogl') ? null : new Scene($('gl')); } catch (e) { scene = null; }   // ?nogl pretends there is no 3D, to test the fallback
+try { scene = qs.has('nogl') ? null : new Scene($('gl')); } catch (e) { scene = null; count('f_nogl', String((e && e.message) || 'no 3D').replace(/\s+/g, ' ')); }
+if (!scene) count('f_nogl', 'no 3D was asked for');      // only reached with ?nogl: a real failure was counted above, and each kind counts once
+count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');   // ?nogl pretends there is no 3D, to test the fallback
 if (bottle) sky(bottle.mood);
 const ready = () => { window.__bottleReady = true; const p = $('plain'); if (p) p.className = ''; };
 
@@ -1483,14 +1570,15 @@ function run() {
   async function askMotion() {
     try {
       const DM = window.DeviceMotionEvent;
-      if (!DM) return;
+      if (!DM) { count('motion', 'none on this device'); return; }
       if (typeof DM.requestPermission === 'function') {
         const res = await DM.requestPermission();
+        count('motion', 'asked: ' + res);
         if (res !== 'granted') return;                 // fine: everything still works by touch
-      }
+      } else count('motion', 'no need to ask');
       addEventListener('devicemotion', onMotion);
       addEventListener('deviceorientation', onOrient);
-    } catch {}
+    } catch (e) { count('motion', 'error: ' + ((e && e.message) || '')); }
   }
 
   // ---- touch
@@ -1500,6 +1588,7 @@ function run() {
     // The first touch has to be a real click for iPhone to allow sound and motion.
     cv.addEventListener('click', (e) => {
       if (story.state !== 'arrive') return;
+      count('s_touch');
       audio.unlock();
       askMotion();
       if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {});
@@ -1515,7 +1604,7 @@ function run() {
     const up = () => { if (story.state !== 'arrive') story.up(); };
     cv.addEventListener('pointerup', up);
     cv.addEventListener('pointercancel', up);
-    $('skip').addEventListener('click', () => { audio.unlock(); audio.play('reveal'); story.state = 'reading'; story.seen = true; story.lift = 1; showLetter(false); });
+    $('skip').addEventListener('click', () => { count('skip', 'stuck at: ' + story.state); audio.unlock(); audio.play('reveal'); story.state = 'reading'; story.seen = true; story.lift = 1; showLetter(false); });
   }
   addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('visibilitychange', () => { if (audio.ctx && document.visibilityState === 'visible') audio.ctx.resume(); });
@@ -1525,6 +1614,9 @@ function run() {
   const look = [0, 0], rest = [0, 1];
   let camY = reading ? 0.44 : 0.1;
   let hintText = null, cueT = 0, slow = 0, last = performance.now(), started = false;
+  let was = '', fpsN = 0, fpsT = 0, tilted = false;
+  const speed = () => `${fpsT > 0 ? Math.round(fpsN / fpsT) : 0} fps, ${Math.round(W * scene.scale)}x${Math.round(H * scene.scale)}, quality ${quality.toFixed(2)}`;
+  $('gl').addEventListener('webglcontextlost', () => count('f_ctx', 'the phone took the 3D away at: ' + story.state));
 
   function frame(dt) {
     if (reading) story.update(dt); else story.t += dt;
@@ -1536,6 +1628,13 @@ function run() {
       audio.play(ev);
     }
     story.events.length = 0;
+    if (reading && story.state !== was) {
+      was = story.state;
+      if (was === 'held') count('s_held', speed());
+      if (was === 'open') count('s_cork', story.motion ? 'tilt on' : 'touch only');
+      if (was === 'reading') count('s_read', speed());
+    }
+    if (story.motion && !tilted) { tilted = true; count('motion_live'); }
     const t = story.t;
     audio.surf((swash(0, t + 0.05) - swash(0, t)) / 0.05, (swash(0, t) + 0.72) / 1.6);
 
@@ -1587,6 +1686,7 @@ function run() {
     last = now;
     frame(Math.min(0.05, Math.max(0.001, raw)));
     // If the phone cannot keep up, trade a little sharpness for smoothness.
+    if (raw < 0.2) { fpsN++; fpsT += raw; }
     if (raw > 0.024 && raw < 0.2) slow++; else slow = Math.max(0, slow - 0.25);
     if (slow > 40 && quality > 0.5) { quality *= 0.82; slow = 0; layout(true); }
   }

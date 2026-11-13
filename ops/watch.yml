@@ -1,0 +1,38 @@
+# The watch, run by GitHub twice a day. Free on a public repo.
+# When it fails, GitHub emails the owner of the repo. That email is the alarm.
+#
+# NOT SWITCHED ON YET. To switch it on, this file has to be copied to
+# .github/workflows/watch.yml and pushed, and GitHub only allows that from a
+# sign-in that has the "workflow" permission. See HANDOFF.md, "The watch".
+#
+# GitHub switches scheduled jobs off after 60 days with no commits to the repo,
+# and emails first. One click in the Actions tab turns it back on.
+
+name: Watch the bottle
+
+on:
+  schedule:
+    - cron: '17 11,23 * * *'   # about 6 or 7 in the morning and evening, Miami time
+  workflow_dispatch:
+    inputs:
+      drill:
+        description: 'Fail on purpose, to prove the warning email arrives'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Is the bottle well?
+        run: node test/watch.mjs
+        env:
+          DRILL: ${{ inputs.drill && '1' || '' }}

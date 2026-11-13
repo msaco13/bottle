@@ -39,9 +39,19 @@ Object.assign(SERVER, saved);
 
 // the built file is up to date with the source
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
-for (const f of ['code', 'scene', 'story', 'audio', 'thread', 'main']) {
+for (const f of ['code', 'scene', 'story', 'audio', 'thread', 'count', 'main']) {
   const src = fs.readFileSync(new URL(`../js/${f}.js`, import.meta.url), 'utf8');
   const probe = src.split('\n').filter((l) => l.length > 50 && !l.startsWith('import') && !l.startsWith('export'))[3];
   assert(app.includes(probe), `app.js is stale: rebuild (node build.mjs) after changing js/${f}.js`);
 }
+// the safety net in the page reports to the same server as the app
+const page = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+assert(page.includes(JSON.stringify(SERVER.url)) && page.includes(JSON.stringify(SERVER.key)), 'index.html has a different server address from js/thread.js: rebuild');
+
+// device families, as the counter names them
+const { device } = await import('../js/count.js');
+assert.equal(device('Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1'), 'iPhone iOS 18.1 · Safari 18');
+assert.equal(device('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36'), 'Android 14 · Chrome 130');
+assert.equal(device('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/21F90 Instagram 340.0.0 (iPhone15,2; iOS 17_5)'), 'iPhone iOS 17.5 · Instagram');
+assert.equal(device('Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/25.0 Chrome/121.0.0.0 Mobile Safari/537.36'), 'Android 13 · Samsung 25');
 console.log('thread ok');
