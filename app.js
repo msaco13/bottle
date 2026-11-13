@@ -1483,8 +1483,13 @@ async function light() {
     // The first notification is the proof that it works. A push service needs a moment to hear about a brand-new subscription,
     // so wait a breath first, and the sender keeps trying for a few seconds if it is told "gone".
     await new Promise((res) => setTimeout(res, 1500));
-    const r = await notify({ do: 'lit', auth: await token() }, 16000);
-    return r && r.sent > 0 ? 'lit' : 'lit, but the first notification was not accepted' + (r && r.codes ? ' (' + r.codes.join(',') + ')' : '');
+    const first = async () => { const r = await notify({ do: 'lit', auth: await token() }, 16000); return r && r.sent > 0 ? '' : (r && r.codes && r.codes.length ? r.codes.join(',') : 'no answer'); };
+    const why = await first();
+    // Sometimes the push service takes longer than that to know the new subscription. The subscription is kept, and
+    // real bottles will ring. The proof is simply tried again, quietly, a little later.
+    const later = (waits) => { if (waits.length) setTimeout(async () => { if (flag() && await first()) later(waits.slice(1)); }, waits[0]); };
+    if (why) later([12000, 40000]);
+    return why ? 'lit, first notification late (' + why + ')' : 'lit';
   } catch (e) {
     return 'failed: ' + String((e && e.message) || e).slice(0, 120);
   }
@@ -1782,7 +1787,7 @@ function lantern() {
         const how = await light();                    // the browser asks its one question here
         count('lantern', how, true);
         lanternSaid = how === 'lit' ? '' : how === 'refused' ? 'No lantern, then. You can light one any time.'
-          : how.startsWith('lit') ? 'The lantern is lit, but its first notification did not go through. If none shows up in a minute, put it out and light it again.'
+          : how.startsWith('lit') ? ''
           : 'The lantern would not light (' + how.replace('failed: ', '') + '). Try again in a minute.';
         lantern();
       }, standalone ? 'btn' : 'btn ghost');

@@ -59,7 +59,7 @@
   <h2>Sending</h2>
   <div class="steps" id="sending"></div>
 
-  <h2>Sharing, tilt and skipping</h2>
+  <h2>Sharing, lanterns, seats, tilt and skipping</h2>
   <div class="scroll" id="ways"></div>
 
   <h2>Problems, newest first</h2>
@@ -149,7 +149,7 @@
       return [when(r.at), { t: PROBLEM[r.kind] || r.kind, c: "wrap" }, { t: r.detail, c: "wrap" }, r.ua, r.ver];
     }), "None in this period.");
 
-    var WAY = { share: "Share sheet", copy: "Copy the link", motion: "Tilt and shake", skip: "Skip to the note", s_cork: "Cork pulled with" };
+    var WAY = { share: "Share sheet", copy: "Copy the link", motion: "Tilt and shake", skip: "Skip to the note", s_cork: "Cork pulled with", lantern: "Lantern (notifications)", seal: "Seat in the conversation", carried: "Shore carried to the Home Screen", followed: "Notification tapped" };
     table($("ways"), ["What", "How it went", "Times"], (s.ways || []).map(function (r) { return [WAY[r.kind] || r.kind, { t: r.detail, c: "wrap" }, r.n]; }), "Nothing counted in this period yet.");
     table($("speed"), ["When", "Speed", "Phone and browser"], (s.speed || []).map(function (r) { return [when(r.at), { t: r.detail, c: "wrap" }, r.ua]; }), "Nobody has finished the story in this period yet.");
 

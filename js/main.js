@@ -187,7 +187,7 @@ function lantern() {
         const how = await light();                    // the browser asks its one question here
         count('lantern', how, true);
         lanternSaid = how === 'lit' ? '' : how === 'refused' ? 'No lantern, then. You can light one any time.'
-          : how.startsWith('lit') ? 'The lantern is lit, but its first notification did not go through. If none shows up in a minute, put it out and light it again.'
+          : how.startsWith('lit') ? ''
           : 'The lantern would not light (' + how.replace('failed: ', '') + '). Try again in a minute.';
         lantern();
       }, standalone ? 'btn' : 'btn ghost');
