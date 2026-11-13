@@ -651,7 +651,8 @@ export class Scene {
     if (this.keepsOn) {
       const k = this.keeps, sh = new Float32Array(MAX_SHELLS * 4), kd = new Float32Array(MAX_SHELLS * 4), st = new Float32Array(STARS * 3);
       if (k) {
-        k.shells.forEach((s, i) => { sh.set([s.x, s.z, s.r, s.turn], i * 4); kd.set([s.kind, s.tint, s.a, 0], i * 4); });
+        const seen = 1 - (this.keepHide || 0);          // 0 while a note is being read: the page lays words and buttons over that sand
+        k.shells.forEach((s, i) => { sh.set([s.x, s.z, s.r, s.turn], i * 4); kd.set([s.kind, s.tint, s.a * seen, 0], i * 4); });
         k.stars.forEach((s, i) => { const at = starAt(s, this.W > this.H); st.set([at[0], at[1], s.a], i * 3); });
       }
       for (let i = 0; i < MAX_SHELLS; i++) if (!sh[i * 4 + 2]) sh[i * 4 + 2] = 1;      // never a size of nothing to divide by

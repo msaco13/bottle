@@ -210,10 +210,11 @@ export class Flat extends Camera {
       const shade = this.mood === 1 ? [0.40, 0.48, 0.68] : this.mood === 2 ? [1.16, 1.10, 1.04] : [1.0, 0.94, 0.88];
       const ink = (r, gr, bl) => `rgb(${Math.min(255, Math.round(r * shade[0]))},${Math.min(255, Math.round(gr * shade[1]))},${Math.min(255, Math.round(bl * shade[2]))})`;
       for (const sh of keeps.shells) {
-        if (sh.a <= 0) continue;
+        const seen = sh.a * (1 - (this.keepHide || 0));
+        if (seen <= 0.01) continue;
         const c = P([sh.x, 0, sh.z]), ex = P([sh.x + sh.r, 0, sh.z]), ez = P([sh.x, 0, sh.z + sh.r]);
         g.save();
-        g.globalAlpha = sh.a;
+        g.globalAlpha = seen;
         g.transform(ex[0] - c[0], ex[1] - c[1], ez[0] - c[0], ez[1] - c[1], c[0], c[1]);      // from here on, one unit is the shell's own size on the sand
         g.fillStyle = 'rgba(8,6,14,0.34)';
         g.beginPath(); g.arc(0.06, 0.24, 0.95, 0, 6.283); g.fill();
@@ -225,9 +226,9 @@ export class Flat extends Camera {
           for (let a = -1.05; a <= 1.051; a += 0.15) g.lineTo(Math.sin(a) * fan(a), -0.72 + Math.cos(a) * fan(a));
           g.lineTo(0.3, -0.62); g.lineTo(0.3, -0.84); g.closePath();
           g.fillStyle = ink(240, 222, 200); g.fill();
-          g.fillStyle = ink(blush[0], blush[1], blush[2]); g.globalAlpha = sh.a * 0.4;
+          g.fillStyle = ink(blush[0], blush[1], blush[2]); g.globalAlpha = seen * 0.4;
           g.beginPath(); g.arc(0, -0.5, 0.5, 0, 6.283); g.fill();
-          g.globalAlpha = sh.a;
+          g.globalAlpha = seen;
           g.strokeStyle = ink(190, 156, 132); g.lineWidth = 0.07;
           g.beginPath();
           for (let a = -0.9; a <= 0.91; a += 0.3) { g.moveTo(0, -0.72); g.lineTo(Math.sin(a) * fan(a) * 0.94, -0.72 + Math.cos(a) * fan(a) * 0.94); }

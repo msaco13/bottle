@@ -289,6 +289,48 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   got = await read({ message: 'from nowhere', name: '', mood: 'dusk', to: '', key: 'zzzzzzzzzzzzzzzzzzzzzz' });
   check('an unsigned note from a conversation this phone does not know says nothing it cannot know', got[0] === '' && got[1] === 'Send one back', got.join(' | '));
 }
+// 10. the little things: rename or remove someone, a quick way through the preview, shells out of the way of the words
+{
+  const p = await phone({ seed: jorge });
+  await p.page.waitForTimeout(700);
+  check('the shore offers to rename or remove someone', await p.shown('editPeople') && (await p.text('editPeople')) === 'Rename or remove someone');
+  await p.page.click('#editPeople'); await p.page.waitForTimeout(200);
+  check('names become fields, and the other buttons step aside', (await p.page.evaluate(() => document.querySelectorAll('#people input.rowEdit').length)) === 2 && !(await p.shown('newOne')) && (await p.text('editPeople')) === 'Done');
+  await p.page.fill('#people .person:nth-child(1) input', 'Jorge M.'); await p.page.press('#people .person:nth-child(1) input', 'Tab');
+  await p.page.click('#people .person:nth-child(2) .peek'); await p.page.waitForTimeout(150);
+  check('removing asks for a second tap', (await p.page.evaluate(() => document.querySelector('#people .person:nth-child(2) .peek').textContent)) === 'Tap again to remove' && (await p.page.evaluate(() => document.querySelectorAll('#people .person').length)) === 2);
+  await p.page.click('#people .person:nth-child(2) .peek'); await p.page.waitForTimeout(200);
+  await p.page.click('#editPeople'); await p.page.waitForTimeout(600);
+  const rows = await p.page.evaluate(() => [...document.querySelectorAll('#people .row')].map((r) => r.textContent));
+  const kept = await p.page.evaluate(() => ({ th: JSON.parse(localStorage.getItem('bottle-threads')), gone: JSON.parse(localStorage.getItem('bottle-gone')), notes: Object.keys(JSON.parse(localStorage.getItem('bottle-notes'))) }));
+  check('one is renamed and the other is gone from this phone', rows.length === 1 && rows[0].startsWith('Jorge M.') && kept.th.length === 1 && kept.th[0].w === 'Jorge M.' && kept.gone[0] === 'bbbbbbbbbbbbbbbbbbbbbb' && kept.notes.length === 1, rows.join(' / '));
+  await p.ctx.close();
+  // a name given by hand stays, whatever a note is signed with
+  const { linkFor } = await import('../js/code.js');
+  const named = JSON.parse(JSON.stringify(jorge)); named['bottle-threads'][0].w = 'Jorge M.'; named['bottle-threads'][0].n = 1;
+  const at = (b, q) => linkFor('http://localhost:8899/', b).replace('http://localhost:8899/', '').replace('#', q + '#');
+  const r = await phone({ seed: named, at: at({ message: 'signed another way', name: 'J-Dog', mood: 'dusk', to: 'Mike', key: KEY }, '?dev') });
+  await r.page.touchscreen.tap(20, 20);
+  await r.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(4); window.dev.hold = true; });
+  await r.page.waitForTimeout(1200);
+  check('a name given by hand is kept when a note is signed differently', (await r.page.evaluate(() => JSON.parse(localStorage.getItem('bottle-threads'))[0].w)) === 'Jorge M.');
+  check('shells fade out of the way while a note is read', (await r.page.evaluate(() => window.dev.scene.keepHide)) > 0.95, String(await r.page.evaluate(() => window.dev.scene.keepHide)));
+  await r.ctx.close();
+  // "See what they will see"
+  const w = await phone({});
+  await w.page.fill('#msg', 'A look before it goes.'); await w.page.click('#make'); await w.page.waitForTimeout(500);
+  const href = await w.page.evaluate(() => document.getElementById('try').getAttribute('href'));
+  check('the preview link says it is a preview', /\?dev&see#1\./.test(href), href.slice(0, 50));
+  await w.ctx.close();
+  const v = await phone({ at: href.replace('http://localhost:8899/', '') });
+  await v.page.evaluate(() => { window.dev.hold = false; window.dev.frame(1 / 60); window.dev.hold = true; });
+  check('and the way straight to the note is offered at once', await v.page.evaluate(() => document.getElementById('skip').classList.contains('show')));
+  await v.ctx.close();
+  const n = await phone({ at: href.replace('http://localhost:8899/', '').replace('&see', '') });
+  await n.page.evaluate(() => { window.dev.hold = false; window.dev.frame(1 / 60); window.dev.hold = true; });
+  check('someone opening the real link is not hurried', !(await n.page.evaluate(() => document.getElementById('skip').classList.contains('show'))));
+  await n.ctx.close();
+}
 await browser.close();
 const bad = results.filter((r) => !r[0]);
 console.log(bad.length ? `\n${bad.length} WRONG` : `\nall ${results.length} ok`);

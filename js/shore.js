@@ -28,14 +28,40 @@ export const threads = () => stored('bottle-threads').filter((x) => x && typeof 
 export const isMine = (n) => !!n && (n.id ? stored('bottle-mine').includes(n.id) : !!(n.name && n.name === myName()));
 export function wrote(id) { set('bottle-mine', JSON.stringify([id, ...stored('bottle-mine')].slice(0, 300))); save(); }
 
+// Conversations taken off this phone by hand. A copy of the shore kept elsewhere must not bring them back.
+const gone = () => stored('bottle-gone').filter((x) => typeof x === 'string');
+
 /** Keep a conversation: its key, who it is with, the newest note already seen (by the server's clock), and their mobile number if one was given. */
 export function remember(k, w, seenAt, p) {
   if (!k) return;
+  if (gone().includes(k)) set('bottle-gone', JSON.stringify(gone().filter((x) => x !== k)));       // a bottle from it was opened again: it is wanted after all
   const all = threads(), old = all.find((x) => x.k === k) || {};
-  const next = { k, w: w || old.w || '', s: Math.max(old.s || 0, seenAt || 0), t: Date.now() };
+  const next = { k, w: old.n ? old.w : (w || old.w || ''), s: Math.max(old.s || 0, seenAt || 0), t: Date.now() };       // a name given by hand is kept
+  if (old.n) next.n = 1;
   if (p || old.p) next.p = p || old.p;
   set('bottle-threads', JSON.stringify([next, ...all.filter((x) => x.k !== k)].slice(0, 30)));
   if (next.w !== old.w || next.s !== old.s || next.p !== old.p || !old.k) save();
+}
+
+/** Call someone by another name. It stays, whatever name their notes are signed with. */
+export function rename(k, w) {
+  const name = String(w || '').trim().slice(0, 40), all = threads(), th = all.find((x) => x.k === k);
+  if (!th || !name || name === th.w) return false;
+  th.w = name; th.n = 1; th.t = Date.now();
+  set('bottle-threads', JSON.stringify(all));
+  save();
+  return true;
+}
+
+/** Take a conversation off this phone: its place on the shore and the notes kept here. Links already sent still open. */
+export function forget(k) {
+  if (!k) return;
+  set('bottle-threads', JSON.stringify(threads().filter((x) => x.k !== k)));
+  set('bottle-gone', JSON.stringify([k, ...gone().filter((x) => x !== k)].slice(0, 60)));
+  const book = notes();
+  delete book[k];
+  set('bottle-notes', JSON.stringify(book));
+  save();
 }
 
 /** A mobile number as a phone will dial it: digits, with a leading + if it had one. '' if it is not a number. */
@@ -98,19 +124,24 @@ export async function token() {
 
 // ---------------------------------------------------------------- a copy with the server, scrambled
 
-const state = () => ({ v: 1, name: myName(), threads: threads(), mine: stored('bottle-mine') });
+const state = () => ({ v: 1, name: myName(), threads: threads(), mine: stored('bottle-mine'), gone: gone() });
 
 /** Fold another copy of the shore into this one. Returns true if anything here changed. */
 function fold(other) {
   if (!other || typeof other !== 'object') return false;
   const before = JSON.stringify(state());
+  const left = [...new Set([...gone(), ...(Array.isArray(other.gone) ? other.gone.filter((x) => typeof x === 'string') : [])])].slice(0, 60);
+  set('bottle-gone', JSON.stringify(left));
   const by = new Map();
   for (const t of [...(Array.isArray(other.threads) ? other.threads : []), ...threads()]) {
-    if (!t || typeof t.k !== 'string') continue;
+    if (!t || typeof t.k !== 'string' || left.includes(t.k)) continue;
     const old = by.get(t.k);
     const one = old ? { k: t.k, w: (t.t || 0) >= (old.t || 0) ? (t.w || old.w || '') : (old.w || t.w || ''), s: Math.max(t.s || 0, old.s || 0), t: Math.max(t.t || 0, old.t || 0) } : { k: t.k, w: t.w || '', s: t.s || 0, t: t.t || 0 };
     const p = old ? ((t.t || 0) >= (old.t || 0) ? (t.p || old.p) : (old.p || t.p)) : t.p;
     if (typeof p === 'string' && p) one.p = p;
+    // A name given by hand wins over one taken from a note. If both copies have one, the newer wins.
+    const hand = [t, old].filter((x) => x && x.n).sort((x, y) => (y.t || 0) - (x.t || 0))[0];
+    if (hand) { one.n = 1; one.w = hand.w || one.w; }
     by.set(t.k, one);
   }
   set('bottle-threads', JSON.stringify([...by.values()].sort((a, b) => b.t - a.t).slice(0, 30)));
