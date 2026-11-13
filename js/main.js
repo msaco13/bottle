@@ -4,7 +4,7 @@
 // After a note is read, sending one back is one tap: the desk opens already addressed.
 
 import { decode, linkFor, MAX_MESSAGE } from './code.js';
-import { Scene, swash, DRY_LINE } from './scene.js';
+import { Scene, swash, DRY_LINE, MOOD } from './scene.js';
 import { Story } from './story.js';
 import { Shore } from './audio.js';
 import { newKey, add, list } from './thread.js';
@@ -40,9 +40,13 @@ function remember(k, w, seenAt) {
   } catch {}
 }
 
+/** Put a sky over the shore: 'dusk', 'night' or 'dawn'. */
+function sky(mood) { if (scene) scene.mood = MOOD[mood] || 0; document.documentElement.dataset.mood = MOOD[mood] ? mood : 'dusk'; }
+
 function showLetter(instant, note) {
   if (note) shown = note;
   const b = shown;
+  sky(b.mood);
   const letter = $('letter'), paper = $('paper');
   // replay the unrolling when a different note is put on the paper
   letter.classList.remove('show'); void paper.offsetWidth;
@@ -126,7 +130,7 @@ async function shelf() {
 
 // ---------------------------------------------------------------- the writing desk
 
-let deskReady = false, deskCtx = {}, madeLink = '', madeTo = '';
+let deskReady = false, deskCtx = {}, madeLink = '', madeTo = '', deskMood = 'dusk';
 
 // Your bottles: every conversation this phone has been part of, newest news first. One tap and that bottle washes up.
 async function inbox() {
@@ -186,6 +190,8 @@ function desk(ctx) {
     : 'Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.';
   msg.value = '';
   try { who.value = myName(); } catch {}
+  const choose = (m) => { deskMood = m; sky(m); for (const c of $('moods').children) c.classList.toggle('on', c.dataset.mood === m); };
+  choose((shown && shown.mood) || 'dusk');
   const count = () => { $('left').textContent = String(MAX_MESSAGE - msg.value.length); };
   count();
   if (deskCtx.to) setTimeout(() => msg.focus(), 350);
@@ -203,7 +209,7 @@ function desk(ctx) {
     try { localStorage.setItem('bottle-name', name); } catch {}
     let key = deskCtx.key || '';
     try { if (!key) key = newKey(); } catch {}
-    const b = { message: msg.value.trim(), name, mood: 'dusk', to: deskCtx.to || $('forWho').value.trim(), key };
+    const b = { message: msg.value.trim(), name, mood: deskMood, to: deskCtx.to || $('forWho').value.trim(), key };
     madeTo = b.to;
     const link = madeLink = linkFor(location.origin + location.pathname, b);
     $('link').value = madeLink;
@@ -225,6 +231,7 @@ function desk(ctx) {
       if (ok && madeLink === link) $('madeLede').textContent += ` When ${b.to ? b.to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
     });
   });
+  for (const c of $('moods').children) c.addEventListener('click', () => choose(c.dataset.mood));
   $('link').addEventListener('focus', () => $('link').select());
   $('copy').addEventListener('click', async () => {
     let ok = false;
@@ -236,13 +243,14 @@ function desk(ctx) {
   });
   $('share').addEventListener('click', share);
   $('again').addEventListener('click', () => desk({}));
-  $('backToNote').addEventListener('click', () => { compose.classList.remove('show'); if (bottle) $('letter').classList.add('show'); });
+  $('backToNote').addEventListener('click', () => { compose.classList.remove('show'); if (bottle) { sky(shown.mood); $('letter').classList.add('show'); } });
 }
 
 // ---------------------------------------------------------------- the shore
 
 let scene = null;
 try { scene = qs.has('nogl') ? null : new Scene($('gl')); } catch (e) { scene = null; }   // ?nogl pretends there is no 3D, to test the fallback
+if (bottle) sky(bottle.mood);
 const ready = () => { window.__bottleReady = true; const p = $('plain'); if (p) p.className = ''; };
 
 if (!scene) {

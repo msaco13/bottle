@@ -30,6 +30,9 @@ html, body {
   opacity: 0; transition: opacity 0.6s ease; pointer-events: none;
 }
 #hint.show { opacity: 1; }
+/* Dawn is bright: the first words and the skip link turn dark so they can be read against it */
+[data-mood=dawn] #hint.big { color: #35233c; font-weight: 400; text-shadow: 0 1px 18px rgba(255, 250, 240, 0.9); }
+[data-mood=dawn] #skip { color: #35233c; }
 #hint.big { font-size: clamp(24px, 7vmin, 34px); font-weight: 300; background: none; border-color: transparent; box-shadow: none; bottom: 46%; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.75); animation: breathe 3.2s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: 0.62; } }
 
@@ -117,7 +120,7 @@ textarea, input[type=text] {
   width: 100%; border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 245, 230, 0.94); color: #2e1f12;
   padding: 13px 14px; font: inherit; font-size: 17px; line-height: 1.4; -webkit-user-select: text; user-select: text; outline: none;
 }
-textarea { font-family: var(--hand); font-size: 21px; resize: none; min-height: 150px; }
+textarea { font-family: var(--hand); font-size: 21px; resize: none; min-height: 132px; }
 textarea:focus, input[type=text]:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255, 201, 138, 0.25); }
 #link { font-size: 13.5px; color: #4a3a2a; }
 .count { font-size: 12.5px; color: var(--dim); text-align: right; margin-top: -4px; }
@@ -126,7 +129,12 @@ textarea:focus, input[type=text]:focus { border-color: var(--gold); box-shadow: 
   font: inherit; font-size: 17px; font-weight: 600; color: #2b1a0c; background: linear-gradient(180deg, #ffe0b4, #ffc07a); box-shadow: 0 10px 26px rgba(255, 170, 90, 0.28); cursor: pointer;
 }
 .btn:active { transform: scale(0.985); }
-#forRow { display: flex; flex-direction: column; gap: 10px; }
+#names { display: flex; gap: 10px; }
+#names > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* The sky picker */
+#moods { display: flex; gap: 8px; }
+.mood { flex: 1; appearance: none; font: inherit; font-size: 14.5px; font-weight: 600; color: var(--ink); background: rgba(255, 240, 220, 0.08); border: 1px solid var(--line); border-radius: 12px; padding: 11px 4px; cursor: pointer; }
+.mood.on { border-color: var(--gold); color: var(--gold); background: rgba(255, 201, 138, 0.16); }
 /* Your bottles: the conversations this phone is part of */
 #inbox { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 #inbox:empty { display: none; }

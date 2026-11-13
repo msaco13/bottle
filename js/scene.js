@@ -44,25 +44,37 @@ export function swash(x, t) {
 /** The highest the water ever reaches. Past this the sand is dry. */
 export const DRY_LINE = 0.98;
 
+/** The three skies a bottle can arrive under, and where the sun or moon hangs in each. */
+export const MOOD = { dusk: 0, night: 1, dawn: 2 };
+const SUNS = [[-0.1385, 0.0940, -0.9859], [0.160, 0.190, -0.969], [0.100, 0.060, -0.993]];
+
 // ---------------------------------------------------------------- shaders
 
 const SKY = `
 uniform float uTime;
-const vec3 SUN = vec3(-0.1385, 0.0940, -0.9859);
+uniform float uMood;          // 0 dusk, 1 moonlit night, 2 dawn
+uniform vec3 uSun;            // where the sun (or the moon) hangs
+#define SUN uSun
+vec3 pick(vec3 a, vec3 b, vec3 c) { return uMood < 0.5 ? a : (uMood < 1.5 ? b : c); }
+float pickf(float a, float b, float c) { return uMood < 0.5 ? a : (uMood < 1.5 ? b : c); }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 uniform sampler2D uNoise;
 float vnoise(vec2 p) { return texture2D(uNoise, (p + 0.5) / 256.0).r; }
 float fbm(vec2 p) { return 0.52 * vnoise(p) + 0.26 * vnoise(p * 2.03 + 3.1) + 0.14 * vnoise(p * 4.1 + 7.7) + 0.08 * vnoise(p * 8.3 + 1.3); }
 // Dusk: a band of orange on the horizon, rose above it, then deep blue.
+// Night: blue-black with a cold glow round the moon. Dawn: peach on the horizon under pale blue.
 vec3 sky(vec3 d) {
   float h = max(d.y, 0.0);
-  vec3 c = mix(vec3(1.00, 0.50, 0.22), vec3(0.88, 0.36, 0.38), smoothstep(0.0, 0.10, h));
-  c = mix(c, vec3(0.40, 0.26, 0.47), smoothstep(0.06, 0.26, h));
-  c = mix(c, vec3(0.09, 0.12, 0.30), smoothstep(0.20, 0.60, h));
-  c = mix(c, vec3(0.025, 0.04, 0.13), smoothstep(0.55, 1.0, h));
+  vec3 c = mix(pick(vec3(1.00, 0.50, 0.22), vec3(0.11, 0.17, 0.31), vec3(1.00, 0.80, 0.58)), pick(vec3(0.88, 0.36, 0.38), vec3(0.07, 0.115, 0.25), vec3(0.99, 0.68, 0.62)), smoothstep(0.0, 0.10, h));
+  c = mix(c, pick(vec3(0.40, 0.26, 0.47), vec3(0.04, 0.07, 0.17), vec3(0.74, 0.64, 0.80)), smoothstep(0.06, 0.26, h));
+  c = mix(c, pick(vec3(0.09, 0.12, 0.30), vec3(0.02, 0.035, 0.10), vec3(0.44, 0.58, 0.84)), smoothstep(0.20, 0.60, h));
+  c = mix(c, pick(vec3(0.025, 0.04, 0.13), vec3(0.008, 0.012, 0.045), vec3(0.24, 0.38, 0.68)), smoothstep(0.55, 1.0, h));
   float sd = max(dot(d, SUN), 0.0);
-  c += vec3(1.0, 0.52, 0.22) * pow(sd, 6.0) * 0.26 + vec3(1.0, 0.70, 0.40) * pow(sd, 60.0) * 0.40;
-  c += vec3(1.0, 0.88, 0.66) * smoothstep(0.99950, 0.99972, sd) * 1.6;
+  c += pick(vec3(1.0, 0.52, 0.22), vec3(0.30, 0.40, 0.65), vec3(1.0, 0.74, 0.46)) * pow(sd, 6.0) * pickf(0.26, 0.16, 0.22) + pick(vec3(1.0, 0.70, 0.40), vec3(0.55, 0.66, 0.90), vec3(1.0, 0.86, 0.62)) * pow(sd, 60.0) * pickf(0.40, 0.30, 0.42);
+  float disc = smoothstep(pickf(0.99950, 0.99962, 0.99950), pickf(0.99972, 0.99979, 0.99972), sd);
+  vec3 face = pick(vec3(1.0, 0.88, 0.66), vec3(0.93, 0.96, 1.0), vec3(1.0, 0.96, 0.82)) * pickf(1.6, 1.0, 1.6);
+  if (disc > 0.0 && uMood > 0.5 && uMood < 1.5) face *= 0.62 + 0.42 * vnoise(d.xy * 110.0 + 7.0);      // the grey seas on the moon
+  c += face * disc;
   return c;
 }`;
 
@@ -96,24 +108,27 @@ void main() {
     float cl = fbm(cp * 1.3 + fbm(cp * 2.9) * 0.5);
     float mask = smoothstep(0.50, 0.80, cl) * smoothstep(-0.01, 0.16, rd.y);
     float nearSun = pow(max(dot(normalize(vec3(rd.x, 0.0, rd.z)), normalize(vec3(SUN.x, 0.0, SUN.z))), 0.0), 3.0);
-    vec3 cloud = mix(vec3(0.20, 0.15, 0.30), vec3(1.0, 0.48, 0.28), nearSun * (1.0 - smoothstep(0.0, 0.5, rd.y)) * 0.9);
-    cloud = mix(cloud, vec3(0.34, 0.20, 0.34), smoothstep(0.6, 0.9, cl) * 0.6);
+    vec3 cloud = mix(pick(vec3(0.20, 0.15, 0.30), vec3(0.05, 0.07, 0.14), vec3(0.64, 0.54, 0.68)), pick(vec3(1.0, 0.48, 0.28), vec3(0.34, 0.40, 0.56), vec3(1.0, 0.82, 0.64)), nearSun * (1.0 - smoothstep(0.0, 0.5, rd.y)) * 0.9);
+    cloud = mix(cloud, pick(vec3(0.34, 0.20, 0.34), vec3(0.08, 0.10, 0.18), vec3(0.82, 0.68, 0.74)), smoothstep(0.6, 0.9, cl) * 0.6);
     col = mix(col, cloud, mask * 0.78);
     vec2 sg = rd.xz / max(rd.y, 0.05) * 42.0;
-    float star = step(0.992, hash(floor(sg))) * smoothstep(0.30, 0.65, rd.y) * (1.0 - mask);
+    float star = step(pickf(0.992, 0.965, 2.0), hash(floor(sg))) * smoothstep(pickf(0.30, 0.04, 0.30), pickf(0.65, 0.28, 0.65), rd.y) * (1.0 - mask) * pickf(1.0, 1.25, 0.0);   // a few at dusk, a sky full at night, none at dawn
     col += vec3(0.9, 0.92, 1.0) * star * (1.0 - smoothstep(0.0, 0.35, length(fract(sg) - 0.5))) * (0.6 + 0.4 * sin(uTime * 2.0 + hash(floor(sg)) * 40.0));
   } else {
     float tt = -uCam.y / rd.y;
     vec3 p = uCam + rd * tt;
     float x = p.x, z = p.z;
     float zs = swash(x, uTime);
+    vec3 FOAM = pick(vec3(0.88, 0.76, 0.74), vec3(0.38, 0.54, 0.72), vec3(0.99, 0.93, 0.90));
+    float glow = pickf(0.0, 1.0, 0.0);                  // at night the surf lights up where it breaks
     float rising = swash(x, uTime + 0.05) - zs;         // > 0 while the water is running up the beach
 
     // ---- sand
     float grain = hash(floor(p.xz * 380.0 + 0.5));
     float soft = fbm(p.xz * 2.6);
     vec3 sand = mix(vec3(0.335, 0.250, 0.195), vec3(0.435, 0.335, 0.250), soft) * (0.90 + 0.20 * grain);
-    sand += vec3(0.10, 0.045, 0.015) * (0.5 + 0.5 * sin(z * 34.0 + soft * 9.0 + x * 3.0)) * 0.35;   // low sun on the ripples
+    sand += pick(vec3(0.10, 0.045, 0.015), vec3(0.09, 0.10, 0.12), vec3(0.11, 0.08, 0.05)) * (0.5 + 0.5 * sin(z * 34.0 + soft * 9.0 + x * 3.0)) * 0.35;   // low light on the ripples
+    sand *= pick(vec3(1.0), vec3(0.40, 0.47, 0.66), vec3(1.22, 1.13, 1.06));
     float wetLine = 0.90 + 0.11 * sin(x * 2.1) + 0.05 * sin(x * 5.3 + 1.0);
     float wet = 1.0 - smoothstep(wetLine - 0.30, wetLine + 0.06, z);
     float film = 1.0 - smoothstep(zs, zs + 0.60, z);                         // the thin sheet of water just behind the edge
@@ -125,7 +140,9 @@ void main() {
     // bubbles the last wave left on the sand
     float lace = fbm(p.xz * 8.0 + vec2(0.0, uTime * 0.25));
     float left = (1.0 - smoothstep(0.0, 0.34, z - zs)) * step(zs, z);
-    col = mix(col, vec3(0.80, 0.70, 0.70), smoothstep(0.50, 0.72, lace + left * 0.30) * left * (rising < 0.0 ? 0.75 : 0.35));
+    float bub = smoothstep(0.50, 0.72, lace + left * 0.30) * left * (rising < 0.0 ? 0.75 : 0.35);
+    col = mix(col, pick(vec3(0.80, 0.70, 0.70), FOAM * 0.9, FOAM * 0.9), bub);
+    col += vec3(0.03, 0.40, 0.48) * bub * glow * (0.3 + 0.7 * vnoise(p.xz * 31.0 + uTime * 1.3));
 
     if (z < zs) {
       // ---- the sea
@@ -145,10 +162,10 @@ void main() {
       float F = 0.03 + 0.97 * pow(1.0 - max(dot(-rd, n), 0.0), 4.0);
       F *= smoothstep(0.0, 0.30, into) * 0.85 + 0.15;                          // right at the edge the water is too thin to mirror the sky
       vec3 seen = sand * vec3(0.36, 0.62, 0.60);                              // the sand, seen through shallow water
-      vec3 body = mix(seen, vec3(0.035, 0.115, 0.150), 1.0 - exp(-into * 0.70));
+      vec3 body = mix(seen, pick(vec3(0.035, 0.115, 0.150), vec3(0.006, 0.022, 0.050), vec3(0.075, 0.21, 0.27)), 1.0 - exp(-into * 0.70));
       col = mix(body, sky(Rw), F);
       float glit = pow(max(dot(Rw, SUN), 0.0), 260.0);
-      col += vec3(1.0, 0.72, 0.42) * glit * 3.2 * (0.5 + 0.5 * vnoise(w * 26.0 + uTime * 3.0));
+      col += pick(vec3(1.0, 0.72, 0.42), vec3(0.70, 0.82, 1.0), vec3(1.0, 0.90, 0.70)) * glit * pickf(3.2, 2.6, 3.0) * (0.5 + 0.5 * vnoise(w * 26.0 + uTime * 3.0));
       // foam at the leading edge, and the white lines of waves coming in
       float edge = 1.0 - smoothstep(0.0, 0.46, into);
       float lace2 = fbm(w * 6.5 + vec2(0.0, uTime * 0.8)) + 0.35 * vnoise(w * 19.0 - vec2(0.0, uTime * 1.3));
@@ -156,14 +173,15 @@ void main() {
       foam = max(foam, (1.0 - smoothstep(0.0, 0.05, into)) * (0.55 + 0.45 * smoothstep(0.35, 0.6, lace2)));
       float sets = pow(0.5 + 0.5 * sin(z * 1.05 - uTime * 0.9 + fbm(vec2(x * 0.35, z * 0.2)) * 3.0), 12.0);
       foam = max(foam, sets * smoothstep(0.58, 0.80, lace2) * smoothstep(-16.0, -1.2, z) * (1.0 - smoothstep(-1.2, -0.2, z)) * 0.8);
-      col = mix(col, vec3(0.88, 0.76, 0.74), foam);
+      col = mix(col, FOAM, foam);
+      col += vec3(0.04, 0.52, 0.60) * foam * glow * (0.30 + 0.70 * vnoise(w * 23.0 + uTime * 1.7));
       // the far sea melts into the sky
       col = mix(col, sky(normalize(vec3(rd.x, 0.004, rd.z))) * 0.92, smoothstep(7.0, 70.0, tt));
       // rings where a finger touched the water
       for (int i = 0; i < 3; i++) {
         if (uRip[i].z >= 0.0) {
           float d = length(p.xz - uRip[i].xy), r = uRip[i].z * 0.85;
-          col += vec3(1.0, 0.78, 0.62) * (exp(-pow((d - r) / 0.035, 2.0)) + 0.5 * exp(-pow((d - r * 0.6) / 0.03, 2.0))) * (1.0 - smoothstep(0.6, 2.4, uRip[i].z)) * 0.5;
+          col += pick(vec3(1.0, 0.78, 0.62), vec3(0.20, 0.85, 0.95), vec3(1.0, 0.92, 0.84)) * (exp(-pow((d - r) / 0.035, 2.0)) + 0.5 * exp(-pow((d - r * 0.6) / 0.03, 2.0))) * (1.0 - smoothstep(0.6, 2.4, uRip[i].z)) * 0.5;
         }
       }
     }
@@ -171,7 +189,7 @@ void main() {
     vec2 bd = (p.xz - uBottle.xy) / (vec2(1.25, 0.85) * uBottle.z);
     float bl = length(bd);
     col *= 1.0 - 0.52 * (1.0 - smoothstep(0.35, 1.0, bl)) * uBottle.w;
-    if (z < zs) col = mix(col, vec3(0.88, 0.76, 0.74), (1.0 - smoothstep(0.0, 0.28, abs(bl - 1.02))) * uBottle.w * 0.55 * smoothstep(0.45, 0.7, fbm(p.xz * 11.0 + uTime)));
+    if (z < zs) col = mix(col, FOAM + vec3(0.0, 0.30, 0.34) * glow, (1.0 - smoothstep(0.0, 0.28, abs(bl - 1.02))) * uBottle.w * 0.55 * smoothstep(0.45, 0.7, fbm(p.xz * 11.0 + uTime)));
   }
   col *= 1.0 - 0.30 * dot(ndc * 0.62, ndc * 0.62);
   col *= 1.0 - 0.50 * uDim;
@@ -222,7 +240,7 @@ void main() {
     vec3 c = texture2D(uBg, clamp(uv - bend, 0.002, 0.998)).rgb;
     c *= mix(vec3(0.74, 0.96, 0.90), vec3(0.42, 0.74, 0.66), pow(1.0 - nv, 1.6));   // sea-glass green, deeper where the glass is seen edge on
     c = mix(c, vec3(0.03, 0.11, 0.10), pow(1.0 - nv, 3.5) * 0.62);
-    c += vec3(0.05, 0.11, 0.10) * (0.35 + 0.65 * uWet);                              // the faint milk of old glass
+    c += vec3(0.05, 0.11, 0.10) * (0.35 + 0.65 * uWet) * pickf(1.0, 0.35, 1.2);                              // the faint milk of old glass
     gl_FragColor = vec4(c, 1.0);
   } else {
     vec3 R = reflect(-V, N);
@@ -234,7 +252,7 @@ void main() {
     streak += pow(max(dot(N, normalize(vec3(0.75, 0.10, 0.65))), 0.0), 60.0) * 0.22;
     // beads of sea water still clinging to it
     float beads = smoothstep(0.90, 0.96, vnoise(vO.xy * vec2(64.0, 64.0) + vO.z * 40.0)) * uWet;
-    vec3 c = refl * F * 1.05 + vec3(1.0, 0.80, 0.55) * sun + vec3(1.0, 0.95, 0.88) * (streak + beads * 0.22);
+    vec3 c = refl * F * 1.05 + pick(vec3(1.0, 0.80, 0.55), vec3(0.72, 0.84, 1.0), vec3(1.0, 0.92, 0.74)) * sun + pick(vec3(1.0, 0.95, 0.88), vec3(0.42, 0.50, 0.62), vec3(1.0, 0.97, 0.92)) * (streak + beads * 0.22);
     gl_FragColor = vec4(c, clamp(F * 0.55 + beads * 0.25, 0.0, 1.0));
   }
 }`;
@@ -262,8 +280,8 @@ void main() {
     base = mix(base, vec3(0.62, 0.10, 0.10), thread);
     base *= 0.80 + 0.20 * smoothstep(0.0, 0.02, 0.04 - length(vO.xz) + 0.012);          // the dark spiral at each end
   }
-  vec3 warm = uKind < 0.5 ? vec3(1.0, 0.66, 0.42) : vec3(1.0, 0.82, 0.66);
-  vec3 c = base * (warm * sunl * 0.85 + mix(vec3(0.24, 0.21, 0.28), vec3(0.40, 0.39, 0.52), skyl) * (uKind < 0.5 ? 0.85 : 1.05));
+  vec3 warm = (uKind < 0.5 ? vec3(1.0, 0.66, 0.42) : vec3(1.0, 0.82, 0.66)) * pick(vec3(1.0), vec3(0.42, 0.55, 0.85), vec3(1.05, 1.04, 1.0));
+  vec3 c = base * (warm * sunl * 0.85 + mix(vec3(0.24, 0.21, 0.28), vec3(0.40, 0.39, 0.52), skyl) * pick(vec3(1.0), vec3(0.45, 0.56, 0.86), vec3(1.35, 1.25, 1.15)) * (uKind < 0.5 ? 0.85 : 1.05));
   c *= mix(1.0, 0.86, uShade);
   gl_FragColor = vec4(c, 1.0);
 }`;
@@ -340,6 +358,7 @@ export class Scene {
     this.bgScale = 0.72;
     this.cam = { pos: [0, 1.22, 2.75], target: [0, 0.0, -1.5], fov: 62 * Math.PI / 180 };
     this._frame = 0;
+    this.mood = 0;              // 0 dusk, 1 night, 2 dawn
   }
 
   _program(vs, fs) {
@@ -438,6 +457,7 @@ export class Scene {
     gl.uniform3fv(u.uCam, b.pos); gl.uniform3fv(u.uRight, b.r); gl.uniform3fv(u.uUp, b.u); gl.uniform3fv(u.uFwd, b.f);
     gl.uniform2f(u.uTan, b.tx, b.ty);
     gl.uniform1f(u.uTime, tm);
+    gl.uniform1f(u.uMood, this.mood); gl.uniform3fv(u.uSun, SUNS[this.mood]);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.noise); gl.activeTexture(gl.TEXTURE0);
     gl.uniform1i(u.uNoise, 1);
     gl.uniform4fv(u.uBottle, s.shadow || [0, 0, 1, 0]);
@@ -468,7 +488,7 @@ export class Scene {
       const g = this.glass.u;
       gl.uniformMatrix4fv(g.uModel, false, s.bottle); gl.uniformMatrix4fv(g.uVP, false, vp);
       gl.uniform3fv(g.uCam, b.pos); gl.uniform2f(g.uRes, pw, ph);
-      gl.uniform1i(g.uBg, 0); gl.uniform1i(g.uNoise, 1); gl.uniform1f(g.uPass, pass); gl.uniform1f(g.uTime, tm); gl.uniform1f(g.uWet, s.wet || 0);
+      gl.uniform1i(g.uBg, 0); gl.uniform1i(g.uNoise, 1); gl.uniform1f(g.uPass, pass); gl.uniform1f(g.uTime, tm); gl.uniform1f(g.uWet, s.wet || 0); gl.uniform1f(g.uMood, this.mood); gl.uniform3fv(g.uSun, SUNS[this.mood]);
       this._drawMesh(this.mBottle, this.glass);
     };
     gl.depthMask(false);
@@ -477,7 +497,7 @@ export class Scene {
     gl.disable(gl.CULL_FACE);
     gl.useProgram(this.solid.p);
     const so = this.solid.u;
-    gl.uniformMatrix4fv(so.uVP, false, vp); gl.uniform3fv(so.uCam, b.pos); gl.uniform1f(so.uTime, tm); gl.uniform1i(so.uNoise, 1);
+    gl.uniformMatrix4fv(so.uVP, false, vp); gl.uniform3fv(so.uCam, b.pos); gl.uniform1f(so.uTime, tm); gl.uniform1i(so.uNoise, 1); gl.uniform1f(so.uMood, this.mood); gl.uniform3fv(so.uSun, SUNS[this.mood]);
     if (s.note) { gl.uniformMatrix4fv(so.uModel, false, s.note); gl.uniform1f(so.uKind, 1); gl.uniform1f(so.uShade, s.noteOut ? 0 : 1); this._drawMesh(this.mNote, this.solid); }
     if (s.cork) { gl.uniformMatrix4fv(so.uModel, false, s.cork); gl.uniform1f(so.uKind, 0); gl.uniform1f(so.uShade, 0); this._drawMesh(this.mCork, this.solid); }
     gl.enable(gl.CULL_FACE);

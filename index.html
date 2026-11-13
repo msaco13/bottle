@@ -15,7 +15,7 @@
 <meta property="og:url" content="https://msaco13.github.io/bottle/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.500' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=e66e53c68c">
+<link rel="stylesheet" href="css/style.css?v=d57ee5f0d6">
 </head>
 <body>
 <div id="stage">
@@ -47,15 +47,25 @@
       <h1 id="deskTitle">Message in a bottle</h1>
       <div id="toChip"></div>
       <p class="lede" id="deskLede">Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.</p>
-      <div id="forRow">
-        <label for="forWho">Who is it for <span>(optional)</span></label>
-        <input id="forWho" type="text" maxlength="40" placeholder="Their name goes on the note">
+      <div id="names">
+        <div id="forRow">
+          <label for="forWho">To <span>(optional)</span></label>
+          <input id="forWho" type="text" maxlength="40" placeholder="Their name">
+        </div>
+        <div>
+          <label for="who">From <span>(optional)</span></label>
+          <input id="who" type="text" maxlength="40" placeholder="Your name">
+        </div>
       </div>
       <label for="msg">Your message</label>
       <textarea id="msg" rows="5" maxlength="600" placeholder="Write it here" required></textarea>
       <div class="count"><span id="left">600</span> characters left</div>
-      <label for="who">Your name <span>(optional)</span></label>
-      <input id="who" type="text" maxlength="40" placeholder="So they know who it is from">
+      <label id="moodsLabel">The sky they will open it under</label>
+      <div id="moods" role="group" aria-labelledby="moodsLabel">
+        <button type="button" class="mood on" data-mood="dusk">Dusk</button>
+        <button type="button" class="mood" data-mood="night">Night</button>
+        <button type="button" class="mood" data-mood="dawn">Dawn</button>
+      </div>
       <button class="btn" type="submit" id="make">Create bottle</button>
       <div id="inbox"></div>
     </form>
@@ -109,6 +119,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain(); }, true);   // or a file failed outright
 })();
 </script>
-<script defer src="app.js?v=e66e53c68c"></script>
+<script defer src="app.js?v=d57ee5f0d6"></script>
 </body>
 </html>
