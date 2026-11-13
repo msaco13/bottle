@@ -126,6 +126,17 @@ textarea:focus, input[type=text]:focus { border-color: var(--gold); box-shadow: 
   font: inherit; font-size: 17px; font-weight: 600; color: #2b1a0c; background: linear-gradient(180deg, #ffe0b4, #ffc07a); box-shadow: 0 10px 26px rgba(255, 170, 90, 0.28); cursor: pointer;
 }
 .btn:active { transform: scale(0.985); }
+#forRow { display: flex; flex-direction: column; gap: 10px; }
+/* Your bottles: the conversations this phone is part of */
+#inbox { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+#inbox:empty { display: none; }
+#inbox.top { margin: 0 0 8px; padding: 0 0 16px; border-top: 0; border-bottom: 1px solid var(--line); }
+.inboxHead { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); }
+.row { appearance: none; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; font: inherit; color: var(--ink); background: rgba(255, 240, 220, 0.08); border: 1px solid var(--line); border-radius: 14px; padding: 11px 14px; cursor: pointer; }
+.row.new { border-color: var(--gold); background: rgba(255, 201, 138, 0.16); }
+.rowWho { font-size: 16.5px; font-weight: 600; }
+.rowSub { font-size: 13.5px; color: var(--dim); }
+.row.new .rowSub { color: var(--gold); }
 .btn.ghost { background: rgba(255, 240, 220, 0.10); color: var(--ink); font-weight: 500; box-shadow: none; border: 1px solid var(--line); }
 .btn[disabled] { opacity: 0.5; }
 .link { appearance: none; border: 0; background: none; color: var(--gold); font: inherit; font-size: 15px; padding: 10px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7); }

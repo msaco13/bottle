@@ -1159,6 +1159,21 @@ let shown = bottle;          // the note on the paper right now (the one from th
 const myName = () => { try { return localStorage.getItem('bottle-name') || ''; } catch { return ''; } };
 const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (b.name || '');
 
+// What this phone remembers, and nothing leaves it: the conversations it is part of and the notes it wrote.
+const stored = (k) => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+const threads = () => stored('bottle-threads').filter((x) => x && typeof x.k === 'string');
+const isMine = (n) => !!(n && ((n.id && stored('bottle-mine').includes(n.id)) || (n.name && n.name === myName())));
+function wrote(id) { try { localStorage.setItem('bottle-mine', JSON.stringify([id, ...stored('bottle-mine')].slice(0, 300))); } catch {} }
+/** Keep a conversation: its key, who it is with, and the newest note already seen (by the server's clock). */
+function remember(k, w, seenAt) {
+  if (!k) return;
+  try {
+    const all = threads(), old = all.find((x) => x.k === k) || {};
+    const next = { k, w: w || old.w || '', s: Math.max(old.s || 0, seenAt || 0), t: Date.now() };
+    localStorage.setItem('bottle-threads', JSON.stringify([next, ...all.filter((x) => x.k !== k)].slice(0, 12)));
+  } catch {}
+}
+
 function showLetter(instant, note) {
   if (note) shown = note;
   const b = shown;
@@ -1187,9 +1202,10 @@ function showLetter(instant, note) {
   seal.style.animationDelay = instant ? '0s' : (2.0 + parts.length * per).toFixed(2) + 's';
   sign.style.animationDelay = instant ? '0s' : (1.6 + parts.length * per).toFixed(2) + 's';
   // Sending one back is the obvious next thing, and it is already addressed.
-  const mine = b.name && b.name === myName();
+  const mine = isMine(b);
   const other = mine ? b.to : b.name;
-  $('reply').textContent = other ? 'Send one back to ' + other : 'Send one back';
+  $('reply').textContent = (mine ? 'Send another' : 'Send one back') + (other ? ' to ' + other : '');
+  remember(bottle.key || b.key, other, b.at || 0);
   $('reply').onclick = () => desk({ to: other || '', key: bottle.key || b.key || '' });
   $('fresh').onclick = () => desk({});
   letter.classList.add('show');
@@ -1210,7 +1226,8 @@ async function shelf() {
   const all = await list(bottle.key);
   if (!all.length) return;
   const here = all.find((n) => same(n, bottle));
-  const newer = here ? all.filter((n) => n.at > here.at) : [];
+  if (here) remember(bottle.key, '', here.at);
+  const newer = here ? all.filter((n) => n.at > here.at && !isMine(n)) : [];      // your own notes are not news
   const others = all.filter((n) => !same(n, bottle));
   if (!others.length) return;
   if (newer.length) {
@@ -1243,7 +1260,47 @@ async function shelf() {
 
 // ---------------------------------------------------------------- the writing desk
 
-let deskReady = false, deskCtx = {}, madeLink = '';
+let deskReady = false, deskCtx = {}, madeLink = '', madeTo = '';
+
+// Your bottles: every conversation this phone has been part of, newest news first. One tap and that bottle washes up.
+async function inbox() {
+  const el = $('inbox');
+  el.textContent = '';
+  const mine = threads().slice(0, 6);
+  if (!mine.length) return;
+  const turn = inbox.turn = (inbox.turn || 0) + 1;
+  const found = (await Promise.all(mine.map(async (th) => {
+    const all = await list(th.k);
+    if (!all.length) return null;
+    const theirs = all.filter((n) => !isMine(n));
+    const fresh = theirs.filter((n) => n.at > (th.s || 0));
+    const last = all[all.length - 1];
+    return { th, isNew: fresh.length > 0, open: fresh.length ? fresh[fresh.length - 1] : last, at: last.at, count: all.length,
+      who: th.w || (theirs.length ? theirs[theirs.length - 1].name : '') || all[0].to || 'Someone' };
+  }))).filter(Boolean);
+  if (turn !== inbox.turn || !found.length) return;
+  found.sort((a, b) => (b.isNew - a.isNew) || (b.at - a.at));
+  // News goes where it cannot be missed: above the desk. Otherwise the list waits quietly underneath.
+  const news = found[0].isNew;
+  el.classList.toggle('top', news);
+  if (news) $('desk').insertBefore(el, $('deskTitle')); else $('desk').appendChild(el);
+  const head = document.createElement('div');
+  head.className = 'inboxHead';
+  head.textContent = 'Your bottles';
+  el.appendChild(head);
+  const when = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
+  for (const f of found) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'row' + (f.isNew ? ' new' : '');
+    const who = document.createElement('span'); who.className = 'rowWho'; who.textContent = f.who;
+    const sub = document.createElement('span'); sub.className = 'rowSub';
+    sub.textContent = f.isNew ? 'A new bottle washed up. Tap to open it' : `${f.count === 1 ? '1 bottle' : f.count + ' bottles'} · ${when(f.at)}`;
+    row.append(who, sub);
+    row.onclick = () => { location.href = linkFor(location.origin + location.pathname, { message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k }); };
+    el.appendChild(row);
+  }
+}
 
 /** ctx: { to, key } when sending one back. Empty for a fresh bottle. */
 function desk(ctx) {
@@ -1254,6 +1311,9 @@ function desk(ctx) {
   compose.classList.add('show');
   compose.scrollTop = 0;
   $('toChip').textContent = deskCtx.to ? 'To ' + deskCtx.to : '';
+  $('forRow').style.display = deskCtx.to ? 'none' : '';
+  $('forWho').value = '';
+  if (deskCtx.to) $('inbox').textContent = ''; else inbox();
   $('deskTitle').textContent = deskCtx.to ? 'Send one back' : 'Message in a bottle';
   $('deskLede').textContent = deskCtx.to
     ? `Write your note. You get a link to text to ${deskCtx.to}, and your bottle washes up on their shore.`
@@ -1268,7 +1328,7 @@ function desk(ctx) {
   msg.addEventListener('input', count);
 
   const share = async () => {
-    try { await navigator.share({ title: 'A message in a bottle', text: deskCtx.to ? `${deskCtx.to}, a bottle washed up for you.` : 'Something washed ashore for you.', url: madeLink }); return true; } catch { return false; }
+    try { await navigator.share({ title: 'A message in a bottle', text: madeTo ? `${madeTo}, a bottle washed up for you.` : 'Something washed ashore for you.', url: madeLink }); return true; } catch { return false; }
   };
   $('desk').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1277,20 +1337,27 @@ function desk(ctx) {
     try { localStorage.setItem('bottle-name', name); } catch {}
     let key = deskCtx.key || '';
     try { if (!key) key = newKey(); } catch {}
-    const b = { message: msg.value.trim(), name, mood: 'dusk', to: deskCtx.to || '', key };
-    madeLink = linkFor(location.origin + location.pathname, b);
+    const b = { message: msg.value.trim(), name, mood: 'dusk', to: deskCtx.to || $('forWho').value.trim(), key };
+    madeTo = b.to;
+    const link = madeLink = linkFor(location.origin + location.pathname, b);
     $('link').value = madeLink;
     $('try').href = madeLink;
     $('share').style.display = navigator.share ? '' : 'none';
-    $('madeLede').textContent = deskCtx.to
-      ? `Text this link to ${deskCtx.to}. The note travels inside the link itself.`
+    $('madeLede').textContent = b.to
+      ? `Text this link to ${b.to}. The note travels inside the link itself.`
       : 'Send this link to one person. The note travels inside the link itself.';
     compose.classList.add('done');
     compose.scrollTop = 0;
     // The share sheet opens straight away, while this is still the same tap.
     if (navigator.share) share();
     // Keep a scrambled copy with the conversation, so either of you can find it again. Not needed for the link to work.
-    add(key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id: Math.random().toString(36).slice(2, 12), t: Date.now() });
+    const id = Math.random().toString(36).slice(2, 12);
+    wrote(id);
+    remember(key, b.to, 0);
+    add(key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now() }).then((ok) => {
+      // Only promised once the server has really taken it.
+      if (ok && madeLink === link) $('madeLede').textContent += ` When ${b.to ? b.to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
+    });
   });
   $('link').addEventListener('focus', () => $('link').select());
   $('copy').addEventListener('click', async () => {
