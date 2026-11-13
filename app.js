@@ -303,14 +303,15 @@ void main() {
 }`;
 
 const BLIT_FS = `
-precision mediump float;
+precision highp float;
 varying vec2 vUv;
 uniform sampler2D uTex;
 uniform float uGrain;
 void main() {
   vec3 c = texture2D(uTex, vUv).rgb;
   c = c / (1.0 + 0.12 * dot(c, vec3(0.3333)));          // ease the brightest glints, keep the dusk dark
-  c += (fract(sin(dot(gl_FragCoord.xy + uGrain, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 180.0;
+  // film grain. The position is wrapped to a small number first, so the sum stays exact on every phone.
+  c += (fract(sin(dot(mod(gl_FragCoord.xy + uGrain, 251.0), vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 180.0;
   gl_FragColor = vec4(c, 1.0);
 }`;
 
@@ -488,7 +489,7 @@ class Scene {
     this.highp = !!(hp && hp.precision > 0);
     const fit = (src) => (this.highp ? src : src.replace('precision highp float;', 'precision mediump float;'));
     this.shore = this._program(QUAD_VS, fit(SHORE_FS));
-    this.blit = this._program(QUAD_VS, BLIT_FS);
+    this.blit = this._program(QUAD_VS, fit(BLIT_FS));
     this.glass = this._program(MESH_VS, fit(GLASS_FS));
     this.solid = this._program(MESH_VS, fit(SOLID_FS));
     this.direct = false;         // true if this phone cannot draw the beach into a texture first (then the glass does not bend the view)
@@ -2350,6 +2351,8 @@ async function arriveAndCatchUp() {
     if (!$('who').value) $('who').value = myName();
     if (!bottle && !deskCtx.to) { inbox(); lantern(); }
   }
+  // The Home Screen copy opened without its parcel code (the phone did not keep it in the address) and has nothing of its own: say how to bring the bottles over.
+  if (standalone && !code && !threads().length) { carriedLost = true; count('carried', 'no code in the address'); if (!bottle && !deskCtx.to) lantern(); }
   if (hop) return follow(hop[1]);
   if (await pull() && !bottle && !deskCtx.to) { inbox(); lantern(); }
   tend();

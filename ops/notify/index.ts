@@ -13,7 +13,9 @@ import { newVapid, send } from "./webpush.js";
 
 const URL_ = Deno.env.get("SUPABASE_URL") ?? "";
 const KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const ABOUT = "https://msaco13.github.io/bottle/";
+// Who is sending, for the push services. Apple is known to refuse some web addresses here and is happy with a mail address.
+// This is the project's public no-reply address on GitHub, the same one its commits carry.
+const ABOUT = "mailto:msaco13@users.noreply.github.com";
 const cors = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "content-type, apikey, authorization",

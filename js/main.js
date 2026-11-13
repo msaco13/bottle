@@ -369,6 +369,8 @@ async function arriveAndCatchUp() {
     if (!$('who').value) $('who').value = myName();
     if (!bottle && !deskCtx.to) { inbox(); lantern(); }
   }
+  // The Home Screen copy opened without its parcel code (the phone did not keep it in the address) and has nothing of its own: say how to bring the bottles over.
+  if (standalone && !code && !threads().length) { carriedLost = true; count('carried', 'no code in the address'); if (!bottle && !deskCtx.to) lantern(); }
   if (hop) return follow(hop[1]);
   if (await pull() && !bottle && !deskCtx.to) { inbox(); lantern(); }
   tend();
