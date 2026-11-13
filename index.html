@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://msaco13.github.io/bottle/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.500' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=2c2277445a">
+<link rel="stylesheet" href="css/style.css?v=03e419b472">
 </head>
 <body>
 <div id="stage">
@@ -38,6 +38,7 @@
   <section id="letter" aria-live="polite">
     <div id="paper">
       <div id="dear"></div>
+      <div id="picWrap"><img id="pic" alt="The picture that came in the bottle"><div id="picNote"></div></div>
       <div id="words"></div>
       <div id="sign"></div>
       <div id="seal"></div>
@@ -87,8 +88,13 @@
         </div>
       </div>
       <label for="msg">Your message</label>
-      <textarea id="msg" rows="5" maxlength="600" placeholder="Write it here" required></textarea>
+      <textarea id="msg" rows="5" maxlength="600" placeholder="Write it here"></textarea>
       <div class="count"><span id="left">600</span> characters left</div>
+      <div id="picRow">
+        <input type="file" id="picFile" accept="image/*" hidden>
+        <button type="button" class="mood" id="picAdd">Add a picture or GIF</button>
+        <div id="picShow"><img id="picThumb" alt=""><span id="picSay" aria-live="polite"></span><button type="button" class="link" id="picDrop">Remove</button></div>
+      </div>
       <label id="moodsLabel">The sky they will open it under</label>
       <div id="moods" role="group" aria-labelledby="moodsLabel">
         <button type="button" class="mood on" data-mood="dusk">Dusk</button>
@@ -131,6 +137,9 @@
       <button class="btn ghost" id="homeClose" type="button">Close</button>
     </div>
   </div>
+
+  <!-- the picture from a bottle, as large as the screen allows. A tap puts it away. -->
+  <div id="picBig" role="dialog" aria-label="The picture, larger"><img id="picBigImg" alt=""></div>
 
   <div id="veil"></div>
 </div>
@@ -186,6 +195,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain("a file failed to load"); }, true);   // or a file failed outright
 })();
 </script>
-<script defer src="app.js?v=2c2277445a"></script>
+<script defer src="app.js?v=03e419b472"></script>
 </body>
 </html>

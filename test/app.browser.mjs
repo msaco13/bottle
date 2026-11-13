@@ -13,14 +13,26 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 const results = [];
 const check = (name, ok, detail = '') => { results.push([ok, name, detail]); console.log((ok ? 'ok    ' : 'WRONG ') + name + (detail ? '  | ' + detail : '')); };
 
-async function phone({ reach, sent = 0, addOk = true, seed, ios = false }) {
+const shelf = new Map();          // the pictures the pretend server is holding, by name
+async function phone({ reach, sent = 0, addOk = true, seed, ios = false, picOk = true, at = '?dev' }) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true,
     userAgent: ios ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1' : undefined });
   const page = await ctx.newPage(); page.setDefaultTimeout(60000);
   const calls = [], errs = [];
   page.on('pageerror', (e) => errs.push(String(e)));
   await page.route(/supabase\.co/, async (route) => {
-    const url = route.request().url(), fn = url.split('/').pop();
+    const url = route.request().url(), fn = url.split('/').pop().split('?')[0];
+    if (url.includes('/storage/v1/object/')) {
+      if (route.request().method() === 'POST') {
+        calls.push('picture:add');
+        if (!picOk) return route.fulfill({ status: 500, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"error":"down"}' });
+        shelf.set(fn, route.request().postDataBuffer());
+        return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"Key":"pictures/' + fn + '"}' });
+      }
+      calls.push('picture:get');
+      return shelf.has(fn) ? route.fulfill({ status: 200, contentType: 'application/octet-stream', headers: { 'access-control-allow-origin': '*' }, body: shelf.get(fn) })
+        : route.fulfill({ status: 404, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"error":"not found"}' });
+    }
     let body = {}; try { body = JSON.parse(route.request().postData() || '{}'); } catch {}
     calls.push(fn === 'notify' ? 'notify:' + body.do : fn);
     const json = (v, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(v) });
@@ -34,7 +46,7 @@ async function phone({ reach, sent = 0, addOk = true, seed, ios = false }) {
     return json('ok');
   });
   if (seed) await page.addInitScript((s) => { if (!localStorage.getItem('seeded')) { for (const [k, v] of Object.entries(s)) localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); localStorage.setItem('seeded', '1'); } }, seed);
-  await page.goto('http://localhost:8899/?dev');
+  await page.goto('http://localhost:8899/' + at);
   await page.waitForFunction(() => window.dev && window.__bottleReady);
   await page.evaluate(() => { window.dev.hold = true; });      // the software graphics chip is slow: stop the beach moving so the page stays quick
   await page.waitForTimeout(300);
@@ -187,6 +199,73 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('back on the shore, no one is ticked any more', (await p.page.evaluate(() => document.querySelectorAll('#people .row.picked').length)) === 0 && (await p.text('newOne')) === 'A bottle for someone new');
   check('no errors', !p.errs.length, p.errs.join(' ; '));
   await p.ctx.close();
+}
+// 8. a picture in the bottle: chosen, made smaller, scrambled, sent, and shown on the paper at the other end
+{
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAFklEQVR42mP8z8Dwn4EIwMRAJBhVCAA7VAIKzTXl3QAAAABJRU5ErkJggg==', 'base64');
+  const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+  const p = await phone({});
+  check('the desk offers a picture', await p.shown('picAdd') && (await p.text('picAdd')) === 'Add a picture or GIF');
+  await p.page.setInputFiles('#picFile', { name: 'beach.png', mimeType: 'image/png', buffer: PNG });
+  await p.page.waitForFunction(() => /tucked in\./.test(document.getElementById('picSay').textContent), null, { timeout: 20000 });
+  check('a chosen photo is tucked in, and shown small on the desk', (await p.text('picSay')) === 'Your picture is tucked in.' && await p.shown('picThumb') && !(await p.shown('picAdd')));
+  check('what left the phone is scrambled, not a picture', shelf.size === 1 && ![...shelf.values()][0].subarray(0, 60).toString('latin1').match(/JFIF|PNG|GIF8/) && /^[0-9a-f]{40}$/.test([...shelf.keys()][0]), [...shelf.keys()][0]);
+  await p.page.fill('#forWho', 'Ana'); await p.page.fill('#msg', 'Remember this place?');
+  await p.shot('8-desk-picture');
+  await p.page.click('#make'); await p.page.waitForTimeout(700);
+  const link = await p.page.evaluate(() => document.getElementById('link').value);
+  check('the link carries the picture\u2019s secret, and it is not the name the server knows', /#1\./.test(link) && !link.includes([...shelf.keys()][0]));
+  await p.ctx.close();
+  // the other phone
+  const q = await phone({ at: link.replace('http://localhost:8899/', '').replace('#', '?dev#') });
+  await q.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(1); window.dev.hold = true; });
+  await q.page.waitForFunction(() => document.getElementById('picWrap').classList.contains('got'), null, { timeout: 20000 });
+  const seen = await q.page.evaluate(() => { const i = document.getElementById('pic'); return [i.naturalWidth, i.naturalHeight, document.getElementById('words').textContent]; });
+  check('the other phone sees the picture on the paper, above the words', seen[0] === 8 && seen[1] === 6 && seen[2] === 'Remember this place?', seen.join(' x '));
+  await q.page.waitForTimeout(2500);
+  await q.shot('8-letter-picture');
+  await q.page.click('#pic'); await q.page.waitForTimeout(200);
+  check('a tap shows it large, and a tap puts it away', await q.shown('picBig'));
+  await q.page.click('#picBig'); await q.page.waitForTimeout(200);
+  check('and it is put away again', !(await q.shown('picBig')));
+  check('no errors', !p.errs.length && !q.errs.length, [...p.errs, ...q.errs].join(' ; '));
+  await q.ctx.close();
+  // a GIF goes as it is; a picture with no words is still a bottle
+  const g = await phone({});
+  await g.page.setInputFiles('#picFile', { name: 'wave.gif', mimeType: 'image/gif', buffer: GIF });
+  await g.page.waitForFunction(() => /tucked in\./.test(document.getElementById('picSay').textContent), null, { timeout: 20000 });
+  check('a GIF is tucked in as a GIF', (await g.text('picSay')) === 'Your GIF is tucked in.');
+  await g.page.click('#make'); await g.page.waitForTimeout(600);
+  const gifLink = await g.page.evaluate(() => document.getElementById('link').value);
+  check('a picture with no words still makes a bottle', (await g.text('madeTitle')) === 'Your bottle is ready' && /#1\./.test(gifLink));
+  await g.ctx.close();
+  const h = await phone({ at: gifLink.replace('http://localhost:8899/', '').replace('#', '?dev#') });
+  await h.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(1); window.dev.hold = true; });
+  await h.page.waitForFunction(() => document.getElementById('picWrap').classList.contains('got'), null, { timeout: 20000 });
+  check('and the GIF arrives still a GIF', await h.page.evaluate(async () => (await (await fetch(document.getElementById('pic').src)).blob()).type === 'image/gif'));
+  await h.ctx.close();
+  // things that go wrong are said plainly, and a bottle never leaves without the picture it was given
+  const big = await phone({});
+  await big.page.setInputFiles('#picFile', { name: 'huge.gif', mimeType: 'image/gif', buffer: Buffer.concat([GIF, Buffer.alloc(3600000)]) });
+  await big.page.waitForFunction(() => /too big/.test(document.getElementById('picSay').textContent), null, { timeout: 20000 });
+  check('a GIF that is too big is refused with the reason', (await big.text('picSay')).startsWith('That GIF is too big to send'));
+  await big.page.fill('#msg', 'With a picture that would not go.'); await big.page.click('#make'); await big.page.waitForTimeout(500);
+  check('and the bottle is not made without it', !(await big.shown('made')) && await big.shown('desk'));
+  await big.page.click('#picDrop'); await big.page.click('#make'); await big.page.waitForTimeout(500);
+  check('until the picture is removed', await big.shown('made'));
+  await big.ctx.close();
+  const down = await phone({ picOk: false });
+  await down.page.setInputFiles('#picFile', { name: 'beach.png', mimeType: 'image/png', buffer: PNG });
+  await down.page.waitForFunction(() => /could not be sent/.test(document.getElementById('picSay').textContent), null, { timeout: 20000 });
+  check('a server that will not take the picture is said so', (await down.text('picSay')) === 'It could not be sent just now. Remove it and try again.');
+  await down.ctx.close();
+  // a picture that has gone missing does not hold up the words
+  shelf.clear();
+  const lost = await phone({ at: link.replace('http://localhost:8899/', '').replace('#', '?dev#') });
+  await lost.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(1); window.dev.hold = true; });
+  await lost.page.waitForFunction(() => /could not be brought in/.test(document.getElementById('picNote').textContent), null, { timeout: 20000 });
+  check('a picture that cannot be fetched says so, and the words are there all the same', (await lost.text('words')) === 'Remember this place?' && (await lost.text('picNote')).includes('Tap here to try again'));
+  await lost.ctx.close();
 }
 await browser.close();
 const bad = results.filter((r) => !r[0]);

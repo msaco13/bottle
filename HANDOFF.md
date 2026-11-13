@@ -4,9 +4,11 @@ Write a note, get one link, text it to someone. They tap it and a bottle washes 
 
 Live: https://msaco13.github.io/bottle/ (the page with no message is the writing page). Stats: https://msaco13.github.io/bottle/stats.html
 
-Last updated: 2026-11-13, afternoon. Published, "Your shore" included (merged 12:07 pm Miami, live version `376ed2fde5`, checked byte for byte against `main`). Its server function `bottle_reach` was applied to the Bottle database the same afternoon and passes `test/live.test.mjs`. Michael has an Android, no iPhone. On 2026-11-13 he cleared the assistant to merge this repository's pull requests and to change the Bottle database without asking each time; staying at $0 and touching no other Supabase project still hold.
+Last updated: 2026-11-13, late afternoon. Published: keepsakes, Your shore, one bottle for several people, and pictures and GIFs. Michael has an Android, no iPhone. On 2026-11-13 he cleared the assistant to merge this repository's pull requests and to change the Bottle database without asking each time. Touching no other Supabase project still holds.
 
-Keepsakes on a real phone, 2026-11-13: Michael's Android (Adreno 750) drew the 3D beach with keepsakes at 65 pictures a second, and the twelve-shell night shore at 71, both at full sharpness (his screenshots, and the counter).
+**Money, changed 2026-11-13.** Michael moved the Supabase organization that holds Bottle ("aisimulationcenter.com") to the Pro plan. Per Supabase's docs that day: $25 a month for the organization with $10 of compute credit that covers one project; every other running project adds at least $10 a month, and Bottle's Nano size is billed at that rate; paid projects are never paused for being idle; 100 GB of file storage and 250 GB of egress are included, and more is only billed if the spend cap is switched off. Not checked: how many other projects share that organization, and whether the spend cap is on. Pro is now the baseline. Say so before anything that would cost more.
+
+Real phones, 2026-11-13 (Michael's screenshots, his word, and the counter): two Androids (Adreno 750 and 740) drew the 3D beach with keepsakes at 62 to 71 pictures a second at full sharpness; the text that writes itself was used; a lantern was lit; two bottles went straight to a lit lantern; the notification appeared (under Chrome's name, with the small bottle badge). Still no iPhone on anything published that day.
 
 What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a person): at 6:51 am Miami an "iPhone iOS 18.7 · Safari 27" drew the 3D beach on "Apple GPU" at 57 pictures a second, granted motion, popped the cork by tilt, read the note and took its seat. An Android (Adreno 750) also drew 3D. Chrome dressed as an iPhone does not report "Apple GPU", so these are taken to be real phones. That is the first sign the 3D shaders run on Apple's driver.
 
@@ -20,7 +22,7 @@ What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a
 ## How it works
 
 - One static page on GitHub Pages. No accounts, no sign-in, no app.
-- The note lives in the link after the `#`: `1.` plus base64url of the UTF-8 JSON list `[message, name, mood, to, key, claim]`. Empty fields on the end are dropped, so a plain dusk bottle is byte for byte what version one made. Limits: 600 characters, names 40.
+- The note lives in the link after the `#`: `1.` plus base64url of the UTF-8 JSON list `[message, name, mood, to, key, claim, pic]` (`pic`: the secret of a picture, see Pictures and GIFs). Empty fields on the end are dropped, so a plain dusk bottle is byte for byte what version one made. Limits: 600 characters, names 40.
   - `mood`: `""` dusk, `"n"` night, `"a"` dawn. `to`: who it is for.
   - `key`: 22 characters, the secret of the conversation. `claim`: 16 characters, the one seat this bottle carries.
 
@@ -39,6 +41,19 @@ What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a
 - The server knows a shore only by the hash of its token. It cannot work the secret back out.
 - The phone also keeps the notes it has already seen (`bottle-notes`), so the history is still there if the server is asleep.
 - Clearing the browser's data makes a new, empty shore. Old links still open.
+
+## Pictures and GIFs
+
+- "Add a picture or GIF" on the desk. One per bottle. A bottle may be a picture with no words.
+- `js/pic.js`. A photo is redrawn no longer than 1600 dots a side and saved as a JPEG (usually well under 400 KB). A GIF is sent exactly as it is so it still moves, up to about 3.5 MB.
+- **A picture cannot travel inside a link, so it is the one thing kept on the server whole.** It is scrambled on the phone first (AES-GCM) with a secret that only travels in the link, as a seventh, optional field (`pic`, 22 characters). The server is given unreadable bytes under a name worked out from that secret. It cannot open a picture or tell a photo from a GIF.
+- It is left with the server as soon as it is chosen, while the note is written. If it will not go, the page says why and will not make the bottle until the picture is removed or sent.
+- On the paper it sits above the words and fades in when it arrives. A tap shows it large. **The words never wait for it**: if it cannot be fetched the note is read all the same, with a line to tap to try again. So promise 2 holds for the words and not for the picture.
+- The note kept with the conversation carries the picture's secret (`p`), so "Read last", a notification and the shelf of earlier notes all show it.
+- Storage: the bucket `pictures` in the Bottle project (`ops/sql/pictures.sql`, applied). Public to read by name; open to add to, with brakes: 4 MB a file, plain bytes only, a 40-hex name, 60 a minute, 200,000 in all. Nobody outside can list, change or delete. **Pictures are never tidied away**, because a link that carries one must keep working. A picture chosen and then removed is left behind as an orphan.
+- Counted as "Pictures and GIFs" on the stats page (`ops/sql/event_stats_kinds.sql`, applied).
+- Tested: `test/pic.test.mjs`, the picture checks in `test/app.browser.mjs` (59 checks in all), and `test/live.test.mjs` against the real storage (in, out, and every refusal).
+- **Not tested**: any real phone. Choosing from a phone's gallery or camera, an iPhone's HEIC photos, how long a large photo takes on a slow connection.
 
 ## Your shore: people, and sending without texting
 
@@ -82,12 +97,12 @@ The reason to come back. Every bottle sent back and forth leaves something on th
 
 ## The server (Supabase)
 
-- Project `bottle`, ref `segtizidayglyouweszn`, us-east-1, free plan, $0. It holds nothing else. Never touch the other projects in the account.
+- Project `bottle`, ref `segtizidayglyouweszn`, us-east-1, in the organization "aisimulationcenter.com", which is on the Pro plan since 2026-11-13 (see the top). It holds nothing else. Never touch the other projects in the account.
 - Tables, all locked (row security on, no policies): `bottles`, `threads`, `members`, `shores`, `push_subs`, `handoffs`, `events`, and `private.settings`.
 - Everything goes through functions. Open to the page: `bottle_reach`, `bottle_open`, `bottle_list`, `bottle_add`, `shore_get`, `shore_put`, `handoff_put`, `handoff_take`, `push_save`, `push_drop`, `push_key`, `alerts_set`, `log_event`, `event_stats`, and the two old ones `thread_bottles` and `add_bottle` (old open conversations only). Only the notification sender may call `vapid_init`, `push_plan`, `push_self`, `push_gone`, `watch_plan`.
 - Brakes: 400 notes per conversation, one a second per conversation, 300 a minute overall, 600 counter events a minute.
 - The address, publishable key and public notification key are in `js/thread.js`. All three are meant to be public. No secret is in the repo.
-- Every hour the database itself calls the sender (`pg_cron` job `bottle-watch`). That checks for problems (see "The alarm") and keeps the project from sitting idle. **Not proven**: whether that inside-out call counts as activity to Supabase's one-week pause. If the project does pause, Supabase emails first, Restore is one button, and nothing is lost. While paused: bottles open, replies send, the history each phone has already seen is still shown, and new notifications do not go out.
+- Every hour the database itself calls the sender (`pg_cron` job `bottle-watch`). That checks for problems (see "The alarm"). On the Pro plan a project is never paused for being idle, so the old worry about the one-week pause is gone for as long as the plan is kept.
 
 ## The counter and the alarm
 
@@ -151,6 +166,7 @@ js/flat.js        the same shore painted flat, for a phone that will not give 3D
 js/story.js       the story as a state machine (pure, tested)
 js/audio.js       surf and effects, synthesised
 js/thread.js      conversations: keys, encryption, seats, the server calls
+js/pic.js         a picture in a bottle: made smaller, scrambled, kept on the server, fetched back
 js/shore.js       this phone's memory, its secret, the copy on the server, the parcel for the Home Screen
 js/lantern.js     notifications: where the phone stands, lighting, putting out
 js/count.js       the counter
@@ -161,7 +177,7 @@ stats.html        the stats page
 ops/notify/       the notification sender (deployed to Supabase) and its Web Push code
 ops/make-icons.mjs  draws the icons
 ops/watch.yml     the GitHub schedule for the watch (not switched on)
-test/             code, keeps, story, flat, thread, push (npm test); live, watch and app.browser (by hand)
+test/             code, keeps, story, flat, thread, pic, push (npm test); live, watch and app.browser (by hand)
 ops/sql/          server functions added since the first build, kept here so the database can be rebuilt
 ```
 
