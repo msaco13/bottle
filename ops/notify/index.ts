@@ -45,8 +45,17 @@ type Sub = { endpoint: string; p256dh: string; auth: string };
 async function tell(subs: Sub[], data: unknown) {
   if (!subs || !subs.length) return { sent: 0, gone: 0, failed: 0, codes: [] as number[] };
   const v = await vapid();
-  const codes = await Promise.all(subs.slice(0, 20).map((s) => send(s, data, v, ABOUT).catch(() => 0)));
-  const gone = subs.filter((_, i) => codes[i] === 404 || codes[i] === 410).map((s) => s.endpoint);
+  const list = subs.slice(0, 20);
+  const once = (s: Sub) => send(s, data, v, ABOUT).catch(() => 0);
+  const codes = await Promise.all(list.map(once));
+  // A push service can hiccup. Anything that was not a clear yes or a clear "gone" gets one more try.
+  const again = codes.map((c, i) => (c === 0 || c === 429 || c >= 500 ? i : -1)).filter((i) => i >= 0);
+  if (again.length) {
+    await new Promise((r) => setTimeout(r, 700));
+    const second = await Promise.all(again.map((i) => once(list[i])));
+    again.forEach((i, k) => { codes[i] = second[k]; });
+  }
+  const gone = list.filter((_, i) => codes[i] === 404 || codes[i] === 410).map((s) => s.endpoint);
   if (gone.length) await rpc("push_gone", { p_endpoints: gone }).catch(() => {});
   return { sent: codes.filter((c) => c >= 200 && c < 300).length, gone: gone.length, failed: codes.filter((c) => !(c >= 200 && c < 300) && c !== 404 && c !== 410).length, codes };
 }

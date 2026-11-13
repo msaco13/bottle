@@ -1167,15 +1167,19 @@ async function rpc(fn, args, ms = 6000) {
   }
 }
 
-/** Ask the notification sender to do something. Never waited on by anything that matters. */
+/** Ask the notification sender to do something. Never waited on by anything that matters. One more try if it does not answer. */
 async function notify(body, ms = 8000) {
   if (!SERVER.url || typeof fetch !== 'function') return null;
-  const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timer = setTimeout(() => ctl && ctl.abort(), ms);
-  try {
-    const r = await fetch(`${SERVER.url}/functions/v1/notify`, { method: 'POST', signal: ctl ? ctl.signal : undefined, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    return r.ok ? await r.json() : null;
-  } catch { return null; } finally { clearTimeout(timer); }
+  for (let turn = 0; turn < 2; turn++) {
+    const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = setTimeout(() => ctl && ctl.abort(), ms);
+    try {
+      const r = await fetch(`${SERVER.url}/functions/v1/notify`, { method: 'POST', signal: ctl ? ctl.signal : undefined, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      if (r.ok) return await r.json();
+    } catch { /* try once more */ } finally { clearTimeout(timer); }
+    if (turn === 0) await new Promise((res) => setTimeout(res, 1200));
+  }
+  return null;
 }
 
 /**
