@@ -61,6 +61,9 @@ What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a
 - A notification's title starts with the name ("Jorge sent you a bottle"), because a phone shows only the start of a long title. It used to read "A bottle from Jorge has washed up" and was cut off before the name.
 - The wax seal now follows the signature in the page's own flow, so on a long note or one with a picture it can never lie over the words.
 - On a phone that has people, the link under a note reads "Back to your shore".
+- **Rename or remove someone** ("Rename or remove someone" on Your shore). A name given by hand is kept whatever their notes are signed with (`n` on the conversation). Removing takes two taps and takes the conversation off this phone only: its row and the notes kept here. A list of removed conversations (`bottle-gone`, also in the scrambled copy of the shore) stops another copy from bringing it back; opening one of its links again brings it back on purpose. The server is not told, so a removed person's bottle can still ring this phone and then lead nowhere.
+- **Shells fade out while a note is read**, so they never show through the words and buttons laid over that sand. They are back when the story plays.
+- **"See what they will see"** opens the link with `?see`: "Skip to the note" is offered at once, and the visit is counted as `see`, not as someone opening a bottle.
 - In the row of earlier notes, this phone's own are labelled "You".
 - "From" on the desk says "(sign it)", not "(optional)": an unsigned note is what made the question "who sent this?" come up.
 - The note's screen: the paper is never squeezed by what is under it (it used to shrink until the signature was out of sight). The paper and what is under it sit in the middle when they fit, and the page scrolls when they do not.
@@ -77,7 +80,7 @@ What turns it from a link maker into something you open to send. No accounts, no
 - The number is kept with the person in this phone's list, which is scrambled before its copy goes to the server, like the names. What is known of each lantern (`bottle-reach`) stays on the phone.
 - Android: "Put Bottle on your home screen" appears on the shore when Chrome offers to install it.
 - Sending results are counted under "Lantern (notifications)" on the stats page, as "sending: went straight to their lit lantern" and so on.
-- Tested with `test/app.browser.mjs` (64 checks with pictures and unsigned notes, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
+- Tested with `test/app.browser.mjs` (73 checks with pictures, unsigned notes and the small things, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
 - **Not tested**: any real phone. Whether `sms:` opens Messages with the words in place on a real iPhone and Android. The contact picker. The install offer. And everything about iPhone lanterns, as before: direct sending to an iPhone depends on it.
 - **One bottle for several people** ("One bottle for several people" on the shore, when it has two or more): tick up to eight names, write one note, and each gets their own bottle in their own conversation with its own seat. It goes straight to anyone whose lantern is lit. Each of the others gets one button that texts or shares their own link. A group text cannot carry it: one link has one seat.
 

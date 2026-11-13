@@ -10,7 +10,7 @@ import { Flat } from './flat.js';
 import { Story } from './story.js';
 import { Shore } from './audio.js';
 import { newKey, newClaim, add, list, open, reach } from './thread.js';
-import { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber, mobile, reachOf, setReach } from './shore.js';
+import { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber, mobile, reachOf, setReach, rename, forget } from './shore.js';
 import { standing, light, douse, tend, ios, standalone } from './lantern.js';
 import { count } from './count.js';
 import { newPic, prepare, put, get } from './pic.js';
@@ -19,6 +19,7 @@ const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const bottle = decode(location.hash) || decode(qs.get('b'));
 const hop = /^#n\.([A-Za-z0-9_-]{22})$/.exec(location.hash);          // a notification was tapped: it names a conversation
+const seeing = qs.has('see');           // the writer looking at their own bottle from "See what they will see"
 const stage = $('stage');
 const isIOS = ios;
 const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
@@ -371,10 +372,15 @@ function person(th, all) {
     who: th.w || (theirs.length ? theirs[theirs.length - 1].name : '') || (all[0] && all[0].to) || '' };
 }
 let picking = null;          // while several people are being chosen for one bottle: the keys ticked so far
+let editing = false;         // while people are being renamed or removed
 const listed = (names) => (names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1]);
 /** The shore's buttons, for sending to one or for choosing several. */
 function pickWords(count) {
   const on = !!picking, n = on ? picking.size : 0;
+  $('editPeople').style.display = count && !on ? 'block' : 'none';
+  $('editPeople').textContent = editing ? 'Done' : 'Rename or remove someone';
+  $('newOne').style.display = editing ? 'none' : '';
+  if (editing) { $('several').style.display = 'none'; $('homeLede').textContent = 'Change a name, or take someone off this phone.'; return; }
   $('several').style.display = count > 1 ? 'block' : 'none';
   $('several').textContent = on ? 'Never mind' : 'One bottle for several people';
   $('newOne').textContent = on ? (n < 2 ? 'Choose two or more' : `Write to these ${n}`) : 'A bottle for someone new';
@@ -395,6 +401,24 @@ async function people() {
     for (const f of found) {
       const line = document.createElement('div');
       line.className = 'person';
+      if (editing) {
+        // The name as a field, saved when it is left. Removing takes two taps, so it cannot happen by a slip of the thumb.
+        const field = document.createElement('input');
+        field.type = 'text'; field.className = 'rowEdit'; field.maxLength = 40; field.value = f.who; field.placeholder = 'Their name';
+        field.setAttribute('aria-label', 'Their name');
+        field.onchange = () => { if (rename(f.th.k, field.value)) { f.who = field.value.trim(); f.th.w = f.who; count('people', 'renamed', true); } };
+        const out = document.createElement('button');
+        out.type = 'button'; out.className = 'peek'; out.textContent = 'Remove';
+        out.onclick = () => {
+          if (!out.classList.contains('sure')) { out.classList.add('sure'); out.textContent = 'Tap again to remove'; setTimeout(() => { out.classList.remove('sure'); out.textContent = 'Remove'; }, 4000); return; }
+          forget(f.th.k); count('people', 'removed', true);
+          const rest = found.filter((x) => x !== f);
+          if (!rest.length) { editing = false; desk({}); } else draw(rest);
+        };
+        line.append(field, out);
+        el.appendChild(line);
+        continue;
+      }
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'row' + (f.isNew ? ' new' : '');
@@ -480,7 +504,7 @@ function desk(ctx) {
   wire();
   const known = threads().length > 0;
   const home = known && !deskCtx.key && !deskCtx.to && !deskCtx.fresh && !deskCtx.many;
-  if (!home) picking = null;
+  if (!home) { picking = null; editing = false; }
   compose.classList.toggle('home', home);
   $('toHome').style.display = known && !home ? 'block' : 'none';
   if (home) { people(); lantern(); count('home', Math.min(threads().length, 12) + ' people'); return; }
@@ -514,7 +538,7 @@ function made(how, to, number, extra) {
   $('madeLede').textContent = how === 'sending' ? 'Carrying it down to the water.'
     : (to ? `Text this link to ${to}. The note travels inside the link itself.` : 'Send this link to one person. The note travels inside the link itself.') + extra;
   $('link').value = madeLink;
-  $('try').href = madeLink;
+  $('try').href = madeLink.replace('#', (qs.has('dev') ? '?dev&see' : '?see') + '#');
   // With their number, the phone's own Messages opens already addressed and written. Otherwise, the share sheet.
   $('text').style.display = number ? 'block' : 'none';
   $('text').textContent = to ? `Text it to ${to}` : 'Text it';
@@ -700,6 +724,7 @@ function wire() {
     if (chosen.length > 1) desk({ many: chosen });
   });
   $('several').addEventListener('click', () => { picking = picking ? null : new Set(); people(); });
+  $('editPeople').addEventListener('click', () => { editing = !editing; picking = null; people(); });
   $('toHome').addEventListener('click', () => desk({}));
   const back = () => { compose.classList.remove('show'); if (bottle) { sky(shown.mood); $('letter').classList.add('show'); } };
   $('backToNote').addEventListener('click', back);
@@ -838,7 +863,7 @@ if (!scene) {
 // How the shore is being drawn. If 3D was refused, enough to tell why: was the page on screen, how big, does the browser know 3D at all.
 if (scene) setTimeout(() => count('view', scene.info() + (scene.flat ? ` | 3D refused: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight} | browser knows 3D: ${typeof WebGLRenderingContext !== 'undefined'}` : ''), true), 0);
 else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight}`);
-count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
+count(bottle ? (seeing ? 'see' : 's_open') : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
 if (bottle) sky(bottle.mood);
 if (bottle) { const known = bottle.key ? kept(bottle.key) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
 lantern();
@@ -933,7 +958,7 @@ function run() {
     // The first touch has to be a real click for iPhone to allow sound and motion.
     cv.addEventListener('click', (e) => {
       if (story.state !== 'arrive') return;
-      count('s_touch');
+      if (!seeing) count('s_touch');
       audio.unlock();
       askMotion();
       if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {});
@@ -1000,9 +1025,9 @@ function run() {
     story.events.length = 0;
     if (reading && story.state !== was) {
       was = story.state;
-      if (was === 'held') count('s_held', speed());
-      if (was === 'open') count('s_cork', story.motion ? 'tilt on' : 'touch only');
-      if (was === 'reading') count('s_read', speed());
+      if (was === 'held' && !seeing) count('s_held', speed());
+      if (was === 'open' && !seeing) count('s_cork', story.motion ? 'tilt on' : 'touch only');
+      if (was === 'reading' && !seeing) count('s_read', speed());
     }
     if (story.motion && !tilted) { tilted = true; count('motion_live'); }
     const t = story.t;
@@ -1020,7 +1045,9 @@ function run() {
         finger.style.opacity = cueT < 0.08 ? cueT / 0.08 : cueT > 0.75 ? Math.max(0, 1 - (cueT - 0.75) / 0.2) : 1;
       } else { finger.style.opacity = 0; cueT = 0; }
       // a way out for anyone who is stuck
-      if (story.idle > 16 && story.state !== 'reading') $('skip').classList.add('show');
+      if ((seeing || story.idle > 16) && story.state !== 'reading') $('skip').classList.add('show');
+      // shells fade away while a note is being read: the page lays its words and buttons over that sand
+      scene.keepHide = (scene.keepHide || 0) + ((story.state === 'reading' ? 1 : 0) - (scene.keepHide || 0)) * Math.min(1, dt * 2.5);
     }
 
     const held = story.state !== 'arrive' && story.state !== 'adrift';

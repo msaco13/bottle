@@ -849,7 +849,8 @@ class Scene {
     if (this.keepsOn) {
       const k = this.keeps, sh = new Float32Array(MAX_SHELLS * 4), kd = new Float32Array(MAX_SHELLS * 4), st = new Float32Array(STARS * 3);
       if (k) {
-        k.shells.forEach((s, i) => { sh.set([s.x, s.z, s.r, s.turn], i * 4); kd.set([s.kind, s.tint, s.a, 0], i * 4); });
+        const seen = 1 - (this.keepHide || 0);          // 0 while a note is being read: the page lays words and buttons over that sand
+        k.shells.forEach((s, i) => { sh.set([s.x, s.z, s.r, s.turn], i * 4); kd.set([s.kind, s.tint, s.a * seen, 0], i * 4); });
         k.stars.forEach((s, i) => { const at = starAt(s, this.W > this.H); st.set([at[0], at[1], s.a], i * 3); });
       }
       for (let i = 0; i < MAX_SHELLS; i++) if (!sh[i * 4 + 2]) sh[i * 4 + 2] = 1;      // never a size of nothing to divide by
@@ -1140,10 +1141,11 @@ class Flat extends Camera {
       const shade = this.mood === 1 ? [0.40, 0.48, 0.68] : this.mood === 2 ? [1.16, 1.10, 1.04] : [1.0, 0.94, 0.88];
       const ink = (r, gr, bl) => `rgb(${Math.min(255, Math.round(r * shade[0]))},${Math.min(255, Math.round(gr * shade[1]))},${Math.min(255, Math.round(bl * shade[2]))})`;
       for (const sh of keeps.shells) {
-        if (sh.a <= 0) continue;
+        const seen = sh.a * (1 - (this.keepHide || 0));
+        if (seen <= 0.01) continue;
         const c = P([sh.x, 0, sh.z]), ex = P([sh.x + sh.r, 0, sh.z]), ez = P([sh.x, 0, sh.z + sh.r]);
         g.save();
-        g.globalAlpha = sh.a;
+        g.globalAlpha = seen;
         g.transform(ex[0] - c[0], ex[1] - c[1], ez[0] - c[0], ez[1] - c[1], c[0], c[1]);      // from here on, one unit is the shell's own size on the sand
         g.fillStyle = 'rgba(8,6,14,0.34)';
         g.beginPath(); g.arc(0.06, 0.24, 0.95, 0, 6.283); g.fill();
@@ -1155,9 +1157,9 @@ class Flat extends Camera {
           for (let a = -1.05; a <= 1.051; a += 0.15) g.lineTo(Math.sin(a) * fan(a), -0.72 + Math.cos(a) * fan(a));
           g.lineTo(0.3, -0.62); g.lineTo(0.3, -0.84); g.closePath();
           g.fillStyle = ink(240, 222, 200); g.fill();
-          g.fillStyle = ink(blush[0], blush[1], blush[2]); g.globalAlpha = sh.a * 0.4;
+          g.fillStyle = ink(blush[0], blush[1], blush[2]); g.globalAlpha = seen * 0.4;
           g.beginPath(); g.arc(0, -0.5, 0.5, 0, 6.283); g.fill();
-          g.globalAlpha = sh.a;
+          g.globalAlpha = seen;
           g.strokeStyle = ink(190, 156, 132); g.lineWidth = 0.07;
           g.beginPath();
           for (let a = -0.9; a <= 0.91; a += 0.3) { g.moveTo(0, -0.72); g.lineTo(Math.sin(a) * fan(a) * 0.94, -0.72 + Math.cos(a) * fan(a) * 0.94); }
@@ -2040,14 +2042,40 @@ const threads = () => stored('bottle-threads').filter((x) => x && typeof x.k ===
 const isMine = (n) => !!n && (n.id ? stored('bottle-mine').includes(n.id) : !!(n.name && n.name === myName()));
 function wrote(id) { set('bottle-mine', JSON.stringify([id, ...stored('bottle-mine')].slice(0, 300))); save(); }
 
+// Conversations taken off this phone by hand. A copy of the shore kept elsewhere must not bring them back.
+const gone = () => stored('bottle-gone').filter((x) => typeof x === 'string');
+
 /** Keep a conversation: its key, who it is with, the newest note already seen (by the server's clock), and their mobile number if one was given. */
 function remember(k, w, seenAt, p) {
   if (!k) return;
+  if (gone().includes(k)) set('bottle-gone', JSON.stringify(gone().filter((x) => x !== k)));       // a bottle from it was opened again: it is wanted after all
   const all = threads(), old = all.find((x) => x.k === k) || {};
-  const next = { k, w: w || old.w || '', s: Math.max(old.s || 0, seenAt || 0), t: Date.now() };
+  const next = { k, w: old.n ? old.w : (w || old.w || ''), s: Math.max(old.s || 0, seenAt || 0), t: Date.now() };       // a name given by hand is kept
+  if (old.n) next.n = 1;
   if (p || old.p) next.p = p || old.p;
   set('bottle-threads', JSON.stringify([next, ...all.filter((x) => x.k !== k)].slice(0, 30)));
   if (next.w !== old.w || next.s !== old.s || next.p !== old.p || !old.k) save();
+}
+
+/** Call someone by another name. It stays, whatever name their notes are signed with. */
+function rename(k, w) {
+  const name = String(w || '').trim().slice(0, 40), all = threads(), th = all.find((x) => x.k === k);
+  if (!th || !name || name === th.w) return false;
+  th.w = name; th.n = 1; th.t = Date.now();
+  set('bottle-threads', JSON.stringify(all));
+  save();
+  return true;
+}
+
+/** Take a conversation off this phone: its place on the shore and the notes kept here. Links already sent still open. */
+function forget(k) {
+  if (!k) return;
+  set('bottle-threads', JSON.stringify(threads().filter((x) => x.k !== k)));
+  set('bottle-gone', JSON.stringify([k, ...gone().filter((x) => x !== k)].slice(0, 60)));
+  const book = notes();
+  delete book[k];
+  set('bottle-notes', JSON.stringify(book));
+  save();
 }
 
 /** A mobile number as a phone will dial it: digits, with a leading + if it had one. '' if it is not a number. */
@@ -2110,19 +2138,24 @@ async function token() {
 
 // ---------------------------------------------------------------- a copy with the server, scrambled
 
-const state = () => ({ v: 1, name: myName(), threads: threads(), mine: stored('bottle-mine') });
+const state = () => ({ v: 1, name: myName(), threads: threads(), mine: stored('bottle-mine'), gone: gone() });
 
 /** Fold another copy of the shore into this one. Returns true if anything here changed. */
 function fold(other) {
   if (!other || typeof other !== 'object') return false;
   const before = JSON.stringify(state());
+  const left = [...new Set([...gone(), ...(Array.isArray(other.gone) ? other.gone.filter((x) => typeof x === 'string') : [])])].slice(0, 60);
+  set('bottle-gone', JSON.stringify(left));
   const by = new Map();
   for (const t of [...(Array.isArray(other.threads) ? other.threads : []), ...threads()]) {
-    if (!t || typeof t.k !== 'string') continue;
+    if (!t || typeof t.k !== 'string' || left.includes(t.k)) continue;
     const old = by.get(t.k);
     const one = old ? { k: t.k, w: (t.t || 0) >= (old.t || 0) ? (t.w || old.w || '') : (old.w || t.w || ''), s: Math.max(t.s || 0, old.s || 0), t: Math.max(t.t || 0, old.t || 0) } : { k: t.k, w: t.w || '', s: t.s || 0, t: t.t || 0 };
     const p = old ? ((t.t || 0) >= (old.t || 0) ? (t.p || old.p) : (old.p || t.p)) : t.p;
     if (typeof p === 'string' && p) one.p = p;
+    // A name given by hand wins over one taken from a note. If both copies have one, the newer wins.
+    const hand = [t, old].filter((x) => x && x.n).sort((x, y) => (y.t || 0) - (x.t || 0))[0];
+    if (hand) { one.n = 1; one.w = hand.w || one.w; }
     by.set(t.k, one);
   }
   set('bottle-threads', JSON.stringify([...by.values()].sort((a, b) => b.t - a.t).slice(0, 30)));
@@ -2210,7 +2243,7 @@ async function threadByNumber(id) {
   return null;
 }
 
-return { myName, setName, threads, isMine, wrote, remember, mobile, reachOf, setReach, kept, keep, secret, token, pull, save, saveNow, carry, arrive, names, threadByNumber };
+return { myName, setName, threads, isMine, wrote, remember, rename, forget, mobile, reachOf, setReach, kept, keep, secret, token, pull, save, saveNow, carry, arrive, names, threadByNumber };
 })();
 
 // ---------------------------------------------------------------- lantern.js
@@ -2443,7 +2476,7 @@ const { Flat } = __m.flat;
 const { Story } = __m.story;
 const { Shore } = __m.audio;
 const { newKey, newClaim, add, list, open, reach } = __m.thread;
-const { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber, mobile, reachOf, setReach } = __m.shore;
+const { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber, mobile, reachOf, setReach, rename, forget } = __m.shore;
 const { standing, light, douse, tend, ios, standalone } = __m.lantern;
 const { count } = __m.count;
 const { newPic, prepare, put, get } = __m.pic;
@@ -2451,6 +2484,7 @@ const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const bottle = decode(location.hash) || decode(qs.get('b'));
 const hop = /^#n\.([A-Za-z0-9_-]{22})$/.exec(location.hash);          // a notification was tapped: it names a conversation
+const seeing = qs.has('see');           // the writer looking at their own bottle from "See what they will see"
 const stage = $('stage');
 const isIOS = ios;
 const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
@@ -2803,10 +2837,15 @@ function person(th, all) {
     who: th.w || (theirs.length ? theirs[theirs.length - 1].name : '') || (all[0] && all[0].to) || '' };
 }
 let picking = null;          // while several people are being chosen for one bottle: the keys ticked so far
+let editing = false;         // while people are being renamed or removed
 const listed = (names) => (names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1]);
 /** The shore's buttons, for sending to one or for choosing several. */
 function pickWords(count) {
   const on = !!picking, n = on ? picking.size : 0;
+  $('editPeople').style.display = count && !on ? 'block' : 'none';
+  $('editPeople').textContent = editing ? 'Done' : 'Rename or remove someone';
+  $('newOne').style.display = editing ? 'none' : '';
+  if (editing) { $('several').style.display = 'none'; $('homeLede').textContent = 'Change a name, or take someone off this phone.'; return; }
   $('several').style.display = count > 1 ? 'block' : 'none';
   $('several').textContent = on ? 'Never mind' : 'One bottle for several people';
   $('newOne').textContent = on ? (n < 2 ? 'Choose two or more' : `Write to these ${n}`) : 'A bottle for someone new';
@@ -2827,6 +2866,24 @@ async function people() {
     for (const f of found) {
       const line = document.createElement('div');
       line.className = 'person';
+      if (editing) {
+        // The name as a field, saved when it is left. Removing takes two taps, so it cannot happen by a slip of the thumb.
+        const field = document.createElement('input');
+        field.type = 'text'; field.className = 'rowEdit'; field.maxLength = 40; field.value = f.who; field.placeholder = 'Their name';
+        field.setAttribute('aria-label', 'Their name');
+        field.onchange = () => { if (rename(f.th.k, field.value)) { f.who = field.value.trim(); f.th.w = f.who; count('people', 'renamed', true); } };
+        const out = document.createElement('button');
+        out.type = 'button'; out.className = 'peek'; out.textContent = 'Remove';
+        out.onclick = () => {
+          if (!out.classList.contains('sure')) { out.classList.add('sure'); out.textContent = 'Tap again to remove'; setTimeout(() => { out.classList.remove('sure'); out.textContent = 'Remove'; }, 4000); return; }
+          forget(f.th.k); count('people', 'removed', true);
+          const rest = found.filter((x) => x !== f);
+          if (!rest.length) { editing = false; desk({}); } else draw(rest);
+        };
+        line.append(field, out);
+        el.appendChild(line);
+        continue;
+      }
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'row' + (f.isNew ? ' new' : '');
@@ -2912,7 +2969,7 @@ function desk(ctx) {
   wire();
   const known = threads().length > 0;
   const home = known && !deskCtx.key && !deskCtx.to && !deskCtx.fresh && !deskCtx.many;
-  if (!home) picking = null;
+  if (!home) { picking = null; editing = false; }
   compose.classList.toggle('home', home);
   $('toHome').style.display = known && !home ? 'block' : 'none';
   if (home) { people(); lantern(); count('home', Math.min(threads().length, 12) + ' people'); return; }
@@ -2946,7 +3003,7 @@ function made(how, to, number, extra) {
   $('madeLede').textContent = how === 'sending' ? 'Carrying it down to the water.'
     : (to ? `Text this link to ${to}. The note travels inside the link itself.` : 'Send this link to one person. The note travels inside the link itself.') + extra;
   $('link').value = madeLink;
-  $('try').href = madeLink;
+  $('try').href = madeLink.replace('#', (qs.has('dev') ? '?dev&see' : '?see') + '#');
   // With their number, the phone's own Messages opens already addressed and written. Otherwise, the share sheet.
   $('text').style.display = number ? 'block' : 'none';
   $('text').textContent = to ? `Text it to ${to}` : 'Text it';
@@ -3132,6 +3189,7 @@ function wire() {
     if (chosen.length > 1) desk({ many: chosen });
   });
   $('several').addEventListener('click', () => { picking = picking ? null : new Set(); people(); });
+  $('editPeople').addEventListener('click', () => { editing = !editing; picking = null; people(); });
   $('toHome').addEventListener('click', () => desk({}));
   const back = () => { compose.classList.remove('show'); if (bottle) { sky(shown.mood); $('letter').classList.add('show'); } };
   $('backToNote').addEventListener('click', back);
@@ -3270,7 +3328,7 @@ if (!scene) {
 // How the shore is being drawn. If 3D was refused, enough to tell why: was the page on screen, how big, does the browser know 3D at all.
 if (scene) setTimeout(() => count('view', scene.info() + (scene.flat ? ` | 3D refused: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight} | browser knows 3D: ${typeof WebGLRenderingContext !== 'undefined'}` : ''), true), 0);
 else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight}`);
-count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
+count(bottle ? (seeing ? 'see' : 's_open') : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
 if (bottle) sky(bottle.mood);
 if (bottle) { const known = bottle.key ? kept(bottle.key) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
 lantern();
@@ -3365,7 +3423,7 @@ function run() {
     // The first touch has to be a real click for iPhone to allow sound and motion.
     cv.addEventListener('click', (e) => {
       if (story.state !== 'arrive') return;
-      count('s_touch');
+      if (!seeing) count('s_touch');
       audio.unlock();
       askMotion();
       if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {});
@@ -3432,9 +3490,9 @@ function run() {
     story.events.length = 0;
     if (reading && story.state !== was) {
       was = story.state;
-      if (was === 'held') count('s_held', speed());
-      if (was === 'open') count('s_cork', story.motion ? 'tilt on' : 'touch only');
-      if (was === 'reading') count('s_read', speed());
+      if (was === 'held' && !seeing) count('s_held', speed());
+      if (was === 'open' && !seeing) count('s_cork', story.motion ? 'tilt on' : 'touch only');
+      if (was === 'reading' && !seeing) count('s_read', speed());
     }
     if (story.motion && !tilted) { tilted = true; count('motion_live'); }
     const t = story.t;
@@ -3452,7 +3510,9 @@ function run() {
         finger.style.opacity = cueT < 0.08 ? cueT / 0.08 : cueT > 0.75 ? Math.max(0, 1 - (cueT - 0.75) / 0.2) : 1;
       } else { finger.style.opacity = 0; cueT = 0; }
       // a way out for anyone who is stuck
-      if (story.idle > 16 && story.state !== 'reading') $('skip').classList.add('show');
+      if ((seeing || story.idle > 16) && story.state !== 'reading') $('skip').classList.add('show');
+      // shells fade away while a note is being read: the page lays its words and buttons over that sand
+      scene.keepHide = (scene.keepHide || 0) + ((story.state === 'reading' ? 1 : 0) - (scene.keepHide || 0)) * Math.min(1, dt * 2.5);
     }
 
     const held = story.state !== 'arrive' && story.state !== 'adrift';
