@@ -4,7 +4,7 @@ Write a note, get one link, text it to someone. They tap it and a bottle washes 
 
 Live: https://msaco13.github.io/bottle/ (the page with no message is the writing page). Stats: https://msaco13.github.io/bottle/stats.html
 
-Last updated: 2026-11-12. Published. The counter shows at least one real iPhone has opened it. Nobody has yet confirmed what a real phone shows.
+Last updated: 2026-11-13, early morning. Published. Nobody has yet confirmed what a real phone shows. Michael has an Android, no iPhone.
 
 ## The promises
 
@@ -60,8 +60,29 @@ Last updated: 2026-11-12. Published. The counter shows at least one real iPhone 
 
 - `js/count.js` sends small events: story steps, `made`, `share`, `copy`, `motion`, `seal`, `lantern`, `carried`, `followed`, and failures (`f_plain`, `f_nogl`, `f_error`, `f_ctx`, `f_save`). Each is a kind, a short detail, a device family and the app version. Never a note, name, key or link.
 - The stats page shows it in plain language. Building locally counts nothing (add `?count`). `?dev` marks a visit as a test.
+- **Nothing is counted until a person really touches the page.** Link previews, browsers warming a page up, and robots load the page and never touch it. A page put away untouched is recorded once as `preview` and never counts as a visit or a problem. The safety-net script in the page follows the same rule.
 - **The alarm**: on the stats page, "Tell my lantern when something breaks". If phones report 3 or more problems in a day, that phone's lantern is told, at most twice a day. It needs a lantern lit on that phone first. Not yet switched on by anyone.
 - `npm run watch` checks the live page, an old link, the database and the last day's problems. `ops/watch.yml` would run it on GitHub twice a day and email on failure. Still not switched on: it needs `gh auth refresh -h github.com -s workflow`, then copy the file to `.github/workflows/`.
+
+## How the shore gets drawn: 3D first, a flat one as the safety net
+
+Every phone is meant to get the full 3D beach. The flat beach is only for a phone that will not give 3D.
+
+- `js/scene.js` asks for a 3D surface five ways, best first, and treats a surface that arrives already dead as a refusal.
+- If 3D is refused, the story starts on the flat beach (`js/flat.js`) and the page keeps asking for 3D for about 16 seconds, and again whenever the page comes back to the front. When 3D is granted the story moves over to it mid-step.
+- If the phone takes 3D away mid-story (Safari does this when memory is short or the page is put aside), the story carries on flat and asks for 3D again. It no longer reloads.
+- The flat beach uses the same camera, sea line and bottle position, so every drag, pull and pop is the same. It is plain canvas drawing: no images, nothing to download.
+- `#gl` in the page is now only the touch layer. The picture is drawn on a canvas placed under it, a fresh one for each try.
+- iPhone-specific care: the beach is drawn into an RGBA texture (RGB is not guaranteed on phones); every shader runs at full precision (reduced precision can be a true 16-bit number on an iPhone and one sum overflowed); shaders fall back to half precision on a phone that has no full precision; sharpness is not thrown away on a phone holding a steady 30 pictures a second (iPhone Low Power Mode).
+- Each visit reports once how it was drawn (`view`): "3D beach | WebGL 1, smooth edges | Apple GPU | size", or "2D beach | 3D refused: why | on screen or not | does the browser know 3D at all". The stats page lists these by phone. **That table is how to learn whether real iPhones are getting 3D.**
+
+### The two "WebGL is not available" reports of 2026-11-12
+
+Two visits, about 10:00 and 10:11 pm Miami time, both from "iPhone iOS 18.7 · Safari 26", both to the writing page. What is known:
+- They were not iMessage link previews. Apple's preview fetcher does not run page scripts and calls itself an old Mac Safari with "facebookexternalhit" in its name. These visits ran the page and called themselves Safari 26 on an iPhone.
+- "18.7" is what Safari on iOS 26.2 and later reports. So this was a current iPhone.
+- The page asked for 3D once and was told no. Known causes on a real iPhone: Lockdown Mode (it switches WebGL off), or Safari refusing or dropping a surface when the graphics chip is busy or short of memory (reported by other sites on Safari 26.1 and 26.2). Which one it was cannot be told from the record.
+- Since then the page asks several ways and keeps asking, shows the flat beach meanwhile, and records enough to tell the two causes apart next time.
 
 ## The story, and what the person does
 
@@ -75,7 +96,9 @@ Every step works by touch alone. A ghost finger shows the move after 5 seconds. 
 
 ## Safety nets
 
-- No 3D (asked for five ways before giving up): the note is shown straight away.
+- No 3D: the story plays on the flat beach, and 3D is asked for again.
+- No drawing surface of any kind: the note is shown straight away.
+- The app file arrives but cannot run (a very old browser): the plain note shows about a second after the page has loaded.
 - A file fails to load, or nothing has started after 10 seconds: a small script in the page itself shows the note as plain text.
 - Slow phone: the picture gets less sharp, never slower.
 - No share sheet: "Copy the link" is always there.
@@ -89,7 +112,8 @@ app.js            BUILT. Never edit. Made from js/ by build.mjs
 build.mjs         packs js/ into app.js, stamps versions and the server address
 css/style.css
 js/code.js        the link format (pure, tested)
-js/scene.js       the shoreline shader, the skies, the glass, cork and note, the lantern, the camera
+js/scene.js       the 3D shore: shaders, skies, glass, cork and note, the lantern, the camera
+js/flat.js        the same shore painted flat, for a phone that will not give 3D
 js/story.js       the story as a state machine (pure, tested)
 js/audio.js       surf and effects, synthesised
 js/thread.js      conversations: keys, encryption, seats, the server calls
@@ -103,10 +127,10 @@ stats.html        the stats page
 ops/notify/       the notification sender (deployed to Supabase) and its Web Push code
 ops/make-icons.mjs  draws the icons
 ops/watch.yml     the GitHub schedule for the watch (not switched on)
-test/             code, story, thread, push (npm test); live and watch (by hand)
+test/             code, story, flat, thread, push (npm test); live and watch (by hand)
 ```
 
-Run locally: `npm start`. Add `?dev` for a console handle (`dev.run(seconds)`, `dev.hold = true`, `dev.story`, `dev.scene`). With `?dev`: `&lantern=home|can|lit|safari|blocked` shows each lantern state, `&standalone` pretends to be the Home Screen app, `?nogl` pretends there is no 3D.
+Run locally: `npm start`. Add `?dev` for a console handle (`dev.run(seconds)`, `dev.hold = true`, `dev.story`, `dev.scene`). With `?dev`: `&lantern=home|can|lit|safari|blocked` shows each lantern state, `&standalone` pretends to be the Home Screen app, `&flat` forces the flat beach, `&nocanvas` pretends nothing can be drawn at all. `dev.lose()` takes the 3D away mid-story.
 
 ## Publishing
 
@@ -121,13 +145,14 @@ One machine: a Windows PC on the home network.
 - The real database (`test/live.test.mjs`): a stranger with a forwarded link sees nothing and can add nothing, by the new door or the old; replies are sealed too; old conversations still open; the parcel opens once; tables and private functions are locked.
 - Web Push: what the sender scrambles, a browser's side of the standard opens (`test/push.test.mjs`), and real Chrome accepted it.
 - In simulation only: the iPhone card, the parcel carrying a shore into an empty copy, the stranger's view of a taken bottle.
+- **The iPhone suite** (real Chrome made up as an iPhone 15: its name, screen, touch; run against the live site): a healthy iPhone gets 3D and the whole story by touch; 3D refused twice then granted; 3D never available (as in Lockdown Mode) plays the whole story flat; 3D handed over dead; 3D taken away mid-story and given back; a phone that cannot draw into a texture; a phone with half precision only; a phone held at 30 a second keeps its sharpness; a link preview counts as nothing; a person counts. All ten pass.
 
 ## Not tested (say this out loud)
 
 - **No real phone has been watched.** Not iPhone Safari, not Android Chrome.
+- **No WebKit engine at all.** A test build of WebKit was downloaded and Windows refused to run it (code-integrity policy). So everything iPhone is proven only in Chrome wearing an iPhone's name. Chrome and Safari read shaders with the same translator, but they hand them to different graphics drivers. Whether Apple's driver draws these shaders correctly is unproven.
 - **iPhone notifications, all of it**: whether "Add to Home Screen" keeps the parcel code in the address, whether the Home Screen copy then has the conversations, whether Apple's push service accepts these messages, whether the notification shows and opens the bottle. Apple's service was never contacted.
 - Android notifications on a phone (desktop Chrome uses the same service, so this is the likeliest to work).
-- Whether a text-message link preview runs the page. The counter recorded "WebGL is not available" from an iPhone on Safari 26 on 2026-11-12 around 10 pm. That may have been a preview, Lockdown Mode, or a real failure. The page now asks for 3D five ways and reports more detail.
 - The share sheet, tilt and shake, sound, frame rate on phones, in-app browsers, networks that block supabase.co.
 
 ## Known gaps
