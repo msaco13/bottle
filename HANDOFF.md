@@ -52,9 +52,9 @@ What turns it from a link maker into something you open to send. No accounts, no
 - The number is kept with the person in this phone's list, which is scrambled before its copy goes to the server, like the names. What is known of each lantern (`bottle-reach`) stays on the phone.
 - Android: "Put Bottle on your home screen" appears on the shore when Chrome offers to install it.
 - Sending results are counted under "Lantern (notifications)" on the stats page, as "sending: went straight to their lit lantern" and so on.
-- Tested with `test/app.browser.mjs` (31 checks, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link.
+- Tested with `test/app.browser.mjs` (43 checks, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
 - **Not tested**: any real phone. Whether `sms:` opens Messages with the words in place on a real iPhone and Android. The contact picker. The install offer. And everything about iPhone lanterns, as before: direct sending to an iPhone depends on it.
-- Not built yet: one bottle to several people at once.
+- **One bottle for several people** ("One bottle for several people" on the shore, when it has two or more): tick up to eight names, write one note, and each gets their own bottle in their own conversation with its own seat. It goes straight to anyone whose lantern is lit. Each of the others gets one button that texts or shares their own link. A group text cannot carry it: one link has one seat.
 
 ## Keepsakes: a shore that remembers
 
@@ -205,7 +205,6 @@ One machine: a Windows PC on the home network.
 ## Next ideas, not started
 
 - A beach full of bottles for one person from many (birthdays, farewells): one "add your bottle" link for the group, one link for the person. The old open conversations (key alone lets you add) may be most of the server side. Needs no notifications.
-- One bottle to several people at once.
 - The daily tide: one small question on everyone's desk each day, one tap to bottle the answer to someone in "Your bottles".
 - Bottles that arrive later ("wash up at sunrise"). An honest lock needs the server to hold the key, which bends promise 2 for those bottles.
 - Something for conversations past 12 bottles (sea glass, a second figure in the sky).

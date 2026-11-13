@@ -29,7 +29,7 @@ async function phone({ reach, sent = 0, addOk = true, seed, ios = false }) {
     if (fn === 'bottle_add') return addOk ? json('ok') : json({ message: 'down' }, 500);
     if (fn === 'bottle_list') return json([]);
     if (fn === 'bottle_open') return json('member');
-    if (fn === 'notify') return json({ sent, failed: 0 });
+    if (fn === 'notify') return json({ sent: typeof sent === 'function' ? sent(calls.filter((c) => c === 'notify:bottle').length) : sent, failed: 0 });
     if (fn === 'shore_get') return json(null);
     return json('ok');
   });
@@ -152,6 +152,39 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   await p.page.click('#again'); await p.page.waitForTimeout(300);
   await p.page.click('#people .row'); await p.page.waitForTimeout(2500);
   check('tapping a waiting bottle opens it on the beach', await p.page.evaluate(() => location.hash.startsWith('#1.') && document.documentElement.classList.contains('reading')));
+  check('no errors', !p.errs.length, p.errs.join(' ; '));
+  await p.ctx.close();
+}
+// 7. one bottle for several people: a bottle each, straight to the lit lantern, a link for each of the others
+{
+  const three = JSON.parse(JSON.stringify(jorge));
+  three['bottle-threads'].push({ k: 'cccccccccccccccccccccc', w: 'Ana', s: now - 99000000, t: now - 99000000, p: '+13055550199' });
+  three['bottle-notes'].cccccccccccccccccccccc = [{ message: 'Hola', name: 'Ana', mood: 'dusk', to: 'Mike', id: 'a1', at: now - 99000000 }];
+  three['bottle-reach'] = { [KEY]: { j: 1, l: 1, t: now } };                    // Jorge's lantern was lit when last heard
+  const p = await phone({ seed: three, sent: (n) => (n === 1 ? 1 : 0) });       // the server here cannot say who is reachable; only the first phone answers its lantern
+  await p.page.waitForTimeout(900);
+  check('with several people, the shore offers one bottle for several', await p.shown('several'));
+  await p.page.click('#several'); await p.page.waitForTimeout(200);
+  check('nothing can be written until two are chosen', await p.page.evaluate(() => document.getElementById('newOne').disabled) && (await p.text('newOne')) === 'Choose two or more');
+  for (let i = 0; i < 3; i++) await p.page.click(`#people .person:nth-child(${i + 1}) .row`);
+  await p.page.waitForTimeout(200);
+  check('three are ticked', (await p.page.evaluate(() => document.querySelectorAll('#people .row.picked').length)) === 3 && (await p.text('newOne')) === 'Write to these 3');
+  await p.shot('7-choosing');
+  await p.page.click('#newOne'); await p.page.waitForTimeout(400);
+  check('the desk names all three', (await p.text('deskTitle')) === 'A bottle for Jorge, Dad and Ana' && (await p.text('make')) === 'Send to 3 people', await p.text('deskLede'));
+  await p.page.fill('#msg', 'Beach on Saturday. Who is in?');
+  await p.page.click('#make'); await p.page.waitForTimeout(3500);
+  const rows = await p.page.evaluate(() => [...document.querySelectorAll('.sentRow')].map((r) => ({ text: r.textContent, href: (r.querySelector('a') || {}).href || '', done: r.classList.contains('done') })));
+  check('each person has a line, and the title adds them up', rows.length === 3 && (await p.text('madeTitle')) === '1 sent, 2 to text', (await p.text('madeTitle')) + ' | ' + rows.map((r) => r.text).join(' / '));
+  check('the lit lantern was told and needs nothing more', rows[0].text.startsWith('Jorge') && rows[0].done && rows[0].text.includes('phone has been told') && !rows[0].href);
+  check('the one with a number gets a text already addressed, with her own link', rows[2].text.startsWith('Ana') && rows[2].href.startsWith('sms:+13055550199?body=') && decodeURIComponent(rows[2].href).includes('Ana, a bottle washed up for you. http://localhost:8899/#1.'), rows[2].href.slice(0, 50));
+  check('the one without a number gets his own link to pass on', rows[1].text.startsWith('Dad') && /(Share|Copy) Dad\u2019s link/.test(rows[1].text), rows[1].text);
+  check('three notes went to three conversations', p.calls.filter((c) => c === 'bottle_add').length === 3);
+  const kept = await p.page.evaluate(() => { const n = JSON.parse(localStorage.getItem('bottle-notes')); return Object.values(n).map((v) => v.length); });
+  check('and each conversation remembers its own', kept.join(',') === '3,3,2', kept.join(','));
+  await p.shot('7-sent-many');
+  await p.page.click('#again'); await p.page.waitForTimeout(400);
+  check('back on the shore, no one is ticked any more', (await p.page.evaluate(() => document.querySelectorAll('#people .row.picked').length)) === 0 && (await p.text('newOne')) === 'A bottle for someone new');
   check('no errors', !p.errs.length, p.errs.join(' ; '));
   await p.ctx.close();
 }

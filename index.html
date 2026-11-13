@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://msaco13.github.io/bottle/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.500' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=376ed2fde5">
+<link rel="stylesheet" href="css/style.css?v=2c2277445a">
 </head>
 <body>
 <div id="stage">
@@ -60,6 +60,7 @@
       <p class="lede" id="homeLede">Tap a name to send a bottle.</p>
       <div id="people"></div>
       <button class="btn" type="button" id="newOne">A bottle for someone new</button>
+      <button class="link" type="button" id="several">One bottle for several people</button>
       <div class="lantern" id="lanternD"></div>
       <button class="link" type="button" id="install">Put Bottle on your home screen</button>
       <button class="link" type="button" id="homeBack">Back to the note</button>
@@ -108,6 +109,7 @@
         <button class="btn ghost" id="copy">Copy the link</button>
       </div>
       <button class="link" type="button" id="showLink">Text the link as well</button>
+      <div id="sentList"></div>
       <a class="btn ghost" id="try" href="#">See what they will see</a>
       <div class="lantern" id="lanternB"></div>
       <button class="link" id="again">Write another</button>
@@ -184,6 +186,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain("a file failed to load"); }, true);   // or a file failed outright
 })();
 </script>
-<script defer src="app.js?v=376ed2fde5"></script>
+<script defer src="app.js?v=2c2277445a"></script>
 </body>
 </html>
