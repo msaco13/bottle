@@ -17,7 +17,9 @@ html, body {
   overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 #stage { position: fixed; left: 50%; top: 50%; width: 100vw; height: 100vh; transform: translate(-50%, -50%); overflow: hidden; }
+/* #gl is the touch layer: nothing is drawn on it. The shore is drawn on a canvas placed under it (3D, or the flat one when 3D is not to be had). */
 #gl { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
 #veil { position: absolute; inset: 0; background: #0b0a18; pointer-events: none; opacity: 1; transition: opacity 1.4s ease; }
 #veil.up { opacity: 0; }
 

@@ -46,7 +46,7 @@ export const DRY_LINE = 0.98;
 
 /** The three skies a bottle can arrive under, and where the sun or moon hangs in each. */
 export const MOOD = { dusk: 0, night: 1, dawn: 2 };
-const SUNS = [[-0.1385, 0.0940, -0.9859], [0.160, 0.190, -0.969], [0.100, 0.060, -0.993]];
+export const SUNS = [[-0.1385, 0.0940, -0.9859], [0.160, 0.190, -0.969], [0.100, 0.060, -0.993]];
 
 // ---------------------------------------------------------------- shaders
 
@@ -332,29 +332,82 @@ function lathe(profile, seg) {
 }
 
 // The bottle is 1 unit long, centred, standing on its base along +y.
-const BOTTLE = [[0.0, -0.5], [0.10, -0.5], [0.142, -0.492], [0.156, -0.470], [0.160, -0.440], [0.160, -0.20], [0.160, 0.06], [0.156, 0.115], [0.142, 0.165], [0.118, 0.215], [0.092, 0.258], [0.070, 0.295], [0.058, 0.330], [0.054, 0.370], [0.054, 0.435], [0.060, 0.444], [0.068, 0.452], [0.069, 0.478], [0.064, 0.492], [0.056, 0.500], [0.046, 0.500]];
-const CORK = [[0.0, -0.065], [0.040, -0.065], [0.0445, -0.058], [0.049, 0.045], [0.050, 0.058], [0.044, 0.066], [0.0, 0.066]];
-const NOTE = [[0.0, -0.25], [0.028, -0.25], [0.038, -0.248], [0.0385, 0.0], [0.038, 0.248], [0.028, 0.25], [0.0, 0.25]];
+export const BOTTLE = [[0.0, -0.5], [0.10, -0.5], [0.142, -0.492], [0.156, -0.470], [0.160, -0.440], [0.160, -0.20], [0.160, 0.06], [0.156, 0.115], [0.142, 0.165], [0.118, 0.215], [0.092, 0.258], [0.070, 0.295], [0.058, 0.330], [0.054, 0.370], [0.054, 0.435], [0.060, 0.444], [0.068, 0.452], [0.069, 0.478], [0.064, 0.492], [0.056, 0.500], [0.046, 0.500]];
+export const CORK = [[0.0, -0.065], [0.040, -0.065], [0.0445, -0.058], [0.049, 0.045], [0.050, 0.058], [0.044, 0.066], [0.0, 0.066]];
+export const NOTE = [[0.0, -0.25], [0.028, -0.25], [0.038, -0.248], [0.0385, 0.0], [0.038, 0.248], [0.028, 0.25], [0.0, 0.25]];
 export const CORK_SEAT = 0.455;   // where the cork sits, along the bottle
 export const NOTE_SEAT = -0.16;   // where the note rests
 
 // ---------------------------------------------------------------- scene
+
+/** Where the viewer stands and what they see. The 3D shore and the 2D shore share it, so the story cannot tell them apart. */
+export class Camera {
+  constructor() {
+    this.W = 1; this.H = 1; this.scale = 1;
+    this.cam = { pos: [0, 1.22, 2.75], target: [0, 0.0, -1.5], fov: 62 * Math.PI / 180 };
+    this.mood = 0; this.lamp = 0;
+  }
+  basis() {
+    const c = this.cam, f = norm(sub(c.target, c.pos)), r = norm(cross(f, [0, 1, 0])), u = cross(r, f);
+    const ty = Math.tan(c.fov / 2), tx = ty * this.W / this.H;
+    return { pos: c.pos, f, r, u, tx, ty };
+  }
+  viewProj() {
+    const b = this.basis(), p = b.pos;
+    const view = [b.r[0], b.u[0], -b.f[0], 0, b.r[1], b.u[1], -b.f[1], 0, b.r[2], b.u[2], -b.f[2], 0, -dot(b.r, p), -dot(b.u, p), dot(b.f, p), 1];
+    return M.mul(M.perspective(this.cam.fov, this.W / this.H, 0.05, 60), view);
+  }
+  project(w) {
+    const vp = this.viewProj();
+    const x = vp[0] * w[0] + vp[4] * w[1] + vp[8] * w[2] + vp[12], y = vp[1] * w[0] + vp[5] * w[1] + vp[9] * w[2] + vp[13], q = vp[3] * w[0] + vp[7] * w[1] + vp[11] * w[2] + vp[15];
+    return { x: (x / q * 0.5 + 0.5) * this.W, y: (1 - (y / q * 0.5 + 0.5)) * this.H, front: q > 0 };
+  }
+  ground(sx, sy, y = 0) {
+    const b = this.basis();
+    const nx = sx / this.W * 2 - 1, ny = 1 - sy / this.H * 2;
+    const d = norm([b.f[0] + b.r[0] * nx * b.tx + b.u[0] * ny * b.ty, b.f[1] + b.r[1] * nx * b.tx + b.u[1] * ny * b.ty, b.f[2] + b.r[2] * nx * b.tx + b.u[2] * ny * b.ty]);
+    if (d[1] > -0.02) return null;
+    const t = (y - b.pos[1]) / d[1];
+    return [b.pos[0] + d[0] * t, y, b.pos[2] + d[2] * t];
+  }
+}
+
+// How to ask a phone for a 3D drawing surface, best first. Safari on an iPhone sometimes refuses the first and grants a later one.
+const ASKS = [
+  ['webgl', { alpha: false, antialias: true, depth: true, stencil: false, powerPreference: 'high-performance' }, 'smooth edges'],
+  ['webgl', { alpha: false, antialias: true, depth: true, stencil: false }, 'smooth edges, default power'],
+  ['webgl', { alpha: false, antialias: false, depth: true, stencil: false }, 'plain edges'],
+  ['experimental-webgl', { alpha: false, antialias: false, depth: true }, 'old name'],
+  ['webgl2', { alpha: false, antialias: true, depth: true, stencil: false }, 'version 2'],
+];
 
 export class Scene {
   constructor(canvas) {
     this.canvas = canvas;
     const opts = { alpha: false, antialias: true, depth: true, stencil: false, powerPreference: 'high-performance' };
     // Ask the way that looks best first, then more and more plainly. Some phones refuse the first and grant the last.
-    const gl = this.gl = canvas.getContext('webgl', opts) || canvas.getContext('experimental-webgl', opts)
-      || canvas.getContext('webgl', { alpha: false, antialias: false, depth: true }) || canvas.getContext('webgl') || canvas.getContext('webgl2', { alpha: false, antialias: false, depth: true });
+    let gl = null;
+    this.kind = '';
+    for (const [name, how, label] of ASKS) {
+      try { gl = canvas.getContext(name, how); } catch (e) { gl = null; }
+      if (gl) { this.kind = (name === 'webgl2' ? 'WebGL 2' : 'WebGL 1') + ', ' + label; break; }
+    }
+    this.gl = gl;
     if (!gl) throw new Error('WebGL is not available');
+    // Safari can hand over a surface that is already dead (the graphics chip was busy, or short of memory).
+    if (gl.isContextLost && gl.isContextLost()) throw new Error('WebGL was handed over already lost');
     this.lost = false;
-    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; });
-    canvas.addEventListener('webglcontextrestored', () => location.reload());
-    this.shore = this._program(QUAD_VS, SHORE_FS);
+    this.onlost = null;          // called if the phone takes the 3D away later
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (this.lost) return; this.lost = true; if (this.onlost) this.onlost(); });
+    // Every phone since about 2013 draws in full precision. One that cannot gets the same shaders at half precision: rougher water, but a 3D beach.
+    const hp = gl.getShaderPrecisionFormat ? gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT) : null;
+    this.highp = !!(hp && hp.precision > 0);
+    const fit = (src) => (this.highp ? src : src.replace('precision highp float;', 'precision mediump float;'));
+    this.shore = this._program(QUAD_VS, fit(SHORE_FS));
     this.blit = this._program(QUAD_VS, BLIT_FS);
-    this.glass = this._program(MESH_VS, GLASS_FS);
-    this.solid = this._program(MESH_VS, SOLID_FS);
+    this.glass = this._program(MESH_VS, fit(GLASS_FS));
+    this.solid = this._program(MESH_VS, fit(SOLID_FS));
+    this.direct = false;         // true if this phone cannot draw the beach into a texture first (then the glass does not bend the view)
     this.quad = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quad);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -386,10 +439,25 @@ export class Scene {
     this.lamp = 0;              // 1 when the lantern is lit
   }
 
+  /** What this phone gave us, in a few words. */
+  info() {
+    const gl = this.gl;
+    let chip = '';
+    try { const x = gl.getExtension('WEBGL_debug_renderer_info'); chip = String(x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).replace(/\s+/g, ' ').slice(0, 70); } catch (e) { chip = ''; }
+    return `3D beach | ${this.kind}${this.highp ? '' : ', half precision'}${this.direct ? ', glass does not bend the view' : ''} | ${chip} | ${this.canvas.width}x${this.canvas.height}`;
+  }
+
+  /** Let go of everything, so the phone has the memory back. */
+  dispose() {
+    try { this.lost = true; const x = this.gl.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); } catch (e) { /* nothing to do */ }
+    try { this.canvas.width = 1; this.canvas.height = 1; } catch (e) { /* nothing to do */ }
+  }
+
   _program(vs, fs) {
     const gl = this.gl;
     const mk = (type, src) => {
       const s = gl.createShader(type);
+      if (!s) throw new Error('WebGL stopped while the beach was being built');
       gl.shaderSource(s, src); gl.compileShader(s);
       if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader failed');
       return s;
@@ -424,13 +492,14 @@ export class Scene {
     if (this.bg) gl.deleteTexture(this.bg);
     this.bg = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.bg);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, bw, bh, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, bw, bh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.bg, 0);
+    this.direct = gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
@@ -474,8 +543,8 @@ export class Scene {
     const tm = s.time % 2000;
 
     // 1. the beach, into a texture (the glass needs to look through it)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
-    gl.viewport(0, 0, this.bw, this.bh);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.direct ? null : this.fbo);
+    gl.viewport(0, 0, this.direct ? pw : this.bw, this.direct ? ph : this.bh);
     gl.disable(gl.DEPTH_TEST); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
     gl.useProgram(this.shore.p);
     const u = this.shore.u;
@@ -496,12 +565,14 @@ export class Scene {
     // 2. onto the screen
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, pw, ph);
-    gl.useProgram(this.blit.p);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.bg);
-    gl.uniform1i(this.blit.u.uTex, 0);
-    gl.uniform1f(this.blit.u.uGrain, (this._frame++ % 64) * 1.37);
-    this._quad();
+    if (!this.direct) {
+      gl.useProgram(this.blit.p);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.bg);
+      gl.uniform1i(this.blit.u.uTex, 0);
+      gl.uniform1f(this.blit.u.uGrain, (this._frame++ % 64) * 1.37);
+      this._quad();
+    }
     if (!s.bottle) return;
 
     // 3. the bottle: through the glass, then what is inside it, then the shine on top
@@ -518,7 +589,7 @@ export class Scene {
       this._drawMesh(this.mBottle, this.glass);
     };
     gl.depthMask(false);
-    glassPass(0);
+    if (!this.direct) glassPass(0);
     gl.depthMask(true);
     gl.disable(gl.CULL_FACE);
     gl.useProgram(this.solid.p);

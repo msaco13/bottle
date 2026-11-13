@@ -52,11 +52,8 @@ const version = () => { try { const s = document.querySelector('script[src*="app
 const said = new Set();
 let sent = 0;
 
-/** Count something. Each kind is counted once per visit unless again is true. Never throws, never waits. */
-export function count(kind, detail = '', again = false) {
+function post(kind, detail) {
   try {
-    if (!on || !SERVER.url || typeof fetch !== 'function') return;
-    if (!again) { if (said.has(kind)) return; said.add(kind); }
     if (++sent > 40) return;
     fetch(`${SERVER.url}/rest/v1/rpc/log_event`, {
       method: 'POST', keepalive: true,
@@ -64,6 +61,39 @@ export function count(kind, detail = '', again = false) {
       body: JSON.stringify({ p_kind: kind, p_detail: String(detail == null ? '' : detail).slice(0, 300), p_ua: testing ? 'test' : device(), p_ver: version() }),
     }).catch(() => {});
   } catch {}
+}
+
+// A PERSON, OR A PREVIEW? Pages get loaded by things that are not people: link previews, browsers warming a page
+// up before it is asked for, robots. Those load the page, run it, and never touch it. So nothing is counted until
+// someone really touches the page. If the page is put away without ever being touched, that is recorded once, as a
+// "preview", and it never counts as a visit or as a problem.
+let person = false;
+const held = [];
+
+/** Count something. Each kind is counted once per visit unless again is true. Never throws, never waits. */
+export function count(kind, detail = '', again = false) {
+  try {
+    if (!on || !SERVER.url || typeof fetch !== 'function') return;
+    if (!again) { if (said.has(kind)) return; said.add(kind); }
+    if (person) post(kind, detail); else if (held.length < 30) held.push([kind, detail]);
+  } catch {}
+}
+
+if (has) {
+  const touched = (e) => {
+    if (person || (e && e.isTrusted === false)) return;
+    person = true;
+    for (const [k, d] of held.splice(0)) post(k, d);
+  };
+  for (const ev of ['pointerdown', 'touchstart', 'keydown', 'wheel']) addEventListener(ev, touched, { capture: true, passive: true });
+  const putAway = () => {
+    if (person || !held.length || said.has('preview')) return;
+    said.add('preview');
+    const trouble = held.filter((h) => h[0].startsWith('f_') || h[0] === 'view').map((h) => h[1]).join(' / ');
+    post('preview', `never touched | ${held.map((h) => h[0]).join(',')} | ${innerWidth}x${innerHeight} | ${trouble}`);
+  };
+  addEventListener('pagehide', putAway);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') putAway(); });
 }
 
 // Anything that breaks while the page is running. At most three a visit: one broken thing can throw every frame.

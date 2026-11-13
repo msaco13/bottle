@@ -50,7 +50,7 @@ Object.assign(SERVER, saved);
 
 // the built file is up to date with the source
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
-for (const f of ['code', 'scene', 'story', 'audio', 'thread', 'shore', 'lantern', 'count', 'main']) {
+for (const f of ['code', 'scene', 'flat', 'story', 'audio', 'thread', 'shore', 'lantern', 'count', 'main']) {
   const src = fs.readFileSync(new URL(`../js/${f}.js`, import.meta.url), 'utf8');
   const probe = src.split('\n').filter((l) => l.length > 50 && !l.startsWith('import') && !l.startsWith('export'))[3];
   assert(app.includes(probe), `app.js is stale: rebuild (node build.mjs) after changing js/${f}.js`);

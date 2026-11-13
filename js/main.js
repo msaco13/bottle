@@ -5,6 +5,7 @@
 
 import { decode, linkFor, MAX_MESSAGE } from './code.js';
 import { Scene, swash, DRY_LINE, MOOD } from './scene.js';
+import { Flat } from './flat.js';
 import { Story } from './story.js';
 import { Shore } from './audio.js';
 import { newKey, newClaim, add, list, open } from './thread.js';
@@ -30,7 +31,7 @@ let human = !!(navigator.userActivation && navigator.userActivation.hasBeenActiv
 const waiting = [];
 const touched = (fn) => { if (human) fn(); else waiting.push(fn); };
 for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
-  addEventListener(ev, () => { if (human) return; human = true; for (const f of waiting.splice(0)) f(); }, { capture: true, passive: true });
+  addEventListener(ev, (e) => { if (human || !e.isTrusted) return; human = true; for (const f of waiting.splice(0)) f(); }, { capture: true, passive: true });
 }
 
 // ---------------------------------------------------------------- the note itself
@@ -375,21 +376,94 @@ async function arriveAndCatchUp() {
 
 // ---------------------------------------------------------------- the shore
 
-let scene = null;
-try { scene = qs.has('nogl') ? null : new Scene($('gl')); } catch (e) {
-  scene = null;
-  // Say enough to tell a real phone from a link preview or a locked-down browser: is the page on screen, how big, does the browser know 3D at all.
-  count('f_nogl', `${String((e && e.message) || 'no 3D').replace(/\s+/g, ' ').slice(0, 120)} | ${document.visibilityState} ${innerWidth}x${innerHeight} | 3D known to browser: ${typeof WebGLRenderingContext !== 'undefined'} | ${bottle ? 'a bottle' : 'the desk'}`);
+let scene = null;            // whatever is drawing the shore right now: the 3D scene, or the flat one
+let story = null;
+let why3D = '';              // why the last try for 3D failed
+let tries = 0;
+let refit = () => {};        // set by run(): lay the picture out again
+
+/** A fresh surface under the touch layer. Each try for 3D gets its own: a canvas that was refused once can stay refused. */
+function surface(cls) {
+  const c = document.createElement('canvas');
+  c.className = 'draw ' + cls;
+  stage.insertBefore(c, $('gl'));
+  return c;
 }
-if (!scene) count('f_nogl', 'no 3D was asked for');      // only reached with ?nogl: a real failure was counted above, and each kind counts once
-count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');   // ?nogl pretends there is no 3D, to test the fallback
+
+/** Try to start the 3D shore. null if the phone will not give it to us right now. */
+function start3D() {
+  if (qs.has('nogl') || qs.has('flat')) { why3D = 'switched off for a test'; return null; }
+  tries++;
+  const c = surface('deep');
+  try {
+    const s = new Scene(c);
+    s.onlost = () => lost3D(s);
+    return s;
+  } catch (e) {
+    c.remove();
+    why3D = String((e && e.message) || e).replace(/\s+/g, ' ').slice(0, 110);
+    return null;
+  }
+}
+
+/** The safety net: the same shore, painted flat. null only if the phone cannot draw at all. */
+function startFlat() {
+  if (qs.has('nocanvas')) return null;
+  const c = surface('flat');
+  try { return new Flat(c); } catch (e) { c.remove(); return null; }
+}
+
+/** Hand the story over to another way of drawing, in the middle of a step if need be. */
+function use(next, note) {
+  const old = scene;
+  scene = next;
+  if (old) scene.mood = old.mood;
+  if (story) story.view = scene;
+  document.documentElement.classList.toggle('flat', !!scene.flat);
+  refit(true);
+  lantern();
+  if (old && old !== next) { const c = old.canvas; old.dispose(); setTimeout(() => c.remove(), 80); }
+  count('view', scene.info() + (note ? ' | ' + note : ''), true);
+}
+
+/** The phone took the 3D away (it does when memory is short, or the page was put aside). Carry on flat, and ask for 3D again shortly. */
+function lost3D(s) {
+  if (scene !== s) return;
+  const f = startFlat();
+  if (f) use(f, 'the phone took the 3D away at: ' + (story ? story.state : 'the start'));
+  again([1200, 4000, 12000]);
+}
+
+/** While the shore is flat, keep asking for 3D for a while. A refusal is often only for a moment. */
+let asking = 0;
+function again(waits) {
+  clearTimeout(asking);
+  if (!waits.length || !scene || !scene.flat || tries > 8) return;
+  asking = setTimeout(() => {
+    if (!scene || !scene.flat) return;
+    if (document.visibilityState === 'hidden') { again(waits); return; }      // ask once the page is in front
+    const s = start3D();
+    if (s) use(s, 'given on try ' + tries + ', after: ' + why3D); else again(waits.slice(1));
+  }, waits[0]);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && scene && scene.flat && tries <= 8) again([300, 2500]); });
+
+scene = start3D();
+if (!scene) {
+  scene = startFlat();
+  if (scene) { document.documentElement.classList.add('flat'); again([400, 1500, 4000, 10000]); }
+}
+// How the shore is being drawn. If 3D was refused, enough to tell why: was the page on screen, how big, does the browser know 3D at all.
+if (scene) count('view', scene.info() + (scene.flat ? ` | 3D refused: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight} | browser knows 3D: ${typeof WebGLRenderingContext !== 'undefined'}` : ''), true);
+else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight}`);
+count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
 if (bottle) sky(bottle.mood);
 lantern();
 arriveAndCatchUp();
 const ready = () => { window.__bottleReady = true; const p = $('plain'); if (p) p.className = ''; };
 
 if (!scene) {
-  // No 3D on this device. The words still get through.
+  // Nothing to draw on at all. The words still get through.
   ready();
   $('veil').classList.add('up');
   if (bottle) showLetter(true); else desk({});
@@ -398,7 +472,7 @@ if (!scene) {
 }
 
 function run() {
-  const story = new Story(scene);
+  story = new Story(scene);
   const audio = new Shore();
   const reading = !!bottle;
   if (!reading) desk({});
@@ -426,6 +500,7 @@ function run() {
   }
   let lt = 0;
   const relayout = () => { clearTimeout(lt); lt = setTimeout(() => layout(false), 120); };
+  refit = layout;
   addEventListener('resize', relayout);
   addEventListener('orientationchange', relayout);
   layout(true);
@@ -501,9 +576,8 @@ function run() {
   const look = [0, 0], rest = [0, 1];
   let camY = reading ? 0.44 : 0.1;
   let hintText = null, cueT = 0, slow = 0, last = performance.now(), started = false;
-  let was = '', fpsN = 0, fpsT = 0, tilted = false;
+  let was = '', fpsN = 0, fpsT = 0, tilted = false, pace = 1 / 60, probe = null, steady = false;
   const speed = () => `${fpsT > 0 ? Math.round(fpsN / fpsT) : 0} fps, ${Math.round(W * scene.scale)}x${Math.round(H * scene.scale)}, quality ${quality.toFixed(2)}`;
-  $('gl').addEventListener('webglcontextlost', () => count('f_ctx', 'the phone took the 3D away at: ' + story.state));
 
   // The cork comes out with a little spray of sea water.
   function spray() {
@@ -599,9 +673,18 @@ function run() {
     if (window.dev && window.dev.hold) return;          // ?dev only: stand still so a test can step time by hand
     frame(Math.min(0.05, Math.max(0.001, raw)));
     // If the phone cannot keep up, trade a little sharpness for smoothness.
-    if (raw < 0.2) { fpsN++; fpsT += raw; }
-    if (raw > 0.024 && raw < 0.2) slow++; else slow = Math.max(0, slow - 0.25);
-    if (slow > 40 && quality > 0.5) { quality *= 0.82; slow = 0; layout(true); }
+    if (raw < 0.2) { fpsN++; fpsT += raw; pace += (raw - pace) * 0.08; }
+    if (!steady) {
+      if (raw > 0.024 && raw < 0.2) slow++; else slow = Math.max(0, slow - 0.25);
+      if (probe) {
+        // Was it any faster for being less sharp? If not, the phone is holding a steady lower rate on purpose
+        // (an iPhone in Low Power Mode draws 30 times a second whatever it is given). Give the sharpness back and leave it be.
+        if (--probe.left <= 0) {
+          if (pace > probe.before * 0.88) { quality = probe.was; steady = true; layout(true); count('pace', `held at ${Math.round(1 / pace)} a second, sharpness kept`); }
+          probe = null; slow = 0;
+        }
+      } else if (slow > 40 && quality > 0.5) { probe = { before: pace, was: quality, left: 50 }; quality *= 0.82; slow = 0; layout(true); }
+    }
   }
   ready();                      // everything loaded and the shaders built: the safety net can stand down
   requestAnimationFrame(loop);
@@ -609,11 +692,12 @@ function run() {
   // For looking at it by hand while building (add ?dev to the address).
   if (qs.has('dev')) {
     window.dev = {
-      story, scene, audio, frame, DRY_LINE, quality: () => quality,
+      story, get scene() { return scene; }, audio, frame, DRY_LINE, quality: () => quality, tries: () => tries,
+      lose() { const x = scene.gl && scene.gl.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); return !!x; },   // pretend the phone took the 3D away
       run(secs) { for (let k = 0; k < secs * 60; k++) frame(1 / 60); return story.state; },
       async shot(name) {          // save what is on the canvas right now (needs dev-server.mjs)
         frame(1 / 60);
-        const r = await fetch('/dev/shot?name=' + name, { method: 'POST', body: cv.toDataURL('image/jpeg', 0.92) });
+        const r = await fetch('/dev/shot?name=' + name, { method: 'POST', body: scene.canvas.toDataURL('image/jpeg', 0.92) });
         return r.status;
       },
     };
