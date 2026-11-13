@@ -45,6 +45,14 @@ assert.equal(await open(stranger, key, seat2), 'taken', 'a reply forwarded on af
 assert.deepEqual(await list(stranger, key), []);
 say('replies are sealed the same way');
 
+// A lantern lit for someone is kept with the conversation, and comes back marked as a lantern, not a bottle.
+await wait(1100);
+assert.equal((await add(dad, key, { m: '', n: 'Dad', mood: 'night', to: 'Mike', id: 'lamp' + Date.now(), t: Date.now(), k: 'l' }, null)).ok, true);
+const withLamp = await list(mike, key);
+assert.deepEqual(withLamp.map((n) => n.kind || 'bottle'), ['bottle', 'bottle', 'l']);
+assert.deepEqual(await list(stranger, key), [], 'and a stranger sees no lantern either');
+say('a lantern lit for someone is kept as a lantern');
+
 // Who can be reached: a member learns that the other phone has joined, and whether its lantern is lit. Nobody else learns anything.
 assert.deepEqual(await reach(dad, key), { others: 1, lit: 0 }, 'Mike has joined, with no lantern');
 assert.deepEqual(await reach(mike, key), { others: 1, lit: 0 });

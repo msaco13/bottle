@@ -1873,7 +1873,8 @@ async function add(auth, key, note, claim) {
     const thread = await threadId(key);
     const r = await rpc('bottle_add', { p_auth: auth, p_thread: thread, p_body: await seal(key, note), p_claim: claim ? await claimHash(claim) : null });
     if (r !== 'ok') return no;
-    return { ok: true, told: notify({ do: 'bottle', auth, thread }).then((n) => (n && n.sent > 0 ? n.sent : 0), () => 0) };
+    // A lantern lit for someone (note.k === 'l') says so to the sender, so the other phone can be told what it is. Nothing else about a note is ever passed on.
+    return { ok: true, told: notify({ do: 'bottle', auth, thread, ...(note && note.k === 'l' ? { k: 'l' } : {}) }).then((n) => (n && n.sent > 0 ? n.sent : 0), () => 0) };
   } catch { return no; }
 }
 
@@ -1920,6 +1921,7 @@ async function list(auth, key) {
       seen.add(v.id);
       const note = { message: v.m, name: v.n || '', mood: v.mood || 'dusk', to: v.to || '', id: v.id, at: Date.parse(row.created_at) || v.t || 0 };
       if (typeof v.p === 'string' && /^[A-Za-z0-9_-]{22}$/.test(v.p)) note.pic = v.p;
+      if (v.k === 'l') note.kind = 'l';             // not a bottle: a lantern lit for the other person, with no words
       out.push(note);
     }
     return out.sort((a, b) => a.at - b.at);
@@ -2568,9 +2570,12 @@ let asked = false;
 const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (b.name || '') && (a.pic || '') === (b.pic || '');
 
 /** The notes of a conversation: what the server says now, joined with what this phone has already seen. */
-async function notesFor(key) {
+/** A lantern lit for someone: kept with the conversation like a note, but not a bottle. It leaves no shell and is never counted as one. */
+const isLamp = (n) => !!n && n.kind === 'l';
+async function notesFor(key, lamps = false) {
   const fresh = await list(await token(), key);
-  return fresh ? keep(key, fresh) : kept(key);        // if the server is asleep, the history is still here
+  const all = fresh ? keep(key, fresh) : kept(key);        // if the server is asleep, the history is still here
+  return lamps ? all : all.filter((n) => !isLamp(n));
 }
 
 // ---------------------------------------------------------------- what the conversation has left on the shore (see keeps.js)
@@ -2763,7 +2768,7 @@ let lanternSaid = '', carriedLost = false, homeBack = '', litHere = false;      
 /** Draw the lantern's line wherever it belongs: under a note, under a new bottle, and on the desk. */
 function lantern() {
   const st = standing();
-  if (scene) scene.lamp = st === 'lit' ? 1 : 0;
+  if (scene) scene.lamp = st === 'lit' || lampHere ? 1 : 0;       // the lantern on the sand: notifications are on, or someone lit one for this phone
   for (const id of ['lanternA', 'lanternB', 'lanternC', 'lanternD']) {
     const onDesk = id === 'lanternC' || id === 'lanternD';
     const el = $(id);
@@ -2781,9 +2786,9 @@ function lantern() {
     if (st === 'lit') {
       // Under a note there is nothing to say once they are on: the lantern on the sand says it. The switch lives on the shore and the desk.
       if (onDesk) {
-        say('Notifications are on. Your lantern is lit, and this phone tells you when a bottle arrives.');
+        say('Notifications are on. This phone tells you when a bottle arrives, or when someone lights a lantern for you.');
         btn('Turn notifications off', async () => { await douse(); litHere = false; count('lantern', 'put out', true); lantern(); }, 'link');
-      } else if (litHere) say('Notifications are on. Your lantern is lit, and this phone tells you when a bottle arrives.');
+      } else if (litHere) say('Notifications are on. This phone tells you when a bottle arrives, or when someone lights a lantern for you.');
     } else if (st === 'blocked') {
       // They said no to notifications. Do not bring it up again, except on the desk where it explains why nothing arrives.
       if (onDesk) say('Notifications are blocked for this page in your browser\u2019s settings, so this phone cannot tell you when a bottle arrives.');
@@ -2791,7 +2796,7 @@ function lantern() {
       say('To get notified when a bottle arrives, open this page in Safari and turn on notifications there.');
     } else if (st === 'home') {
       btn('Turn on notifications', homeCard, 'btn ghost');
-      say('Then this phone tells you when a bottle arrives, and friends can send you one with no link to text. A lantern lights on your shore to show it is on.');
+      say('Then this phone tells you when a bottle arrives, and friends can send you one with no link to text.');
     } else {
       btn('Turn on notifications', async (e) => {
         const b = e.currentTarget;
@@ -2803,7 +2808,7 @@ function lantern() {
           : 'Notifications could not be turned on (' + how.replace('failed: ', '') + '). Try again in a minute.';
         lantern();
       }, standalone ? 'btn' : 'btn ghost');
-      say(lanternSaid || 'Then this phone tells you when a bottle arrives, and friends can send you one with no link to text. A lantern lights on your shore to show it is on.');
+      say(lanternSaid || 'Then this phone tells you when a bottle arrives, and friends can send you one with no link to text.');
     }
   }
 }
@@ -3065,11 +3070,16 @@ async function learnReach(key) {
 }
 
 /** What is known of one conversation, for its row on the shore. */
-function person(th, all) {
+let lampHere = false;        // someone has lit a lantern for this phone, and it has not been answered yet
+const lampAt = new Map();    // when this phone last lit one for each person, so a thumb cannot send ten
+function person(th, every) {
+  const all = every.filter((n) => !isLamp(n)), lamps = every.filter((n) => isLamp(n) && !isMine(n));
+  const lamp = lamps.filter((n) => n.at > (th.s || 0)).pop() || null;      // theirs, not yet seen
   const theirs = all.filter((n) => !isMine(n));
   const fresh = theirs.filter((n) => n.at > (th.s || 0));
   const last = all[all.length - 1];
-  return { th, isNew: fresh.length > 0, open: fresh.length ? fresh[fresh.length - 1] : last, at: last ? last.at : (th.t || 0), count: all.length,
+  return { th, lamp, canLamp: theirs.length > 0 || lamps.length > 0 || !!reachOf(th.k).j,      // only someone who has joined can be lit a lantern
+    isNew: fresh.length > 0, open: fresh.length ? fresh[fresh.length - 1] : last, at: last ? last.at : (th.t || 0), count: all.length,
     who: th.w || (theirs.length ? theirs[theirs.length - 1].name : '') || (all[0] && all[0].to) || '' };
 }
 let picking = null;          // while several people are being chosen for one bottle: the keys ticked so far
@@ -3122,10 +3132,11 @@ async function people() {
       }
       const row = document.createElement('button');
       row.type = 'button';
-      row.className = 'row' + (f.isNew ? ' new' : '');
+      row.className = 'row' + (f.isNew || (f.lamp && !picking) ? ' new' : '');
       const who = document.createElement('span'); who.className = 'rowWho'; who.textContent = f.who || 'Someone';
       const sub = document.createElement('span'); sub.className = 'rowSub';
       sub.textContent = f.isNew ? 'A new bottle washed up. Tap to open it'
+        : f.lamp && !picking ? `Lit a lantern for you \u00b7 ${when(f.lamp.at)}`
         : [f.count ? (f.count === 1 ? '1 bottle' : f.count + ' bottles') : 'No bottles yet', f.count ? when(f.at) : '', reachOf(f.th.k).l ? 'notifications on' : ''].filter(Boolean).join(' · ');
       row.append(who, sub);
       if (picking) {
@@ -3134,7 +3145,34 @@ async function people() {
         row.onclick = () => { if (picking.has(f.th.k)) picking.delete(f.th.k); else if (picking.size < 8) picking.add(f.th.k); draw(found); };
       } else row.onclick = () => (f.isNew ? openNote(f) : desk({ to: f.who, key: f.th.k }));
       line.appendChild(row);
-      if (!picking && !f.isNew && f.open) {
+      if (!picking && f.canLamp) {
+        // One tap, no words: "thinking of you". It is kept with the conversation and their phone is told, if it can be.
+        const lamp = document.createElement('button');
+        lamp.type = 'button'; lamp.className = 'peek lamp'; lamp.textContent = f.lamp ? 'Light one back' : 'Lantern';
+        lamp.setAttribute('aria-label', `Light a lantern for ${f.who || 'them'}`);
+        lamp.onclick = async () => {
+          if ((lampAt.get(f.th.k) || 0) > Date.now() - 30000) return;
+          lampAt.set(f.th.k, Date.now());
+          lamp.disabled = true; lamp.textContent = 'Lighting';
+          const id = Math.random().toString(36).slice(2, 12), mine = myName();
+          wrote(id);
+          if (f.lamp) { remember(f.th.k, '', f.lamp.at); f.lamp = null; }       // theirs has been seen, and answered
+          const r = await add(await token(), f.th.k, { m: '', n: mine, mood: 'night', to: f.who, id, t: Date.now(), k: 'l' }, null);
+          const told = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
+          if (r.ok) keep(f.th.k, [{ message: '', name: mine, mood: 'night', to: f.who, id, at: Date.now(), kind: 'l' }]);
+          if (told) setReach(f.th.k, { j: 1, l: 1 });
+          count('lamp', !r.ok ? 'could not be lit' : told ? 'lit, and their phone was told' : 'lit, waiting on their shore', true);
+          row.classList.remove('new');
+          sub.textContent = !r.ok ? 'It could not be lit just now. Try again in a minute.'
+            : told ? `Lantern lit. ${Whose(f.who)} phone has been told.` : `Lantern lit. ${f.who || 'They'} will see it on opening Bottle.`;
+          lamp.textContent = r.ok ? 'Lit' : 'Lantern';
+          if (!r.ok) { lamp.disabled = false; lampAt.delete(f.th.k); }
+          lampHere = found.some((x) => x.lamp);
+          lantern();
+        };
+        line.appendChild(lamp);
+      }
+      if (!picking && !f.isNew && !f.lamp && f.open) {
         const peek = document.createElement('button');
         peek.type = 'button'; peek.className = 'peek'; peek.textContent = 'Read last';
         peek.setAttribute('aria-label', `Read the last bottle with ${f.who || 'them'}`);
@@ -3143,13 +3181,16 @@ async function people() {
       }
       el.appendChild(line);
     }
-    $('homeLede').textContent = found.some((f) => f.isNew) ? 'A bottle is waiting for you.' : 'Tap a name to send a bottle.';
+    const lit = found.filter((f) => f.lamp);
+    lampHere = lit.length > 0;
+    if (scene) scene.lamp = standing() === 'lit' || lampHere ? 1 : 0;
+    $('homeLede').textContent = found.some((f) => f.isNew) ? 'A bottle is waiting for you.' : lit.length ? `${lit[0].who || 'Someone'} lit a lantern for you.` : 'Tap a name to send a bottle.';
     people.found = found;
     pickWords(found.length);
     drawGathers();
   };
   draw(mine.map((th) => person(th, kept(th.k))));
-  const fresh = await Promise.all(mine.map(async (th) => person(th, await notesFor(th.k))));
+  const fresh = await Promise.all(mine.map(async (th) => person(th, await notesFor(th.k, true))));
   if (turn !== people.turn) return;
   draw(fresh);
   // Whose lantern is lit. The first is asked alone: if the server cannot say, the rest are not asked at all.
@@ -3163,11 +3204,12 @@ async function follow(id) {
   let th = await threadByNumber(id);
   if (!th) { await pull(); th = await threadByNumber(id); }
   if (!th) return home();
-  const all = await notesFor(th.k);
+  const all = await notesFor(th.k, true);
   const theirs = all.filter((n) => !isMine(n));
   const pick = theirs.filter((n) => n.at > (th.s || 0)).pop() || theirs.pop() || all.pop();
   if (!pick) return home();
-  count('followed', 'a notification was tapped');
+  count('followed', isLamp(pick) ? 'a lantern was tapped' : 'a notification was tapped');
+  if (isLamp(pick)) { home(); homecoming(); return; }         // not a bottle to open: it is on the shore, by their name
   location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k, pic: pick.pic }));
 }
 
@@ -3376,7 +3418,7 @@ function wire() {
     madeTo = to;
     const link = madeLink = linkFor(location.origin + location.pathname, b);
     // A reply adds to a shore the two of you already share. Say what it will leave there.
-    const before = deskCtx.key ? kept(key).length : 0;
+    const before = deskCtx.key ? kept(key).filter((n) => !isLamp(n)).length : 0;
     const leaves = before ? ` It is bottle ${before + 1} between you` + (before < MAX_SHELLS ? `, and it leaves ${(before + 1) % 5 ? 'a new shell' : 'a starfish'} on the shore you share.` : '.') : '';
     // If their lantern is lit the bottle goes straight to their shore and their phone is told. No link to text.
     const direct = !!(deskCtx.key && reachOf(key).l);
@@ -3586,7 +3628,7 @@ else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState}
 count(bottle ? (seeing ? 'see' : 's_open') : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
 if (bottle) sky(bottle.mood);
 if (beach) { shoreKeeps(readOnes().length); beachLoad(); }
-else if (bottle) { const known = bottle.key ? kept(bottle.key) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
+else if (bottle) { const known = bottle.key ? kept(bottle.key).filter((n) => !isLamp(n)) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
 if (invite) count('gather', 'opened an invitation');
 lantern();
 arriveAndCatchUp();

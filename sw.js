@@ -32,7 +32,8 @@ self.addEventListener('push', (e) => {
     let title = who ? who + ' sent you a bottle' : 'A bottle washed up for you';
     let body = 'Tap to bring it in.';
     let url = d.t ? './#n.' + d.t : './';
-    if (kind === 'lit') { title = 'Notifications are on'; body = 'Your lantern is lit. This is how you will hear that a bottle arrived.'; url = './'; }
+    if (d.k === 'l') { title = who ? who + ' lit a lantern for you' : 'Someone lit a lantern for you'; body = 'Thinking of you. Tap to light one back.'; }
+    if (kind === 'lit') { title = 'Notifications are on'; body = 'This is how you will hear that a bottle arrived.'; url = './'; }
     if (kind === 'watch') { title = 'The bottle needs a look'; body = d.text || 'Phones have reported problems.'; url = 'stats.html'; }
     const options = { body: body, icon: 'icon-192.png', badge: 'badge.png', tag: d.t || kind, renotify: true, data: { url: url } };
     try {
