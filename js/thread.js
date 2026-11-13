@@ -153,6 +153,23 @@ export async function reach(auth, key) {
   } catch { return null; }
 }
 
+/**
+ * Add a note to a beach that many people are filling (see the "g" links in code.js). Anyone holding the beach's key may add
+ * and may read: that is what makes it a card everyone signs. Resolves true if the server took it.
+ * Two people adding in the same second are asked to wait, so it tries a few times.
+ */
+export async function addOpen(key, note) {
+  if (!key || !subtle()) return false;
+  try {
+    const thread = await threadId(key), body = await seal(key, note);
+    for (let turn = 0; turn < 4; turn++) {
+      if ((await rpc('add_bottle', { p_thread: thread, p_body: body })) === 'ok') return true;
+      await new Promise((res) => setTimeout(res, 1300));
+    }
+    return false;
+  } catch { return false; }
+}
+
 /** Every note in a conversation this phone belongs to, oldest first. null if the server could not be asked. */
 export async function list(auth, key) {
   if (!key || !subtle()) return null;

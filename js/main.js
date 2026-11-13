@@ -7,17 +7,20 @@ import { decode, linkFor, MAX_MESSAGE } from './code.js';
 import { keepsakes, grow, keepLine, MAX_SHELLS } from './keeps.js';
 import { Scene, swash, DRY_LINE, MOOD } from './scene.js';
 import { Flat } from './flat.js';
-import { Story } from './story.js';
+import { Story, floating } from './story.js';
 import { Shore } from './audio.js';
-import { newKey, newClaim, add, list, open, reach } from './thread.js';
-import { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber, mobile, reachOf, setReach, rename, forget } from './shore.js';
+import { newKey, newClaim, add, addOpen, list, open, reach } from './thread.js';
+import { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber, mobile, reachOf, setReach, rename, forget, gathers, gatherAdd } from './shore.js';
 import { standing, light, douse, tend, ios, standalone } from './lantern.js';
 import { count } from './count.js';
 import { newPic, prepare, put, get } from './pic.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
-const bottle = decode(location.hash) || decode(qs.get('b'));
+const linked = decode(location.hash) || decode(qs.get('b'));
+const invite = linked && linked.g === 'i' ? linked : null;       // an invitation to add a bottle to a beach someone is filling
+const beach = linked && linked.g === 'o' ? linked : null;        // that beach, opened by the person it is for
+const bottle = invite ? null : linked;                           // what is read here: one bottle, or a beach of them
 const hop = /^#n\.([A-Za-z0-9_-]{22})$/.exec(location.hash);          // a notification was tapped: it names a conversation
 const seeing = qs.has('see');           // the writer looking at their own bottle from "See what they will see"
 const stage = $('stage');
@@ -73,6 +76,7 @@ function shoreKeeps(n) {
 /** The line under the note that says what the shore is keeping. Only for a conversation this phone belongs to. */
 function keepSay() {
   const el = $('keepNote');
+  if (beach) { if (el) el.textContent = beachNotes && beachNotes.length ? `${opened()} of ${beachNotes.length} opened. Each one leaves a shell on your shore, and lights a star.` : ''; return; }
   if (el) el.textContent = keeps && bottle && bottle.key && seat !== 'taken' ? keepLine(keeps) : '';
 }
 
@@ -118,6 +122,12 @@ $('picBig').addEventListener('click', () => { $('picBig').classList.remove('show
 
 function showLetter(instant, note) {
   if (note) shown = note;
+  if (beach) {
+    // The server answered late, or not at all: bring the first bottle in now, or say plainly that they could not be had.
+    if (!shown.id && beachNotes && beachNotes.length) shown = unread()[0] || beachNotes[0];
+    if (!shown.id) shown = { ...beach, message: beachNotes ? 'No bottles have been added to this beach yet.' : 'The bottles could not be brought in just now. Check your connection, then try again.', name: '', to: beach.to };
+    else { markRead(shown.id); shoreKeeps(opened()); }
+  }
   const b = shown;
   sky(b.mood);
   showPic(b);
@@ -160,6 +170,7 @@ function showLetter(instant, note) {
 
 /** Point the reply button at the other person in this note, and keep the conversation on this phone. */
 function address(b) {
+  if (beach) { beachButtons(); return; }
   const known = withWho();
   const mine = isMine(b) || (!b.name && !!known && b.to === known);       // an unsigned note addressed to them is this phone's own
   const other = (mine ? b.to : b.name) || (theirsUnsigned(b) ? known : '');
@@ -176,6 +187,7 @@ async function shelf() {
   const old = $('newest'); if (old) old.remove();
   $('reply').classList.remove('ghost');
   $('sealNote').textContent = '';
+  if (beach) { beachShelf(); beachButtons(); return; }
   if (!bottle || !bottle.key) return;
   // Break the seal: take this bottle's seat in its conversation, or find that another phone already has.
   seat = await open(await token(), bottle.key, bottle.claim);
@@ -296,6 +308,175 @@ $('homeClose').onclick = () => {
   $('homecard').classList.remove('show');
   if (homeBack) { try { history.replaceState(null, '', homeBack); } catch {} homeBack = ''; }
 };
+
+// ---------------------------------------------------------------- a beach many people fill for one person (the "g" links in code.js)
+//
+// One person starts it and gets two links. The invitation goes to everyone who should add a bottle. The beach goes to
+// the person it is for, who finds every bottle washed up together and brings them in one at a time.
+// The bottles are kept by the server, scrambled with the beach's key, which both links carry: anyone with either link
+// can read every bottle, like a card that everyone signs. Unlike a single bottle, a beach does need the server.
+
+let beachNotes = null;       // every bottle on the beach being opened, oldest first, once the server has answered
+let gatherSaid = '';         // on an invitation: how many bottles so far, and from whom
+const readBook = () => { try { const v = JSON.parse(localStorage.getItem('bottle-read') || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
+const readOnes = () => { const v = readBook()[beach.key]; return Array.isArray(v) ? v : []; };
+function markRead(id) {
+  try {
+    const v = readBook();
+    v[beach.key] = [...new Set([...readOnes(), id])].slice(-400);
+    const keys = Object.keys(v);
+    for (const k of keys.slice(0, Math.max(0, keys.length - 12))) if (k !== beach.key) delete v[k];
+    localStorage.setItem('bottle-read', JSON.stringify(v));
+  } catch {}
+}
+const unread = () => (beachNotes || []).filter((n) => !readOnes().includes(n.id));
+const opened = () => (beachNotes || []).filter((n) => readOnes().includes(n.id)).length;
+/** "5 bottles so far, from Mike, Dad and Ana." */
+function sofar(all) {
+  if (!all || !all.length) return '';
+  const names = [...new Set(all.map((n) => n.name).filter(Boolean))];
+  return `${all.length === 1 ? '1 bottle' : all.length + ' bottles'} so far` + (names.length ? ', from ' + listed(names.slice(0, 4)) + (names.length > 4 ? ' and others' : '') : '') + '.';
+}
+
+/** Bring a beach's bottles in from the server. The one riding in is the first not yet opened. */
+async function beachLoad() {
+  const all = await list(null, beach.key);
+  if (!all) return false;
+  beachNotes = all;
+  if (!story || story.state === 'arrive' || story.state === 'adrift') { const first = unread()[0] || all[0]; if (first) { shown = first; sky(first.mood); } }
+  shoreKeeps(opened());
+  count('gather', `opened a beach of ${Math.min(all.length, 200)}`);
+  return true;
+}
+/** The bottles still waiting out in the water, for the picture. */
+function stillOut(t) {
+  if (!beach || !beachNotes) return null;
+  const out = [];
+  beachNotes.forEach((n, i) => { if (n !== shown && !readOnes().includes(n.id) && out.length < 14) out.push(floating(i, t)); });
+  return out;
+}
+/** The button under a note from a beach: the next bottle, or, after the last, a bottle of their own. */
+function beachButtons() {
+  const btn = $('reply'), left = unread().length;
+  btn.classList.remove('ghost');
+  if (!beachNotes) { btn.textContent = 'Try again'; btn.onclick = () => location.reload(); return; }
+  if (left) { btn.textContent = left === 1 ? 'Bring in the last bottle' : `Bring in the next bottle (${left} left)`; btn.onclick = nextBottle; }
+  else { btn.textContent = 'Write a bottle of your own'; btn.onclick = () => desk({ fresh: true }); }
+  const hands = new Set((beachNotes || []).map((n) => n.name).filter(Boolean)).size;
+  $('sealNote').textContent = left || !beachNotes.length ? '' : `That was the last one. ${beachNotes.length === 1 ? '1 bottle' : beachNotes.length + ' bottles'}${hands > 1 ? `, from ${hands} people` : ''}.`;
+}
+/** The bottles already opened, to read again. The ones still in the water stay a surprise. */
+function beachShelf() {
+  const el = $('shelf');
+  el.textContent = '';
+  const done = (beachNotes || []).filter((n) => readOnes().includes(n.id));
+  if (done.length < 2) return;
+  const head = document.createElement('div');
+  head.className = 'shelfHead';
+  head.textContent = `Opened so far (${done.length} of ${beachNotes.length})`;
+  const row = document.createElement('div');
+  row.className = 'shelfRow';
+  for (const n of [...done].reverse()) {
+    const chip = document.createElement('button');
+    chip.className = 'chip' + (n === shown ? ' on' : '');
+    chip.textContent = n.name || 'A note';
+    chip.onclick = () => { showLetter(false, n); for (const c of row.children) c.classList.toggle('on', c === chip); };
+    row.appendChild(chip);
+  }
+  el.append(head, row);
+}
+/** Put the note away and let the next bottle ride in. */
+function nextBottle() {
+  const next = unread()[0];
+  if (!next || !story) return;
+  shown = next;
+  sky(next.mood);
+  $('letter').classList.remove('show');
+  $('after').classList.remove('show');
+  const t = story.t;
+  story = new Story(scene);
+  story.t = t;
+  story.down(scene.W / 2, scene.H * 0.62); story.up();       // the water has been touched already: straight to the bottle riding in
+  count('gather', 'brought in another bottle', true);
+}
+
+/** The two links of a beach. */
+function beachLinks(g) {
+  const base = location.origin + location.pathname, b = { message: g.o || '', name: g.name || '', to: g.to || '', key: g.k };
+  return { invite: linkFor(base, { ...b, g: 'i' }), beach: linkFor(base, { ...b, g: 'o' }) };
+}
+/** A pair of buttons that pass a link on: the share sheet where there is one, and always a way to copy it. */
+function passOn(shareId, copyId, link, words, copyLabel) {
+  const share = $(shareId), copy = $(copyId);
+  share.style.display = navigator.share ? '' : 'none';
+  share.onclick = async () => {
+    try { await navigator.share({ title: 'A message in a bottle', text: words, url: link }); count('share', 'sent', true); }
+    catch (e) { count('share', (e && e.name) === 'AbortError' ? 'closed without sending' : 'failed: ' + ((e && e.name) || ''), true); }
+  };
+  copy.textContent = copyLabel;
+  copy.onclick = async () => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(link); ok = true; } catch {}
+    count('copy', ok ? 'copied' : 'could not copy', true);
+    copy.textContent = ok ? 'Copied. Now paste it in a text.' : 'Could not copy it';
+    setTimeout(() => { copy.textContent = copyLabel; }, 3500);
+  };
+}
+/** The screen with a beach's links. how: 'started' just now, 'joined' a bottle was just added from an invitation, 'mine' looked up from the shore. */
+function showGather(g, how) {
+  const el = $('made'), links = beachLinks(g), who = g.to || 'them', compose = $('compose');
+  el.className = how === 'joined' ? 'gather joined' : 'gather';
+  madeLink = '';
+  $('madeTitle').textContent = how === 'joined' ? 'Your bottle is in the water' : how === 'started' ? 'The beach is started' : `The beach for ${who}`;
+  $('madeLede').textContent = how === 'joined' ? `${g.to || 'They'} will find it washed up with all the others. Know someone else who should add one? Pass the invitation on.`
+    : `Send the invitation to everyone who should add a bottle. When it is time, send ${who} the beach, and every bottle will be waiting there.`;
+  $('gatherCount').textContent = '';
+  list(null, g.k).then((all) => { if (all && el.classList.contains('gather')) $('gatherCount').textContent = sofar(all); });
+  $('inviteLabel').textContent = how === 'joined' ? 'The invitation' : '1. Invite people to add a bottle';
+  passOn('inviteShare', 'inviteCopy', links.invite, `We are filling a beach with bottles for ${who}${g.o ? ' (' + g.o + ')' : ''}. Add yours here:`, 'Copy the invitation link');
+  $('beachPart').style.display = how === 'joined' ? 'none' : '';
+  $('beachLabel').textContent = `2. When it is time, send ${who} the beach`;
+  $('beachShare').textContent = `Share ${whose(g.to)} beach`;
+  passOn('beachShare', 'beachCopy', links.beach, `${g.to ? g.to + ', a' : 'A'} whole beach of bottles washed up for you.`, `Copy the link to ${whose(g.to)} beach`);
+  $('again').textContent = threads().length || gathers().length ? 'Back to your shore' : 'Write a bottle of your own';
+  compose.classList.remove('home');
+  compose.classList.add('show', 'done');
+  compose.scrollTop = 0;
+  lantern();
+}
+/** On the shore: the beaches this phone started, each a tap from its links. */
+function drawGathers() {
+  const el = $('gathers');
+  el.textContent = '';
+  for (const g of gathers().slice(0, 6)) {
+    const row = document.createElement('button');
+    row.type = 'button'; row.className = 'row';
+    const who = document.createElement('span'); who.className = 'rowWho'; who.textContent = `A beach for ${g.to || 'someone'}`;
+    const sub = document.createElement('span'); sub.className = 'rowSub'; sub.textContent = (g.o ? g.o + ' · ' : '') + 'tap for its links';
+    row.append(who, sub);
+    row.onclick = () => showGather({ ...g, name: myName() }, 'mine');
+    el.appendChild(row);
+  }
+}
+/** The desk was used to start a beach, or to add a bottle to one from an invitation. The bottle is only good once the server has it. */
+async function joinOrStart(message, name, pic) {
+  const starting = !!deskCtx.gather;
+  const to = starting ? $('forWho').value.trim() : invite.to;
+  if (starting && !to) { $('gatherSay').textContent = 'Say who the beach is for.'; $('forWho').focus(); return; }
+  const why = starting ? $('occasion').value.trim().slice(0, 80) : invite.message;
+  let key = starting ? '' : invite.key;
+  try { if (!key) key = newKey(); } catch {}
+  const label = $('make').textContent;
+  $('make').disabled = true; $('make').textContent = starting ? 'Starting it' : 'Adding it';
+  $('gatherSay').textContent = '';
+  const ok = await addOpen(key, { m: message, n: name, mood: deskMood, to, id: Math.random().toString(36).slice(2, 12), t: Date.now(), ...(pic ? { p: pic } : {}) });
+  $('make').disabled = false; $('make').textContent = label;
+  if (!ok) { $('gatherSay').textContent = 'It could not be added just now. Check your connection and try again.'; count('f_save', 'a bottle for a beach was not taken', true); return; }
+  count('gather', starting ? 'started a beach' : 'added a bottle', true);
+  count('made', `${deskMood} ${starting ? 'beach started' : 'beach bottle'} ${message.length} letters${pic ? ', with a picture' : ''}`, true);
+  if (starting) gatherAdd(key, to, why);
+  showGather({ k: key, to, o: why, name: starting ? name : invite.name }, starting ? 'started' : 'joined');
+}
 
 // ---------------------------------------------------------------- your shore (the people) and the writing desk
 
@@ -445,6 +626,7 @@ async function people() {
     $('homeLede').textContent = found.some((f) => f.isNew) ? 'A bottle is waiting for you.' : 'Tap a name to send a bottle.';
     people.found = found;
     pickWords(found.length);
+    drawGathers();
   };
   draw(mine.map((th) => person(th, kept(th.k))));
   const fresh = await Promise.all(mine.map(async (th) => person(th, await notesFor(th.k))));
@@ -471,6 +653,18 @@ async function follow(id) {
 
 /** The words on the desk: who it is for, and whether it will go straight there or by a link. */
 function deskWords() {
+  $('desk').classList.toggle('gather', !!deskCtx.gather);
+  $('gatherSay').textContent = deskCtx.join ? gatherSaid : '';
+  if (deskCtx.join || deskCtx.gather) {
+    const who = (invite && deskCtx.join && invite.to) || 'someone';
+    $('deskTitle').textContent = deskCtx.join ? `A bottle for ${who}` : 'A beach full of bottles';
+    $('deskLede').textContent = deskCtx.join
+      ? `${invite.name || 'Someone'} is filling a beach with bottles for ${who}${invite.message ? ': ' + invite.message : ''}. Add yours. ${invite.to || 'They'} will find them all washed up together.`
+      : 'For a birthday, a farewell, a big day. You get one link for everyone to add a bottle, and one link for the person, who finds them all washed up together.';
+    $('make').textContent = deskCtx.join ? 'Add my bottle' : 'Start the beach';
+    $('mobileRow').style.display = 'none';
+    return;
+  }
   if (deskCtx.many) {
     const all = deskCtx.many, lit = all.filter((p) => reachOf(p.key).l).length;
     $('deskTitle').textContent = 'A bottle for ' + listed(all.map((p) => p.to || 'someone'));
@@ -502,14 +696,17 @@ function desk(ctx) {
   compose.classList.add('show');
   compose.scrollTop = 0;
   wire();
-  const known = threads().length > 0;
-  const home = known && !deskCtx.key && !deskCtx.to && !deskCtx.fresh && !deskCtx.many;
+  const known = threads().length > 0 || gathers().length > 0;
+  const home = known && !deskCtx.key && !deskCtx.to && !deskCtx.fresh && !deskCtx.many && !deskCtx.join && !deskCtx.gather;
   if (!home) { picking = null; editing = false; }
   compose.classList.toggle('home', home);
   $('toHome').style.display = known && !home ? 'block' : 'none';
   if (home) { people(); lantern(); count('home', Math.min(threads().length, 12) + ' people'); return; }
   $('toChip').textContent = '';                       // the title already says who it is for
-  $('forRow').style.display = deskCtx.to || deskCtx.many ? 'none' : '';
+  $('forRow').style.display = deskCtx.to || deskCtx.many || deskCtx.join ? 'none' : '';
+  $('occasion').value = '';
+  $('gatherB').style.display = deskCtx.to || deskCtx.key || deskCtx.many || deskCtx.join || deskCtx.gather ? 'none' : 'block';
+  if (deskCtx.join) { gatherSaid = ''; list(null, invite.key).then((all) => { gatherSaid = sofar(all); if (deskCtx.join && !compose.classList.contains('done')) $('gatherSay').textContent = gatherSaid; }); }
   $('forWho').value = '';
   $('mobile').value = '';
   $('pick').style.display = navigator.contacts && navigator.contacts.select ? '' : 'none';
@@ -531,7 +728,7 @@ function desk(ctx) {
 /** The "bottle is ready" screen. how: 'link' it goes by a link, 'sending' it is on its way to a lit lantern. */
 function made(how, to, number, extra) {
   const el = $('made');
-  el.classList.remove('many');
+  el.classList.remove('many', 'gather', 'joined');
   el.classList.toggle('direct', how === 'sending');
   el.classList.toggle('busy', how === 'sending');
   $('madeTitle').textContent = how === 'sending' ? (to ? `Sending to ${to}` : 'Sending it') : 'Your bottle is ready';
@@ -560,7 +757,7 @@ function sendMany(message, name, pic) {
   const who = deskCtx.many, el = $('made'), list = $('sentList');
   const run = sendMany.run = (sendMany.run || 0) + 1;
   madeLink = ''; madeTo = '';
-  el.classList.remove('direct', 'busy');
+  el.classList.remove('direct', 'busy', 'gather', 'joined');
   el.classList.add('many');
   $('madeTitle').textContent = `Sending to ${who.length} people`;
   $('madeLede').textContent = 'Carrying them down to the water.';
@@ -648,6 +845,7 @@ function wire() {
     const pic = deskPic ? deskPic.secret : '';
     const name = who.value.trim();
     setName(name);
+    if (deskCtx.join || deskCtx.gather) { joinOrStart(msg.value.trim(), name, pic); return; }
     if (deskCtx.many) { sendMany(msg.value.trim(), name, pic); return; }
     let key = deskCtx.key || '', claim = '';
     try { if (!key) key = newKey(); claim = newClaim(); } catch {}
@@ -718,6 +916,8 @@ function wire() {
   $('text').addEventListener('click', () => count('share', 'opened Messages, already addressed', true));
   $('showLink').addEventListener('click', () => $('made').classList.remove('direct'));
   $('again').addEventListener('click', () => desk({}));
+  $('gatherA').addEventListener('click', () => desk({ gather: true }));
+  $('gatherB').addEventListener('click', () => desk({ gather: true }));
   $('newOne').addEventListener('click', () => {
     if (!picking) { desk({ fresh: true }); return; }
     const chosen = (people.found || []).filter((f) => picking.has(f.th.k)).map((f) => ({ key: f.th.k, to: f.who }));
@@ -756,7 +956,7 @@ function wire() {
 function homecoming() {
   const compose = $('compose');
   if (bottle && !compose.classList.contains('show')) return;
-  if (compose.classList.contains('done') || deskCtx.to || deskCtx.key || deskCtx.fresh || deskCtx.many) { lantern(); return; }
+  if (compose.classList.contains('done') || deskCtx.to || deskCtx.key || deskCtx.fresh || deskCtx.many || deskCtx.join || deskCtx.gather) { lantern(); return; }
   if (compose.classList.contains('home')) { people(); lantern(); }
   else if (!$('msg').value && threads().length && compose.classList.contains('show')) desk({});      // an empty desk becomes the shore once there are people
   else lantern();
@@ -865,7 +1065,9 @@ if (scene) setTimeout(() => count('view', scene.info() + (scene.flat ? ` | 3D re
 else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight}`);
 count(bottle ? (seeing ? 'see' : 's_open') : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
 if (bottle) sky(bottle.mood);
-if (bottle) { const known = bottle.key ? kept(bottle.key) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
+if (beach) { shoreKeeps(readOnes().length); beachLoad(); }
+else if (bottle) { const known = bottle.key ? kept(bottle.key) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
+if (invite) count('gather', 'opened an invitation');
 lantern();
 arriveAndCatchUp();
 const ready = () => { window.__bottleReady = true; const p = $('plain'); if (p) p.className = ''; };
@@ -874,7 +1076,7 @@ if (!scene) {
   // Nothing to draw on at all. The words still get through.
   ready();
   $('veil').classList.add('up');
-  if (bottle) showLetter(true); else desk({});
+  if (bottle) showLetter(true); else desk(invite ? { join: true } : {});
 } else {
   run();
 }
@@ -883,7 +1085,7 @@ function run() {
   story = new Story(scene);
   const audio = new Shore();
   const reading = !!bottle;
-  if (!reading) desk({});
+  if (!reading) desk(invite ? { join: true } : {});
   let W = 0, H = 0, quality = 1;
 
   function screenAngle() {
@@ -1034,7 +1236,8 @@ function run() {
     audio.surf((swash(0, t + 0.05) - swash(0, t)) / 0.05, (swash(0, t) + 0.72) / 1.6);
 
     if (reading) {
-      const h = story.hint();
+      const many = beach && beachNotes && story.state === 'arrive' ? beachNotes.length : 0;
+      const h = many > 1 ? `${many} bottles washed up for you. Touch the water` : story.hint();
       if (h !== hintText) { hintText = h; hintEl.textContent = h; hintEl.classList.toggle('show', !!h); hintEl.classList.toggle('big', story.state === 'arrive'); }
       // the ghost finger
       const cue = story.cue();
@@ -1071,6 +1274,7 @@ function run() {
       bottle: reading && story.visible ? story.bottleMatrix() : null,
       cork: reading ? story.corkMatrix() : null,
       note: reading ? story.noteMatrix() : null,
+      others: stillOut(t),
       noteOut: story.note > 0.55,
       wet: held ? Math.max(0, 1 - story.st / 9) * (story.state === 'held' ? 1 : 0.4) : (zs > story.bz - 0.3 ? 1 : 0.6),
     });
@@ -1103,7 +1307,7 @@ function run() {
   // For looking at it by hand while building (add ?dev to the address).
   if (qs.has('dev')) {
     window.dev = {
-      story, get scene() { return scene; }, audio, frame, DRY_LINE, quality: () => quality, tries: () => tries,
+      get story() { return story; }, get scene() { return scene; }, audio, frame, DRY_LINE, quality: () => quality, tries: () => tries,
       lose() { const x = scene.gl && scene.gl.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); return !!x; },   // pretend the phone took the 3D away
       run(secs) { for (let k = 0; k < secs * 60; k++) frame(1 / 60); return story.state; },
       async shot(name) {          // save what is on the canvas right now (needs dev-server.mjs)

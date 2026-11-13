@@ -28,6 +28,14 @@ export const threads = () => stored('bottle-threads').filter((x) => x && typeof 
 export const isMine = (n) => !!n && (n.id ? stored('bottle-mine').includes(n.id) : !!(n.name && n.name === myName()));
 export function wrote(id) { set('bottle-mine', JSON.stringify([id, ...stored('bottle-mine')].slice(0, 300))); save(); }
 
+// Beaches this phone started for someone, to be filled by many people (see the "g" links in code.js): the key, who it is for, what it is for.
+export const gathers = () => stored('bottle-gathers').filter((x) => x && typeof x.k === 'string');
+export function gatherAdd(k, to, why) {
+  if (!k) return;
+  set('bottle-gathers', JSON.stringify([{ k, to: to || '', o: why || '', t: Date.now() }, ...gathers().filter((x) => x.k !== k)].slice(0, 20)));
+  save();
+}
+
 // Conversations taken off this phone by hand. A copy of the shore kept elsewhere must not bring them back.
 const gone = () => stored('bottle-gone').filter((x) => typeof x === 'string');
 
@@ -124,12 +132,15 @@ export async function token() {
 
 // ---------------------------------------------------------------- a copy with the server, scrambled
 
-const state = () => ({ v: 1, name: myName(), threads: threads(), mine: stored('bottle-mine'), gone: gone() });
+const state = () => ({ v: 1, name: myName(), threads: threads(), mine: stored('bottle-mine'), gone: gone(), gathers: gathers() });
 
 /** Fold another copy of the shore into this one. Returns true if anything here changed. */
 function fold(other) {
   if (!other || typeof other !== 'object') return false;
   const before = JSON.stringify(state());
+  const beaches = new Map();
+  for (const x of [...(Array.isArray(other.gathers) ? other.gathers : []), ...gathers()]) if (x && typeof x.k === 'string') beaches.set(x.k, { k: x.k, to: String(x.to || '').slice(0, 40), o: String(x.o || '').slice(0, 80), t: x.t || 0 });
+  set('bottle-gathers', JSON.stringify([...beaches.values()].sort((x, y) => y.t - x.t).slice(0, 20)));
   const left = [...new Set([...gone(), ...(Array.isArray(other.gone) ? other.gone.filter((x) => typeof x === 'string') : [])])].slice(0, 60);
   set('bottle-gone', JSON.stringify(left));
   const by = new Map();

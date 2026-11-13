@@ -1,7 +1,7 @@
 // The flat shore (the safety net for a phone with no 3D): the whole story must play on it by touch alone,
 // and painting it must never throw, in any state, under any sky.
 import { Flat } from '../js/flat.js';
-import { Story } from '../js/story.js';
+import { Story, floating } from '../js/story.js';
 import { DRY_LINE } from '../js/scene.js';
 import { keepsakes, grow } from '../js/keeps.js';
 import assert from 'node:assert';
@@ -32,6 +32,12 @@ for (const mood of [0, 1, 2]) {
 view.keeps = keepsakes('abcdefghijklmnopqrstuv', 12);
 for (let i = 0; i < 400; i++) grow(view.keeps, 1 / 60);
 for (const mood of [0, 1, 2]) { view.mood = mood; paint(); }
+// and a beach many people have filled: a dozen bottles still waiting out in the water
+{
+  const before = calls;
+  view.draw({ time: 3, dim: 0, ripples: [], shadow: [0, 0, 1, 0], bottle: null, cork: null, note: null, others: Array.from({ length: 12 }, (_, i) => floating(i, 3)) });
+  assert(calls - before > 200, 'the waiting bottles are painted');
+}
 story.down(195, 600); story.up(); seen.push(story.state);
 run(12);
 assert(story.seen, 'the bottle comes into sight');

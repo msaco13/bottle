@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://msaco13.github.io/bottle/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.500' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=d68973d4d2">
+<link rel="stylesheet" href="css/style.css?v=1734d8fbbf">
 </head>
 <body>
 <div id="stage">
@@ -60,8 +60,10 @@
       <h1>Your shore</h1>
       <p class="lede" id="homeLede">Tap a name to send a bottle.</p>
       <div id="people"></div>
+      <div id="gathers"></div>
       <button class="btn" type="button" id="newOne">A bottle for someone new</button>
       <button class="link" type="button" id="several">One bottle for several people</button>
+      <button class="link" type="button" id="gatherA">A beach full of bottles for someone, from everyone</button>
       <button class="link" type="button" id="editPeople">Rename or remove someone</button>
       <div class="lantern" id="lanternD"></div>
       <button class="link" type="button" id="install">Put Bottle on your home screen</button>
@@ -71,6 +73,7 @@
       <h1 id="deskTitle">Message in a bottle</h1>
       <div id="toChip"></div>
       <p class="lede" id="deskLede">Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.</p>
+      <p class="lede" id="gatherSay" aria-live="polite"></p>
       <div id="names">
         <div id="forRow">
           <label for="forWho">To <span>(optional)</span></label>
@@ -80,6 +83,10 @@
           <label for="who">From <span>(sign it)</span></label>
           <input id="who" type="text" maxlength="40" placeholder="Your name">
         </div>
+      </div>
+      <div id="occasionRow">
+        <label for="occasion">What it is for <span>(optional)</span></label>
+        <input id="occasion" type="text" maxlength="80" placeholder="Happy 40th">
       </div>
       <div id="mobileRow">
         <label for="mobile">Their mobile <span>(optional: then one tap texts it)</span></label>
@@ -104,6 +111,7 @@
       </div>
       <button class="btn" type="submit" id="make">Create bottle</button>
       <div class="lantern" id="lanternC"></div>
+      <button class="link" type="button" id="gatherB">Or fill a beach with bottles from everyone</button>
       <button class="link" type="button" id="toHome">Back to your shore</button>
     </form>
     <div id="made">
@@ -117,6 +125,17 @@
       </div>
       <button class="link" type="button" id="showLink">Text the link as well</button>
       <div id="sentList"></div>
+      <div id="gatherBox">
+        <p class="lede" id="gatherCount" aria-live="polite"></p>
+        <label id="inviteLabel">1. Invite people to add a bottle</label>
+        <button class="btn" type="button" id="inviteShare">Share the invitation</button>
+        <button class="btn ghost" type="button" id="inviteCopy">Copy the invitation link</button>
+        <div id="beachPart">
+          <label id="beachLabel">2. When it is time, send them the beach</label>
+          <button class="btn" type="button" id="beachShare">Share the beach</button>
+          <button class="btn ghost" type="button" id="beachCopy">Copy the link to the beach</button>
+        </div>
+      </div>
       <a class="btn ghost" id="try" href="#">See what they will see</a>
       <div class="lantern" id="lanternB"></div>
       <button class="link" id="again">Write another</button>
@@ -196,6 +215,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain("a file failed to load"); }, true);   // or a file failed outright
 })();
 </script>
-<script defer src="app.js?v=d68973d4d2"></script>
+<script defer src="app.js?v=1734d8fbbf"></script>
 </body>
 </html>

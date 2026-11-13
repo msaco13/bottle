@@ -12,6 +12,10 @@
 //        claim the one seat this bottle carries: the first phone to open it joins the conversation
 //   [message, name, mood, to, key, claim, pic]  added later still, optional:
 //        pic   the secret of a picture that came with the note (see pic.js). With one, the words may be empty.
+//   [message, name, mood, to, key, claim, pic, g]  added later still, optional:
+//        g     this link is not one note but a beach many people are filling for one person (the key is the beach's).
+//              "i": the invitation, where a bottle is added.   "o": the beach itself, for the person it is for.
+//              message is what it is for ("Happy 40th"; may be empty), name is who started it, to is who it is for.
 // Plain base64 on purpose (no compression): it opens on every phone, old or new.
 //
 // PROMISE: every link ever made must keep opening. New things may only be added
@@ -24,7 +28,7 @@ export const MOODS = { dusk: '', night: 'n', dawn: 'a' };
 const MOOD_OF = { n: 'night', a: 'dawn' };
 
 /** bottle: { message, name, mood, to, key, claim, pic } */
-export function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '') {
+export function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '', g = '') {
   const list = [
     String(message).slice(0, MAX_MESSAGE),
     String(name || '').trim().slice(0, MAX_NAME),
@@ -33,6 +37,7 @@ export function encode(message, name = '', mood = 'dusk', to = '', key = '', cla
     /^[A-Za-z0-9_-]{16,32}$/.test(key || '') ? key : '',
     /^[A-Za-z0-9_-]{8,32}$/.test(claim || '') ? claim : '',
     /^[A-Za-z0-9_-]{22}$/.test(pic || '') ? pic : '',
+    g === 'i' || g === 'o' ? g : '',
   ];
   while (list.length > 1 && list[list.length - 1] === '') list.pop();   // old-style links stay exactly as they were
   const bytes = new TextEncoder().encode(JSON.stringify(list));
@@ -56,7 +61,8 @@ export function decode(hash) {
     const v = JSON.parse(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
     const str = (x) => (typeof x === 'string' ? x : '');
     const pic = Array.isArray(v) && /^[A-Za-z0-9_-]{22}$/.test(str(v[6])) ? v[6] : '';
-    if (!Array.isArray(v) || typeof v[0] !== 'string' || (!v[0].trim() && !pic)) return null;      // a bottle has words, or a picture, or both
+    const g = Array.isArray(v) && (v[7] === 'i' || v[7] === 'o') && /^[A-Za-z0-9_-]{16,32}$/.test(str(v[4])) ? v[7] : '';
+    if (!Array.isArray(v) || typeof v[0] !== 'string' || (!v[0].trim() && !pic && !g)) return null;      // a bottle has words, or a picture, or both. A beach needs neither.
     return {
       message: v[0].slice(0, MAX_MESSAGE),
       name: str(v[1]).slice(0, MAX_NAME),
@@ -65,6 +71,7 @@ export function decode(hash) {
       key: /^[A-Za-z0-9_-]{16,32}$/.test(str(v[4])) ? v[4] : '',
       claim: /^[A-Za-z0-9_-]{8,32}$/.test(str(v[5])) ? v[5] : '',
       ...(pic ? { pic } : {}),          // only there when the bottle carries one: every older link reads exactly as it always did
+      ...(g ? { g } : {}),
     };
   } catch {
     return null;
@@ -72,5 +79,5 @@ export function decode(hash) {
 }
 
 export function linkFor(base, b) {
-  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic);
+  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic, b.g);
 }

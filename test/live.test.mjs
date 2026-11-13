@@ -1,6 +1,6 @@
 // Against the real Bottle database, by hand: node test/live.test.mjs
 // It proves the promises about who can read what. It leaves a few scrambled test rows behind.
-import { newKey, newClaim, threadId, seal, add, list, open, reach, rpc, notify, box, unbox, hex, b64, SERVER } from '../js/thread.js';
+import { newKey, newClaim, threadId, seal, add, addOpen, list, open, reach, rpc, notify, box, unbox, hex, b64, SERVER } from '../js/thread.js';
 import { newPic, put, get, nameOf } from '../js/pic.js';
 import assert from 'node:assert';
 
@@ -78,6 +78,15 @@ assert.equal(await rpc('handoff_put', { p_id: id, p_blob: await box('handoff:' +
 assert.deepEqual(await unbox('handoff:' + code, await rpc('handoff_take', { p_id: id })), { s: 'x'.repeat(22) });
 assert.equal(await rpc('handoff_take', { p_id: id }), null, 'a parcel opens once');
 say('the shore copy and the one-time parcel work');
+
+// A beach many people fill for one person: anyone holding its key may add and may read. Nobody without it can.
+const shore = newKey();
+assert.equal(await addOpen(shore, note('Forty looks good on you.', 'Mike', 'Ana')), true);
+assert.equal(await addOpen(shore, note('Proud of you, kiddo.', 'Dad', 'Ana')), true, 'a second bottle straight after the first is taken, after a short wait');
+const washed = await list(null, shore);
+assert.deepEqual(washed.map((n) => n.name), ['Mike', 'Dad'], 'the person it is for finds every bottle, oldest first');
+assert.deepEqual(await list(null, newKey()), [], 'a key nobody used holds nothing');
+say('a beach takes bottles from anyone with its key and gives them all back');
 
 // A picture: left with the server scrambled, fetched back whole, and out of reach of everything else.
 const pic = newPic(), photo = new Uint8Array(2000).map((_, i) => (i * 37) % 256);

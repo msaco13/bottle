@@ -672,35 +672,42 @@ export class Scene {
       gl.uniform1f(this.blit.u.uGrain, (this._frame++ % 64) * 1.37);
       this._quad();
     }
-    if (!s.bottle) return;
+    const others = s.others && s.others.length ? [...s.others].sort((m, n) => m[14] - n[14]).slice(-14) : [];      // farthest first
+    if (!s.bottle && !others.length) return;
 
-    // 3. the bottle: through the glass, then what is inside it, then the shine on top
+    // 3. the bottle: through the glass, then what is inside it, then the shine on top.
+    //    On a beach many people have filled, the bottles still waiting out in the water are drawn first, the same way.
     const vp = this.viewProj();
     gl.clear(gl.DEPTH_BUFFER_BIT);
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
-    gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
-    const glassPass = (pass) => {
+    const glassPass = (pass, model, wet) => {
       gl.useProgram(this.glass.p);
       const g = this.glass.u;
-      gl.uniformMatrix4fv(g.uModel, false, s.bottle); gl.uniformMatrix4fv(g.uVP, false, vp);
+      gl.uniformMatrix4fv(g.uModel, false, model); gl.uniformMatrix4fv(g.uVP, false, vp);
       gl.uniform3fv(g.uCam, b.pos); gl.uniform2f(g.uRes, pw, ph);
-      gl.uniform1i(g.uBg, 0); gl.uniform1i(g.uNoise, 1); gl.uniform1f(g.uPass, pass); gl.uniform1f(g.uTime, tm); gl.uniform1f(g.uWet, s.wet || 0); gl.uniform1f(g.uMood, this.mood); gl.uniform3fv(g.uSun, SUNS[this.mood]);
+      gl.uniform1i(g.uBg, 0); gl.uniform1i(g.uNoise, 1); gl.uniform1f(g.uPass, pass); gl.uniform1f(g.uTime, tm); gl.uniform1f(g.uWet, wet); gl.uniform1f(g.uMood, this.mood); gl.uniform3fv(g.uSun, SUNS[this.mood]);
       this._drawMesh(this.mBottle, this.glass);
     };
-    gl.depthMask(false);
-    if (!this.direct) glassPass(0);
-    gl.depthMask(true);
-    gl.disable(gl.CULL_FACE);
-    gl.useProgram(this.solid.p);
-    const so = this.solid.u;
-    gl.uniformMatrix4fv(so.uVP, false, vp); gl.uniform3fv(so.uCam, b.pos); gl.uniform1f(so.uTime, tm); gl.uniform1i(so.uNoise, 1); gl.uniform1f(so.uMood, this.mood); gl.uniform3fv(so.uSun, SUNS[this.mood]);
-    if (s.note) { gl.uniformMatrix4fv(so.uModel, false, s.note); gl.uniform1f(so.uKind, 1); gl.uniform1f(so.uShade, s.noteOut ? 0 : 1); this._drawMesh(this.mNote, this.solid); }
-    if (s.cork) { gl.uniformMatrix4fv(so.uModel, false, s.cork); gl.uniform1f(so.uKind, 0); gl.uniform1f(so.uShade, 0); this._drawMesh(this.mCork, this.solid); }
-    gl.enable(gl.CULL_FACE);
-    gl.depthMask(false);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    glassPass(1);
-    gl.disable(gl.BLEND); gl.depthMask(true); gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
+    const whole = (model, note, cork, noteOut, wet) => {
+      gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+      gl.depthMask(false);
+      if (!this.direct) glassPass(0, model, wet);
+      gl.depthMask(true);
+      gl.disable(gl.CULL_FACE);
+      gl.useProgram(this.solid.p);
+      const so = this.solid.u;
+      gl.uniformMatrix4fv(so.uVP, false, vp); gl.uniform3fv(so.uCam, b.pos); gl.uniform1f(so.uTime, tm); gl.uniform1i(so.uNoise, 1); gl.uniform1f(so.uMood, this.mood); gl.uniform3fv(so.uSun, SUNS[this.mood]);
+      if (note) { gl.uniformMatrix4fv(so.uModel, false, note); gl.uniform1f(so.uKind, 1); gl.uniform1f(so.uShade, noteOut ? 0 : 1); this._drawMesh(this.mNote, this.solid); }
+      if (cork) { gl.uniformMatrix4fv(so.uModel, false, cork); gl.uniform1f(so.uKind, 0); gl.uniform1f(so.uShade, 0); this._drawMesh(this.mCork, this.solid); }
+      gl.enable(gl.CULL_FACE);
+      gl.depthMask(false);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      glassPass(1, model, wet);
+      gl.disable(gl.BLEND); gl.depthMask(true);
+    };
+    for (const m of others) whole(m, M.mul(m, M.translate(0, NOTE_SEAT, 0)), M.mul(m, M.translate(0, CORK_SEAT, 0)), false, 1);
+    if (s.bottle) whole(s.bottle, s.note, s.cork, s.noteOut, s.wet || 0);
+    gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE);
   }
 
   _quad() {
