@@ -1,6 +1,7 @@
 // The notification sender for Message in a bottle. Runs inside the Bottle Supabase project.
 //
 //   { do: "bottle", auth, thread }   a member just added a bottle: tell the other members' phones
+//   { do: "bottle", auth, thread, k: "l" }   the same, for a lantern lit for someone: the phones are told it is a lantern
 //   { do: "lit", auth }              a phone just lit its lantern: send it a first notification, as proof
 //   { do: "watch" }                  called every hour from inside the database: tell the owner if phones reported problems
 //   { do: "key" }                    the public key browsers need to subscribe
@@ -73,7 +74,7 @@ Deno.serve(async (req: Request) => {
     if (b.do === "key") return json({ key: (await vapid()).pub });
     if (b.do === "bottle" && ok(b.auth) && ok(b.thread)) {
       const subs = await rpc("push_plan", { p_auth: b.auth, p_thread: b.thread });
-      const r = await tell(subs, { t: b.thread });
+      const r = await tell(subs, b.k === "l" ? { t: b.thread, k: "l" } : { t: b.thread });
       return json({ sent: r.sent, failed: r.failed });
     }
     if (b.do === "lit" && ok(b.auth)) {

@@ -35,7 +35,7 @@ async function phone({ reach, sent = 0, addOk = true, seed, ios = false, picOk =
         : route.fulfill({ status: 404, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"error":"not found"}' });
     }
     let body = {}; try { body = JSON.parse(route.request().postData() || '{}'); } catch {}
-    calls.push(fn === 'notify' ? 'notify:' + body.do : fn);
+    calls.push(fn === 'notify' ? 'notify:' + body.do + (body.k ? ':' + body.k : '') : fn);
     const json = (v, status = 200) => route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(v) });
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } });
     if (fn === 'bottle_reach') return reach === undefined ? json({ message: 'no such function' }, 404) : json(reach);
@@ -49,7 +49,7 @@ async function phone({ reach, sent = 0, addOk = true, seed, ios = false, picOk =
     }
     if (fn === 'bottle_list') return listOk ? json([...(open.get(body.p_thread) || [])].reverse()) : json({ message: 'down' }, 500);
     if (fn === 'bottle_open') return json('member');
-    if (fn === 'notify') return json({ sent: typeof sent === 'function' ? sent(calls.filter((c) => c === 'notify:bottle').length) : sent, failed: 0 });
+    if (fn === 'notify') return json({ sent: typeof sent === 'function' ? sent(calls.filter((c) => c.startsWith('notify:bottle')).length) : sent, failed: 0 });
     if (fn === 'shore_get') return json(null);
     return json('ok');
   });
@@ -430,6 +430,44 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   await x.page.waitForTimeout(700);
   check('a beach that cannot be fetched says so and offers to try again', (await x.text('words')).startsWith('The bottles could not be brought in just now.') && (await x.text('reply')) === 'Try again');
   await x.ctx.close();
+}
+// 12. a lantern lit for someone: one tap, no words
+{
+  const lamps = JSON.parse(JSON.stringify(jorge));
+  lamps['bottle-notes'][KEY].push({ message: '', name: 'Jorge', mood: 'night', to: 'Mike', id: 'l1', at: now - 1000, kind: 'l' });      // Jorge lit one, after the last note seen here
+  const p = await phone({ seed: lamps, sent: 1 });
+  await p.page.waitForTimeout(900);
+  const rows = () => p.page.evaluate(() => [...document.querySelectorAll('#people .person')].map((r) => r.textContent));
+  let r = await rows();
+  check('a lantern lit for this phone is news on the shore', r[0].startsWith('Jorge') && r[0].includes('Lit a lantern for you') && r[0].includes('Light one back') && (await p.text('homeLede')) === 'Jorge lit a lantern for you.', r.join(' / '));
+  check('and it glows on the sand', (await p.page.evaluate(() => window.dev.scene.lamp)) === 1);
+  check('a lantern is not a bottle: it is not counted as one', r[1].includes('2 bottles'), r[1]);
+  check('anyone who has joined can be lit a lantern', r[1].includes('Lantern'));
+  await p.page.click('#people .person:nth-child(1) .peek.lamp'); await p.page.waitForTimeout(900);
+  r = await rows();
+  check('one tap lights one back, and says their phone was told', r[0].includes('Lantern lit. Jorge\u2019s phone has been told.') && r[0].includes('Lit'), r[0]);
+  check('the sender is told it is a lantern, and nothing else', p.calls.includes('notify:bottle:l') && p.calls.includes('bottle_add'));
+  const kept = await p.page.evaluate((k) => ({ notes: JSON.parse(localStorage.getItem('bottle-notes'))[k], th: JSON.parse(localStorage.getItem('bottle-threads')).find((t) => t.k === k) }), KEY);
+  check('it is kept with the conversation as a lantern, and theirs is marked seen', kept.notes.filter((n) => n.kind === 'l').length === 2 && kept.notes.filter((n) => n.kind !== 'l').length === 2 && kept.th.s >= now - 1000);
+  await p.page.click('#people .person:nth-child(1) .peek.lamp', { force: true }).catch(() => {});
+  check('a second tap straight away sends nothing more', p.calls.filter((c) => c === 'notify:bottle:l').length === 1);
+  await p.ctx.close();
+  const q = await phone({ seed: lamps, sent: 0 });
+  await q.page.waitForTimeout(900);
+  await q.page.click('#people .person:nth-child(2) .peek.lamp'); await q.page.waitForTimeout(900);
+  check('with their notifications off, it waits on their shore and says so', (await q.page.evaluate(() => document.querySelector('#people .person:nth-child(2)').textContent)).includes('Lantern lit. Dad will see it on opening Bottle.'));
+  await q.ctx.close();
+  const x = await phone({ seed: lamps, addOk: false });
+  await x.page.waitForTimeout(900);
+  await x.page.click('#people .person:nth-child(2) .peek.lamp'); await x.page.waitForTimeout(900);
+  check('a lantern the server will not take is said so', (await x.page.evaluate(() => document.querySelector('#people .person:nth-child(2)').textContent)).includes('It could not be lit just now.'));
+  await x.ctx.close();
+  // someone who has never joined cannot be lit one
+  const alone = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Ana', s: 0, t: now }], 'bottle-mine': ['m1'], 'bottle-notes': { [KEY]: [{ message: 'Hello?', name: 'Mike', mood: 'dusk', to: 'Ana', id: 'm1', at: now }] } };
+  const a = await phone({ seed: alone });
+  await a.page.waitForTimeout(900);
+  check('someone who has not opened a bottle yet is not offered a lantern', !(await a.page.evaluate(() => !!document.querySelector('#people .peek.lamp'))));
+  await a.ctx.close();
 }
 await browser.close();
 const bad = results.filter((r) => !r[0]);

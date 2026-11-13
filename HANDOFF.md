@@ -42,6 +42,17 @@ What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a
 - The phone also keeps the notes it has already seen (`bottle-notes`), so the history is still there if the server is asleep.
 - Clearing the browser's data makes a new, empty shore. Old links still open.
 
+## A lantern lit for someone
+
+One tap, no words: "thinking of you".
+
+- On Your shore, beside anyone who has joined a conversation: "Lantern". Their phone is told "Mike lit a lantern for you" if their notifications are on; otherwise it waits by the name on their shore. There: the row is news ("Lit a lantern for you"), a lantern glows on the sand, and one tap is "Light one back".
+- It is a note with no words and `k: "l"`, kept with the conversation like any other (scrambled; the server cannot tell it from a bottle). The page lists it as `kind: 'l'` and never counts it as a bottle: no shell, no star, not in the earlier notes.
+- **The notification sender was changed and redeployed (version 5)**: `{ do: "bottle", ..., k: "l" }` passes `k: "l"` on in the push, so `sw.js` can say it is a lantern. That flag is the only thing about a note the sender is ever told. Checked before and after with the same script: the public key, a push built and signed for an address Google has never heard of (answer 410 both times, which means the message was well formed), and a stranger ringing nobody.
+- A thumb cannot send ten: one lantern per person per 30 seconds, by the page.
+- Because "lantern" now means this, the words about notifications no longer mention one. The lantern drawn on the sand glows when notifications are on or when someone's lantern is waiting.
+- Tested: 11 browser checks (114 in all) and `test/live.test.mjs`. **Not tested**: a real phone, and what the notification looks like on one.
+
 ## A beach full of bottles, from everyone
 
 For a birthday, a farewell, a big day. One person starts it; many people each add a bottle; the person it is for finds them all washed up together.
@@ -94,7 +105,7 @@ What turns it from a link maker into something you open to send. No accounts, no
 - The number is kept with the person in this phone's list, which is scrambled before its copy goes to the server, like the names. What is known of each lantern (`bottle-reach`) stays on the phone.
 - Android: "Put Bottle on your home screen" appears on the shore when Chrome offers to install it.
 - Sending results are counted under "Lantern (notifications)" on the stats page, as "sending: went straight to their lit lantern" and so on.
-- Tested with `test/app.browser.mjs` (103 checks with pictures, unsigned notes, the small things and a beach from everyone, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
+- Tested with `test/app.browser.mjs` (114 checks with pictures, unsigned notes, the small things, a beach from everyone and lanterns, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
 - **Not tested**: any real phone. Whether `sms:` opens Messages with the words in place on a real iPhone and Android. The contact picker. The install offer. And everything about iPhone lanterns, as before: direct sending to an iPhone depends on it.
 - **One bottle for several people** ("One bottle for several people" on the shore, when it has two or more): tick up to eight names, write one note, and each gets their own bottle in their own conversation with its own seat. It goes straight to anyone whose lantern is lit. Each of the others gets one button that texts or shares their own link. A group text cannot carry it: one link has one seat.
 
