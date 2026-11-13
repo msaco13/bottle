@@ -15,7 +15,7 @@
 <meta property="og:url" content="https://msaco13.github.io/bottle/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.500' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=9256674ac9">
 </head>
 <body>
 <div id="stage">
@@ -29,19 +29,23 @@
   <!-- the note, once it is out of the bottle -->
   <section id="letter" aria-live="polite">
     <div id="paper">
+      <div id="dear"></div>
       <div id="words"></div>
       <div id="sign"></div>
     </div>
     <div id="after">
-      <a id="reply" class="btn" href="./">Send one back</a>
+      <button id="reply" class="btn">Send one back</button>
+      <button id="fresh" class="link show">Write a bottle for someone else</button>
+      <div id="shelf"></div>
     </div>
   </section>
 
   <!-- the writing desk: shown when the link carries no message -->
   <section id="compose">
     <form id="desk" autocomplete="off">
-      <h1>Message in a bottle</h1>
-      <p class="lede">Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.</p>
+      <h1 id="deskTitle">Message in a bottle</h1>
+      <div id="toChip"></div>
+      <p class="lede" id="deskLede">Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.</p>
       <label for="msg">Your message</label>
       <textarea id="msg" rows="5" maxlength="600" placeholder="Write it here" required></textarea>
       <div class="count"><span id="left">600</span> characters left</div>
@@ -51,12 +55,13 @@
     </form>
     <div id="made">
       <h1>Your bottle is ready</h1>
-      <p class="lede">Send this link to one person. The message travels inside the link itself. Nothing is stored anywhere.</p>
+      <p class="lede" id="madeLede">Send this link to one person. The note travels inside the link itself.</p>
       <input id="link" type="text" readonly aria-label="The link to send">
       <button class="btn" id="share">Share the link</button>
       <button class="btn ghost" id="copy">Copy the link</button>
       <a class="btn ghost" id="try" href="#">See what they will see</a>
       <button class="link" id="again">Write another</button>
+      <button class="link" id="backToNote">Back to the note</button>
     </div>
   </section>
 
@@ -98,6 +103,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain(); }, true);   // or a file failed outright
 })();
 </script>
-<script type="module" src="js/main.js"></script>
+<script defer src="app.js?v=9256674ac9"></script>
 </body>
 </html>

@@ -1,11 +1,13 @@
 // Message in a bottle. One page, two faces:
 //   a link with a message after the #  ->  the shore, and a bottle to open
 //   no message                         ->  the writing desk
+// After a note is read, sending one back is one tap: the desk opens already addressed.
 
 import { decode, linkFor, MAX_MESSAGE } from './code.js';
 import { Scene, swash, DRY_LINE } from './scene.js';
 import { Story } from './story.js';
 import { Shore } from './audio.js';
+import { newKey, add, list } from './thread.js';
 
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
@@ -15,14 +17,25 @@ const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(
 const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
 
 addEventListener('hashchange', () => location.reload());
+if (bottle) document.documentElement.classList.add('reading');
 
 // ---------------------------------------------------------------- the note itself
 
-function showLetter(instant) {
+let shown = bottle;          // the note on the paper right now (the one from the link, or an earlier one from the shelf)
+const myName = () => { try { return localStorage.getItem('bottle-name') || ''; } catch { return ''; } };
+const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (b.name || '');
+
+function showLetter(instant, note) {
+  if (note) shown = note;
+  const b = shown;
+  const letter = $('letter'), paper = $('paper');
+  // replay the unrolling when a different note is put on the paper
+  letter.classList.remove('show'); void paper.offsetWidth;
+  $('dear').textContent = b.to ? 'For ' + b.to : '';
   const words = $('words');
   words.textContent = '';
   // Each word arrives a moment after the last, as if it were being written.
-  const parts = bottle.message.split(/(\s+)/);
+  const parts = b.message.split(/(\s+)/);
   const per = Math.min(0.09, 3.6 / Math.max(1, parts.length));
   parts.forEach((p, i) => {
     if (/^\s+$/.test(p)) { words.appendChild(document.createTextNode(p)); return; }
@@ -32,46 +45,113 @@ function showLetter(instant) {
     words.appendChild(s);
   });
   const sign = $('sign');
-  sign.textContent = bottle.name ? '~ ' + bottle.name : '';
+  sign.textContent = b.name ? '~ ' + b.name : '';
   sign.style.animationDelay = instant ? '0s' : (1.6 + parts.length * per).toFixed(2) + 's';
-  $('letter').classList.add('show');
+  // Sending one back is the obvious next thing, and it is already addressed.
+  const mine = b.name && b.name === myName();
+  const other = mine ? b.to : b.name;
+  $('reply').textContent = other ? 'Send one back to ' + other : 'Send one back';
+  $('reply').onclick = () => desk({ to: other || '', key: bottle.key || b.key || '' });
+  $('fresh').onclick = () => desk({});
+  letter.classList.add('show');
   $('hint').classList.remove('show'); $('skip').classList.remove('show'); $('finger').style.opacity = 0;
-  setTimeout(() => $('after').classList.add('show'), instant ? 300 : (2.4 + parts.length * per) * 1000);
+  $('after').classList.remove('show');
+  clearTimeout(showLetter.t);
+  showLetter.t = setTimeout(() => $('after').classList.add('show'), instant ? 300 : (2.4 + parts.length * per) * 1000);
+  if (!note) shelf();
+}
+
+// The earlier notes of this conversation, if the server has them. Nothing here is needed to read or reply.
+async function shelf() {
+  const el = $('shelf');
+  el.textContent = '';
+  if (!bottle || !bottle.key) return;
+  const all = await list(bottle.key);
+  if (!all.length) return;
+  const here = all.find((n) => same(n, bottle));
+  const newer = here ? all.filter((n) => n.at > here.at) : [];
+  const others = all.filter((n) => !same(n, bottle));
+  if (!others.length) return;
+  const head = document.createElement('div');
+  head.className = 'shelfHead';
+  head.textContent = newer.length ? (newer.length === 1 ? 'A newer bottle has washed up since this one' : `${newer.length} newer bottles have washed up since this one`) : `Bottles between you (${all.length})`;
+  el.appendChild(head);
+  const row = document.createElement('div');
+  row.className = 'shelfRow';
+  const when = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
+  for (const n of [...all].reverse()) {
+    const chip = document.createElement('button');
+    chip.className = 'chip' + (same(n, shown) ? ' on' : '') + (newer.includes(n) ? ' new' : '');
+    chip.textContent = `${n.name || 'A note'} · ${when(n.at)}`;
+    chip.onclick = () => { showLetter(false, n); for (const c of row.children) c.classList.toggle('on', c === chip); };
+    row.appendChild(chip);
+  }
+  el.appendChild(row);
 }
 
 // ---------------------------------------------------------------- the writing desk
 
-function desk() {
-  $('compose').classList.add('show');
-  const msg = $('msg'), who = $('who');
+let deskReady = false, deskCtx = {}, madeLink = '';
+
+/** ctx: { to, key } when sending one back. Empty for a fresh bottle. */
+function desk(ctx) {
+  deskCtx = ctx || {};
+  const msg = $('msg'), who = $('who'), compose = $('compose');
+  $('letter').classList.remove('show');
+  compose.classList.remove('done');
+  compose.classList.add('show');
+  compose.scrollTop = 0;
+  $('toChip').textContent = deskCtx.to ? 'To ' + deskCtx.to : '';
+  $('deskTitle').textContent = deskCtx.to ? 'Send one back' : 'Message in a bottle';
+  $('deskLede').textContent = deskCtx.to
+    ? `Write your note. You get a link to text to ${deskCtx.to}, and your bottle washes up on their shore.`
+    : 'Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.';
+  msg.value = '';
+  try { who.value = myName(); } catch {}
   const count = () => { $('left').textContent = String(MAX_MESSAGE - msg.value.length); };
-  msg.addEventListener('input', count); count();
-  try { who.value = localStorage.getItem('bottle-name') || ''; } catch {}
-  let link = '';
+  count();
+  if (deskCtx.to) setTimeout(() => msg.focus(), 350);
+  if (deskReady) return;
+  deskReady = true;
+  msg.addEventListener('input', count);
+
+  const share = async () => {
+    try { await navigator.share({ title: 'A message in a bottle', text: deskCtx.to ? `${deskCtx.to}, a bottle washed up for you.` : 'Something washed ashore for you.', url: madeLink }); return true; } catch { return false; }
+  };
   $('desk').addEventListener('submit', (e) => {
     e.preventDefault();
     if (!msg.value.trim()) { msg.focus(); return; }
-    try { localStorage.setItem('bottle-name', who.value.trim()); } catch {}
-    link = linkFor(location.origin + location.pathname, msg.value.trim(), who.value);
-    $('link').value = link;
-    $('try').href = link;
+    const name = who.value.trim();
+    try { localStorage.setItem('bottle-name', name); } catch {}
+    let key = deskCtx.key || '';
+    try { if (!key) key = newKey(); } catch {}
+    const b = { message: msg.value.trim(), name, mood: 'dusk', to: deskCtx.to || '', key };
+    madeLink = linkFor(location.origin + location.pathname, b);
+    $('link').value = madeLink;
+    $('try').href = madeLink;
     $('share').style.display = navigator.share ? '' : 'none';
-    $('compose').classList.add('done');
-    $('compose').scrollTop = 0;
+    $('madeLede').textContent = deskCtx.to
+      ? `Text this link to ${deskCtx.to}. The note travels inside the link itself.`
+      : 'Send this link to one person. The note travels inside the link itself.';
+    compose.classList.add('done');
+    compose.scrollTop = 0;
+    // The share sheet opens straight away, while this is still the same tap.
+    if (navigator.share) share();
+    // Keep a scrambled copy with the conversation, so either of you can find it again. Not needed for the link to work.
+    add(key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id: Math.random().toString(36).slice(2, 12), t: Date.now() });
   });
   $('link').addEventListener('focus', () => $('link').select());
   $('copy').addEventListener('click', async () => {
     let ok = false;
-    try { await navigator.clipboard.writeText(link); ok = true; } catch {
+    try { await navigator.clipboard.writeText(madeLink); ok = true; } catch {
       try { $('link').select(); ok = document.execCommand('copy'); } catch {}
     }
     $('copy').textContent = ok ? 'Copied. Now paste it in a text.' : 'Press and hold the link above to copy it';
     setTimeout(() => { $('copy').textContent = 'Copy the link'; }, 3500);
   });
-  $('share').addEventListener('click', async () => {
-    try { await navigator.share({ title: 'A message in a bottle', text: 'Something washed ashore for you.', url: link }); } catch {}
-  });
-  $('again').addEventListener('click', () => { $('compose').classList.remove('done'); msg.value = ''; count(); msg.focus(); });
+  $('share').addEventListener('click', share);
+  $('again').addEventListener('click', () => desk({}));
+  $('backToNote').addEventListener('click', () => { compose.classList.remove('show'); if (bottle) $('letter').classList.add('show'); });
 }
 
 // ---------------------------------------------------------------- the shore
@@ -84,7 +164,7 @@ if (!scene) {
   // No 3D on this device. The words still get through.
   ready();
   $('veil').classList.add('up');
-  if (bottle) showLetter(true); else desk();
+  if (bottle) showLetter(true); else desk({});
 } else {
   run();
 }
@@ -93,7 +173,7 @@ function run() {
   const story = new Story(scene);
   const audio = new Shore();
   const reading = !!bottle;
-  if (!reading) desk();
+  if (!reading) desk({});
   let W = 0, H = 0, quality = 1;
 
   function screenAngle() {

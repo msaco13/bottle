@@ -1,25 +1,73 @@
 import { encode, decode, linkFor, MAX_MESSAGE } from '../js/code.js';
 import assert from 'node:assert';
+import fs from 'node:fs';
 
-const cases = [
-  ['Meet me where the pier ends.', 'Michael'],
-  ['No name on this one.', ''],
-  ['Línea uno\nlínea dos\n\n¿Cómo estás? 你好 שלום', 'José'],
-  ['Emoji survive too: 🍾🌊❤️‍🔥 and "quotes" & <tags> #hash ?q=1', 'Ana & Co.'],
-  ['x'.repeat(MAX_MESSAGE), 'Long'],
+// ---- THE PROMISE: links that are already out in the world keep opening.
+// These were made by the first published version (2026-11-12). Never edit them. Only add.
+const SENT = [
+  ['1.WyJNZWV0IG1lIHdoZXJlIHRoZSBwaWVyIGVuZHMuXG5CcmluZyB0aGUga2l0ZS4gSSB3aWxsIGJyaW5nIHRoZSBjb2ZmZWUuXG5cbkkgaGF2ZSBzb21ldGhpbmcgdG8gdGVsbCB5b3UuIiwiTWljaGFlbCJd',
+    'Meet me where the pier ends.\nBring the kite. I will bring the coffee.\n\nI have something to tell you.', 'Michael'],
+  ['1.WyJIYXBweSBiaXJ0aGRheSwgRGFkLlxuU2FtZSBiZW5jaCwgU3VuZGF5IGF0IDk_IiwiTWlrZSJd', 'Happy birthday, Dad.\nSame bench, Sunday at 9?', 'Mike'],
+  ['1.WyJJZiB5b3UgY2FuIHJlYWQgdGhpcywgdGhlIGJvdHRsZSBtYWRlIGl0IGFjcm9zcy4g8J-NvlxuQ2FsbCBtZSB3aGVuIHlvdSBmaW5kIGl0LiIsIk1pY2hhZWwiXQ',
+    'If you can read this, the bottle made it across. \u{1F37E}\nCall me when you find it.', 'Michael'],
+  ['1.WyLDiW1vamkg8J+NviBhbmQgYWNjZW50czogSm9zw6kiLCJBbmEiXQ', 'Émoji \u{1F37E} and accents: José', 'Ana'],
+  ['1.WyJObyBuYW1lIG9uIHRoaXMgb25lLiJd', 'No name on this one.', ''],
 ];
-for (const [m, n] of cases) {
-  const e = encode(m, n);
-  assert(/^1\.[A-Za-z0-9_-]+$/.test(e), 'only link-safe characters');
-  assert.deepEqual(decode('#' + e), { message: m, name: n });
-  assert.deepEqual(decode(e), { message: m, name: n });
-  assert.deepEqual(decode('#' + encodeURIComponent(e)), { message: m, name: n }, 'survives being percent-escaped');
+for (const [link, message, name] of SENT) {
+  assert.deepEqual(decode('#' + link), { message, name, mood: 'dusk', to: '', key: '' }, 'an old link no longer opens the same: ' + link.slice(0, 24));
 }
-const long = linkFor('https://example.test/bottle/', 'x'.repeat(MAX_MESSAGE), 'N');
-console.log(`longest possible link: ${long.length} characters. A typical one: ${linkFor('https://example.test/bottle/', cases[0][0], cases[0][1]).length}`);
+// The safety-net reader inside index.html must make the same promise, on its own.
+{
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const src = html.slice(html.indexOf('function read(h)'), html.indexOf('window.__plain'));
+  assert(src.includes('function read(h)'), 'the safety-net reader is missing from index.html');
+  const read = new Function(src + '; return read;')();
+  for (const [link, message, name] of SENT) {
+    const v = read('#' + link);
+    assert(v && v[0] === message && (v[1] || '') === name, 'the safety net reads an old link differently: ' + link.slice(0, 24));
+  }
+  assert.equal(read('#nonsense'), null);
+  // and it reads the newest kind of link too
+  const v = read('#' + encode('new kind', 'Ana', 'night', 'Michael', 'abcdefghijklmnopqrstuv'));
+  assert(v && v[0] === 'new kind' && v[1] === 'Ana');
+}
+console.log(`${SENT.length} links from the first version still open, in the app and in the safety net`);
+
+// ---- new links
+const KEY = 'Qk3_x9-AbCdEfGhIjKlMnO';
+const cases = [
+  ['Meet me where the pier ends.', 'Michael', 'dusk', '', ''],
+  ['No name on this one.', '', 'dusk', '', ''],
+  ['Línea uno\nlínea dos\n\n¿Cómo estás? 你好 שלום', 'José', 'night', '', ''],
+  ['Emoji survive too: \u{1F37E}\u{1F30A} and "quotes" & <tags> #hash ?q=1', 'Ana & Co.', 'dawn', 'Michael', KEY],
+  ['A reply with no name and no mood', '', 'dusk', 'Michael', KEY],
+  ['x'.repeat(MAX_MESSAGE), 'Long', 'night', 'Someone', KEY],
+];
+for (const [m, n, mood, to, key] of cases) {
+  const e = encode(m, n, mood, to, key);
+  assert(/^1\.[A-Za-z0-9_-]+$/.test(e), 'only link-safe characters');
+  const want = { message: m, name: n, mood, to, key };
+  assert.deepEqual(decode('#' + e), want);
+  assert.deepEqual(decode(e), want);
+  assert.deepEqual(decode('#' + encodeURIComponent(e)), want, 'survives being percent-escaped');
+}
+// a plain dusk bottle is written exactly as the first version wrote it
+assert.equal(encode('Happy birthday, Dad.\nSame bench, Sunday at 9?', 'Mike'), SENT[1][0]);
+assert.equal(encode('No name on this one.'), SENT[4][0]);
+// things a future version might add are ignored, not fatal
+{
+  const bytes = new TextEncoder().encode(JSON.stringify(['from the future', 'Zed', 'zz', 7, { extra: 1 }, 'more']));
+  const future = '1.' + btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  assert.deepEqual(decode(future), { message: 'from the future', name: 'Zed', mood: 'dusk', to: '', key: '' });
+}
+// a bad key is dropped rather than trusted
+assert.equal(decode(encode('m', 'n', 'dusk', 't', 'short')).key, '');
+const long = linkFor('https://msaco13.github.io/bottle/', { message: 'x'.repeat(MAX_MESSAGE), name: 'N', mood: 'night', to: 'T', key: KEY });
+const typical = linkFor('https://msaco13.github.io/bottle/', { message: cases[0][0], name: 'Michael', mood: 'dusk', to: 'Ana', key: KEY });
+console.log(`longest possible link: ${long.length} characters. A typical reply: ${typical.length}`);
 assert(long.length < 1000);
 assert.equal(decode('#' + encode('y'.repeat(900))).message.length, MAX_MESSAGE, 'over-long messages are cut, not broken');
-assert.equal(linkFor('https://a.test/b/?x=1#old', 'hi').startsWith('https://a.test/b/#1.'), true);
+assert.equal(linkFor('https://a.test/b/?x=1#old', { message: 'hi' }).startsWith('https://a.test/b/#1.'), true);
 // junk never throws, and is never mistaken for a bottle
 for (const junk of ['', '#', '#hello', '#1.', '#1.!!!!', '#1.eyJ4IjoxfQ', '#2.abcd', null, undefined, '#1.' + 'A'.repeat(50)]) assert.equal(decode(junk), null);
 // a link with a line break pasted into it still opens

@@ -257,7 +257,6 @@ void main() {
   } else {
     float ang = atan(vO.z, vO.x);
     base = vec3(0.97, 0.93, 0.82) * (0.93 + 0.07 * vnoise(vec2(ang * 6.0, vO.y * 40.0)));
-    base *= 0.94 + 0.06 * sin(vO.y * 260.0 + ang * 2.0);                                // the faint ridges of a tight roll
     base *= 1.0 - 0.30 * smoothstep(0.92, 1.0, sin(ang * 1.0 + 1.9));                 // the edge of the sheet along the roll
     float thread = 1.0 - smoothstep(0.012, 0.022, abs(vO.y + 0.10));                         // a red thread tied round the middle
     base = mix(base, vec3(0.62, 0.10, 0.10), thread);
