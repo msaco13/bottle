@@ -28,13 +28,32 @@ export const threads = () => stored('bottle-threads').filter((x) => x && typeof 
 export const isMine = (n) => !!n && (n.id ? stored('bottle-mine').includes(n.id) : !!(n.name && n.name === myName()));
 export function wrote(id) { set('bottle-mine', JSON.stringify([id, ...stored('bottle-mine')].slice(0, 300))); save(); }
 
-/** Keep a conversation: its key, who it is with, and the newest note already seen (by the server's clock). */
-export function remember(k, w, seenAt) {
+/** Keep a conversation: its key, who it is with, the newest note already seen (by the server's clock), and their mobile number if one was given. */
+export function remember(k, w, seenAt, p) {
   if (!k) return;
   const all = threads(), old = all.find((x) => x.k === k) || {};
   const next = { k, w: w || old.w || '', s: Math.max(old.s || 0, seenAt || 0), t: Date.now() };
+  if (p || old.p) next.p = p || old.p;
   set('bottle-threads', JSON.stringify([next, ...all.filter((x) => x.k !== k)].slice(0, 30)));
-  if (next.w !== old.w || next.s !== old.s || !old.k) save();
+  if (next.w !== old.w || next.s !== old.s || next.p !== old.p || !old.k) save();
+}
+
+/** A mobile number as a phone will dial it: digits, with a leading + if it had one. '' if it is not a number. */
+export function mobile(text) {
+  const t = String(text || '').trim(), digits = t.replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 15 ? (t.startsWith('+') ? '+' : '') + digits : '';
+}
+
+// What this phone has learned about reaching the other side of each conversation. Kept on this phone only.
+//   j: someone else has joined (so a bottle left on the shore will be found)    l: their lantern was lit when last heard
+const reaches = () => { try { const v = JSON.parse(get('bottle-reach') || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
+export function reachOf(k) { const v = reaches()[k]; return v && typeof v === 'object' ? v : {}; }
+export function setReach(k, what) {
+  if (!k) return;
+  const all = reaches(), keep = new Set(threads().map((t) => t.k));
+  for (const key of Object.keys(all)) if (!keep.has(key) && key !== k) delete all[key];
+  all[k] = { ...(all[k] || {}), ...what, t: Date.now() };
+  set('bottle-reach', JSON.stringify(all));
 }
 
 // ---------------------------------------------------------------- the notes already seen, kept on the phone
@@ -89,7 +108,10 @@ function fold(other) {
   for (const t of [...(Array.isArray(other.threads) ? other.threads : []), ...threads()]) {
     if (!t || typeof t.k !== 'string') continue;
     const old = by.get(t.k);
-    by.set(t.k, old ? { k: t.k, w: (t.t || 0) >= (old.t || 0) ? (t.w || old.w || '') : (old.w || t.w || ''), s: Math.max(t.s || 0, old.s || 0), t: Math.max(t.t || 0, old.t || 0) } : { k: t.k, w: t.w || '', s: t.s || 0, t: t.t || 0 });
+    const one = old ? { k: t.k, w: (t.t || 0) >= (old.t || 0) ? (t.w || old.w || '') : (old.w || t.w || ''), s: Math.max(t.s || 0, old.s || 0), t: Math.max(t.t || 0, old.t || 0) } : { k: t.k, w: t.w || '', s: t.s || 0, t: t.t || 0 };
+    const p = old ? ((t.t || 0) >= (old.t || 0) ? (t.p || old.p) : (old.p || t.p)) : t.p;
+    if (typeof p === 'string' && p) one.p = p;
+    by.set(t.k, one);
   }
   set('bottle-threads', JSON.stringify([...by.values()].sort((a, b) => b.t - a.t).slice(0, 30)));
   set('bottle-mine', JSON.stringify([...new Set([...stored('bottle-mine'), ...(Array.isArray(other.mine) ? other.mine : [])])].slice(0, 300)));

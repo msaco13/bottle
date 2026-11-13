@@ -123,23 +123,40 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 /* The writing desk */
 #compose { position: absolute; inset: 0; display: none; align-items: flex-start; justify-content: center; padding: calc(var(--top) + 10px) 5% var(--bottom); overflow-y: auto; touch-action: pan-y; }
 #compose.show { display: flex; }
-#desk, #made {
+#desk, #made, #home {
   width: min(100%, 420px); margin: auto 0; padding: 24px 22px 22px; border-radius: 24px; background: var(--panel); border: 1px solid var(--line);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 10px;
 }
-#made { display: none; }
-#compose.done #desk { display: none; }
+#made, #home { display: none; }
+#compose.done #desk, #compose.home #desk { display: none; }
 #compose.done #made { display: flex; }
+#compose.home:not(.done) #home { display: flex; }
+/* Your shore: one row for each person. The name sends them a bottle; the small button opens the last one. */
+#people { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; margin-bottom: 4px; }
+#people:empty { display: none; }
+.person { display: flex; gap: 8px; align-items: stretch; }
+.person .row { flex: 1; min-width: 0; }
+.peek { flex: none; appearance: none; font: inherit; font-size: 13.5px; color: var(--dim); background: rgba(255, 240, 220, 0.05); border: 1px solid var(--line); border-radius: 14px; padding: 0 12px; cursor: pointer; }
+.rowWho { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+#install, #homeBack, #toHome, #text { display: none; }
+.reading #homeBack { display: block; }
+/* a bottle sent straight to a lit lantern needs no link: the link waits behind one tap */
+#byLink { display: flex; flex-direction: column; gap: 10px; }
+#made.direct #byLink, #made:not(.direct) #showLink, #made.busy #showLink, #made.busy #try { display: none; }
+#mobileLine { display: flex; gap: 8px; }
+#mobileLine input { flex: 1; min-width: 0; }
+#mobileLine .mood { flex: none; padding: 0 14px; }
+#mobileRow { display: flex; flex-direction: column; gap: 8px; }
 h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
 .lede { margin: 0 0 6px; font-size: 15.5px; line-height: 1.45; color: var(--dim); }
 label { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); margin-top: 6px; }
 label span { text-transform: none; letter-spacing: 0; color: var(--dim); }
-textarea, input[type=text] {
+textarea, input[type=text], input[type=tel] {
   width: 100%; border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 245, 230, 0.94); color: #2e1f12;
   padding: 13px 14px; font: inherit; font-size: 17px; line-height: 1.4; -webkit-user-select: text; user-select: text; outline: none;
 }
 textarea { font-family: var(--hand); font-size: 21px; resize: none; min-height: 132px; }
-textarea:focus, input[type=text]:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255, 201, 138, 0.25); }
+textarea:focus, input[type=text]:focus, input[type=tel]:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255, 201, 138, 0.25); }
 #link { font-size: 16px; color: #4a3a2a; }   /* 16px or more: an iPhone zooms the whole page when a smaller field is tapped */
 .count { font-size: 12.5px; color: var(--dim); text-align: right; margin-top: -4px; }
 .btn {
@@ -158,10 +175,6 @@ textarea:focus, input[type=text]:focus { border-color: var(--gold); box-shadow: 
 .mood { flex: 1; appearance: none; font: inherit; font-size: 14.5px; font-weight: 600; color: var(--ink); background: rgba(255, 240, 220, 0.08); border: 1px solid var(--line); border-radius: 12px; padding: 11px 4px; cursor: pointer; }
 .mood.on { border-color: var(--gold); color: var(--gold); background: rgba(255, 201, 138, 0.16); }
 /* Your bottles: the conversations this phone is part of */
-#inbox { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
-#inbox:empty { display: none; }
-#inbox.top { margin: 0 0 8px; padding: 0 0 16px; border-top: 0; border-bottom: 1px solid var(--line); }
-.inboxHead { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); }
 .row { appearance: none; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; text-align: left; font: inherit; color: var(--ink); background: rgba(255, 240, 220, 0.08); border: 1px solid var(--line); border-radius: 14px; padding: 11px 14px; cursor: pointer; }
 .row.new { border-color: var(--gold); background: rgba(255, 201, 138, 0.16); }
 .rowWho { font-size: 16.5px; font-weight: 600; }

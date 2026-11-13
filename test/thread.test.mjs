@@ -1,5 +1,6 @@
 // Conversations: the scrambling, and the promise that nothing depends on the server.
-import { newKey, newClaim, claimHash, threadId, seal, unseal, box, unbox, add, list, open, SERVER } from '../js/thread.js';
+import { newKey, newClaim, claimHash, threadId, seal, unseal, box, unbox, add, list, open, reach, SERVER } from '../js/thread.js';
+import { mobile } from '../js/shore.js';
 import fs from 'node:fs';
 import assert from 'node:assert';
 
@@ -38,15 +39,25 @@ assert.equal(await unbox('shore:other', boxed), null);
 const saved = { ...SERVER };
 SERVER.url = ''; SERVER.key = '';
 const me = 'a'.repeat(22);
-assert.equal(await add(me, key, note, newClaim()), false);
+assert.equal((await add(me, key, note, newClaim())).ok, false);
 assert.equal(await list(me, key), null, 'no server: null, so the page falls back on what the phone has kept');
 assert.equal(await open(me, key, newClaim()), null);
 SERVER.url = 'http://127.0.0.1:9'; SERVER.key = 'x';            // nothing listens here
 const t0 = Date.now();
-assert.equal(await add(me, key, note, newClaim()), false);
+assert.equal((await add(me, key, note, newClaim())).ok, false);
 assert.equal(await list(me, key), null);
-assert(Date.now() - t0 < 14000, 'a dead server must not hang the page');
+assert.equal(await reach(me, key), null, 'a dead server cannot say who is reachable, and the page then makes a link as before');
+assert.equal(await (await add(me, key, note, newClaim())).told, 0, 'and nobody was told');
+assert(Date.now() - t0 < 20000, 'a dead server must not hang the page');
 Object.assign(SERVER, saved);
+
+// a mobile number as a phone will dial it, or nothing at all
+assert.equal(mobile('(305) 555-0100'), '3055550100');
+assert.equal(mobile(' +1 305.555.0199 '), '+13055550199');
+assert.equal(mobile('call me'), '');
+assert.equal(mobile('12345'), '', 'too short to be a number');
+assert.equal(mobile('1'.repeat(16)), '', 'too long to be a number');
+assert.equal(mobile(''), ''); assert.equal(mobile(null), '');
 
 // the built file is up to date with the source
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');

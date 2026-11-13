@@ -1827,16 +1827,33 @@ async function open(auth, key, claim) {
   } catch { return null; }
 }
 
-/** Put a note in its conversation, with the seat its link will carry. note: { m, n, mood, to, id, t }. Resolves true if the server took it. */
+/**
+ * Put a note in its conversation, with the seat its link will carry. note: { m, n, mood, to, id, t }.
+ * Resolves { ok, told }: ok if the server took it, and told is a promise of how many of the other side's phones
+ * were told by their lanterns (0 if none is lit, or the sender could not be reached). The link never waits on either.
+ */
 async function add(auth, key, note, claim) {
-  if (!key || !auth || !subtle()) return false;
+  const no = { ok: false, told: Promise.resolve(0) };
+  if (!key || !auth || !subtle()) return no;
   try {
     const thread = await threadId(key);
     const r = await rpc('bottle_add', { p_auth: auth, p_thread: thread, p_body: await seal(key, note), p_claim: claim ? await claimHash(claim) : null });
-    if (r !== 'ok') return false;
-    notify({ do: 'bottle', auth, thread });          // tell the other side's lantern. Not waited on.
-    return true;
-  } catch { return false; }
+    if (r !== 'ok') return no;
+    return { ok: true, told: notify({ do: 'bottle', auth, thread }).then((n) => (n && n.sent > 0 ? n.sent : 0), () => 0) };
+  } catch { return no; }
+}
+
+/**
+ * Who else is in a conversation, and can they be told? Resolves { others, lit }: how many other phones have joined,
+ * and how many of those have a lantern lit. null if the server could not say (asleep, or it does not know how yet).
+ * It tells a member a count and nothing more.
+ */
+async function reach(auth, key) {
+  if (!key || !auth || !subtle()) return null;
+  try {
+    const r = await rpc('bottle_reach', { p_auth: auth, p_thread: await threadId(key) }, 4000);
+    return r && typeof r.others === 'number' ? { others: r.others, lit: r.lit || 0 } : null;
+  } catch { return null; }
 }
 
 /** Every note in a conversation this phone belongs to, oldest first. null if the server could not be asked. */
@@ -1856,7 +1873,7 @@ async function list(auth, key) {
   } catch { return null; }
 }
 
-return { SERVER, b64, unb64, hex, newKey, newClaim, threadId, claimHash, box, unbox, seal, unseal, rpc, notify, open, add, list };
+return { SERVER, b64, unb64, hex, newKey, newClaim, threadId, claimHash, box, unbox, seal, unseal, rpc, notify, open, add, reach, list };
 })();
 
 // ---------------------------------------------------------------- shore.js
@@ -1890,13 +1907,32 @@ const threads = () => stored('bottle-threads').filter((x) => x && typeof x.k ===
 const isMine = (n) => !!n && (n.id ? stored('bottle-mine').includes(n.id) : !!(n.name && n.name === myName()));
 function wrote(id) { set('bottle-mine', JSON.stringify([id, ...stored('bottle-mine')].slice(0, 300))); save(); }
 
-/** Keep a conversation: its key, who it is with, and the newest note already seen (by the server's clock). */
-function remember(k, w, seenAt) {
+/** Keep a conversation: its key, who it is with, the newest note already seen (by the server's clock), and their mobile number if one was given. */
+function remember(k, w, seenAt, p) {
   if (!k) return;
   const all = threads(), old = all.find((x) => x.k === k) || {};
   const next = { k, w: w || old.w || '', s: Math.max(old.s || 0, seenAt || 0), t: Date.now() };
+  if (p || old.p) next.p = p || old.p;
   set('bottle-threads', JSON.stringify([next, ...all.filter((x) => x.k !== k)].slice(0, 30)));
-  if (next.w !== old.w || next.s !== old.s || !old.k) save();
+  if (next.w !== old.w || next.s !== old.s || next.p !== old.p || !old.k) save();
+}
+
+/** A mobile number as a phone will dial it: digits, with a leading + if it had one. '' if it is not a number. */
+function mobile(text) {
+  const t = String(text || '').trim(), digits = t.replace(/\D/g, '');
+  return digits.length >= 7 && digits.length <= 15 ? (t.startsWith('+') ? '+' : '') + digits : '';
+}
+
+// What this phone has learned about reaching the other side of each conversation. Kept on this phone only.
+//   j: someone else has joined (so a bottle left on the shore will be found)    l: their lantern was lit when last heard
+const reaches = () => { try { const v = JSON.parse(get('bottle-reach') || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
+function reachOf(k) { const v = reaches()[k]; return v && typeof v === 'object' ? v : {}; }
+function setReach(k, what) {
+  if (!k) return;
+  const all = reaches(), keep = new Set(threads().map((t) => t.k));
+  for (const key of Object.keys(all)) if (!keep.has(key) && key !== k) delete all[key];
+  all[k] = { ...(all[k] || {}), ...what, t: Date.now() };
+  set('bottle-reach', JSON.stringify(all));
 }
 
 // ---------------------------------------------------------------- the notes already seen, kept on the phone
@@ -1951,7 +1987,10 @@ function fold(other) {
   for (const t of [...(Array.isArray(other.threads) ? other.threads : []), ...threads()]) {
     if (!t || typeof t.k !== 'string') continue;
     const old = by.get(t.k);
-    by.set(t.k, old ? { k: t.k, w: (t.t || 0) >= (old.t || 0) ? (t.w || old.w || '') : (old.w || t.w || ''), s: Math.max(t.s || 0, old.s || 0), t: Math.max(t.t || 0, old.t || 0) } : { k: t.k, w: t.w || '', s: t.s || 0, t: t.t || 0 });
+    const one = old ? { k: t.k, w: (t.t || 0) >= (old.t || 0) ? (t.w || old.w || '') : (old.w || t.w || ''), s: Math.max(t.s || 0, old.s || 0), t: Math.max(t.t || 0, old.t || 0) } : { k: t.k, w: t.w || '', s: t.s || 0, t: t.t || 0 };
+    const p = old ? ((t.t || 0) >= (old.t || 0) ? (t.p || old.p) : (old.p || t.p)) : t.p;
+    if (typeof p === 'string' && p) one.p = p;
+    by.set(t.k, one);
   }
   set('bottle-threads', JSON.stringify([...by.values()].sort((a, b) => b.t - a.t).slice(0, 30)));
   set('bottle-mine', JSON.stringify([...new Set([...stored('bottle-mine'), ...(Array.isArray(other.mine) ? other.mine : [])])].slice(0, 300)));
@@ -2038,7 +2077,7 @@ async function threadByNumber(id) {
   return null;
 }
 
-return { myName, setName, threads, isMine, wrote, remember, kept, keep, secret, token, pull, save, saveNow, carry, arrive, names, threadByNumber };
+return { myName, setName, threads, isMine, wrote, remember, mobile, reachOf, setReach, kept, keep, secret, token, pull, save, saveNow, carry, arrive, names, threadByNumber };
 })();
 
 // ---------------------------------------------------------------- lantern.js
@@ -2270,8 +2309,8 @@ const { Scene, swash, DRY_LINE, MOOD } = __m.scene;
 const { Flat } = __m.flat;
 const { Story } = __m.story;
 const { Shore } = __m.audio;
-const { newKey, newClaim, add, list, open } = __m.thread;
-const { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber } = __m.shore;
+const { newKey, newClaim, add, list, open, reach } = __m.thread;
+const { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber, mobile, reachOf, setReach } = __m.shore;
 const { standing, light, douse, tend, ios, standalone } = __m.lantern;
 const { count } = __m.count;
 const $ = (id) => document.getElementById(id);
@@ -2382,7 +2421,7 @@ function address(b) {
   const other = mine ? b.to : b.name;
   const key = seat === 'taken' ? '' : (bottle.key || b.key || '');       // a taken seat: the reply starts a conversation of its own
   $('reply').textContent = (mine ? 'Send another' : 'Send one back') + (other ? ' to ' + other : '');
-  $('reply').onclick = () => desk({ to: other || '', key });
+  $('reply').onclick = () => desk({ to: other || '', key, fresh: true });
   if (asked && key) remember(key, other, b.at || 0);
 }
 
@@ -2449,14 +2488,16 @@ let lanternSaid = '', carriedLost = false, homeBack = '';
 function lantern() {
   const st = standing();
   if (scene) scene.lamp = st === 'lit' ? 1 : 0;
-  for (const id of ['lanternA', 'lanternB', 'lanternC']) {
+  for (const id of ['lanternA', 'lanternB', 'lanternC', 'lanternD']) {
+    const onDesk = id === 'lanternC' || id === 'lanternD';
     const el = $(id);
     if (!el) continue;
     el.textContent = '';
     if (st === 'none') continue;
-    if (id === 'lanternC' && !(st === 'lit' || standalone || threads().length)) continue;      // the desk only mentions it to people it could help
+    if (onDesk && !(st === 'lit' || standalone || threads().length)) continue;      // the desk only mentions it to people it could help
     // In the Home Screen app, lighting it is the first thing to do, so it goes at the very top.
     if (id === 'lanternC') { if (standalone && st !== 'lit') $('desk').insertBefore(el, $('desk').firstChild); else $('make').after(el); }
+    if (id === 'lanternD') { if (standalone && st !== 'lit') $('home').insertBefore(el, $('people')); else $('newOne').after(el); }
     const say = (t) => { const p = document.createElement('p'); p.className = 'lanternSay'; p.textContent = t; el.appendChild(p); };
     const btn = (t, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = t; b.onclick = fn; el.appendChild(b); return b; };
     if (id === 'lanternC' && carriedLost && !threads().length) say('If you already have bottles in Safari, they did not come across. To bring them: in Safari, open any bottle, tap "Light a lantern", and add it to the Home Screen again.');
@@ -2465,7 +2506,7 @@ function lantern() {
       btn('Put the lantern out', async () => { await douse(); count('lantern', 'put out', true); lantern(); }, 'link');
     } else if (st === 'blocked') {
       // They said no to notifications. Do not bring it up again, except on the desk where it explains why nothing arrives.
-      if (id === 'lanternC') say('Notifications are switched off for this page in your browser settings, so a bottle cannot announce itself here.');
+      if (onDesk) say('Notifications are switched off for this page in your browser settings, so a bottle cannot announce itself here.');
     } else if (st === 'safari') {
       say('To be told when a bottle arrives, open this page in Safari and light a lantern there.');
     } else if (st === 'home') {
@@ -2507,53 +2548,86 @@ $('homeClose').onclick = () => {
   if (homeBack) { try { history.replaceState(null, '', homeBack); } catch {} homeBack = ''; }
 };
 
-// ---------------------------------------------------------------- the writing desk
+// ---------------------------------------------------------------- your shore (the people) and the writing desk
 
 let deskReady = false, deskCtx = {}, madeLink = '', madeTo = '', deskMood = 'dusk';
-
-// Your bottles: every conversation this phone has been part of, newest news first. One tap and that bottle washes up.
-async function inbox() {
-  const el = $('inbox');
-  el.textContent = '';
-  const mine = threads().slice(0, 6);
-  if (!mine.length) return;
-  const turn = inbox.turn = (inbox.turn || 0) + 1;
-  const found = (await Promise.all(mine.map(async (th) => {
-    const all = await notesFor(th.k);
-    if (!all.length) return null;
-    const theirs = all.filter((n) => !isMine(n));
-    const fresh = theirs.filter((n) => n.at > (th.s || 0));
-    const last = all[all.length - 1];
-    return { th, isNew: fresh.length > 0, open: fresh.length ? fresh[fresh.length - 1] : last, at: last.at, count: all.length,
-      who: th.w || (theirs.length ? theirs[theirs.length - 1].name : '') || all[0].to || 'Someone' };
-  }))).filter(Boolean);
-  if (turn !== inbox.turn || !found.length) return;
-  el.textContent = '';
-  found.sort((a, b) => (b.isNew - a.isNew) || (b.at - a.at));
-  // News goes where it cannot be missed: above the desk. Otherwise the list waits quietly underneath.
-  const news = found[0].isNew;
-  el.classList.toggle('top', news);
-  if (news) $('desk').insertBefore(el, $('deskTitle')); else $('desk').appendChild(el);
-  const head = document.createElement('div');
-  head.className = 'inboxHead';
-  head.textContent = 'Your bottles';
-  el.appendChild(head);
-  const when = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
-  for (const f of found) {
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'row' + (f.isNew ? ' new' : '');
-    const who = document.createElement('span'); who.className = 'rowWho'; who.textContent = f.who;
-    const sub = document.createElement('span'); sub.className = 'rowSub';
-    sub.textContent = f.isNew ? 'A new bottle washed up. Tap to open it' : `${f.count === 1 ? '1 bottle' : f.count + ' bottles'} · ${when(f.at)}`;
-    row.append(who, sub);
-    row.onclick = () => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k }); };
-    el.appendChild(row);
-  }
-}
+let reachAsked = true;       // false once the server has shown it cannot say who is reachable: then stop asking
+const when = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
+const whose = (to) => (to ? to + '’s' : 'their');
+const Whose = (to) => (to ? to + '’s' : 'Their');
+const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 
 /** The address of a bottle on this site. A visit that was opened as a test stays a test. */
 const addressOf = (b) => { const l = linkFor(location.origin + location.pathname, b); return qs.has('dev') ? l.replace('#', '?dev#') : l; };
+/** The words that travel with a link when it is texted or shared. */
+const sayWith = (to) => (to ? `${to}, a bottle washed up for you.` : 'Something washed ashore for you.');
+/** An address that opens this phone's own Messages, already addressed and already written. The phone sends the text, nothing else does. */
+const textTo = (number, words) => `sms:${number}${ios ? '&' : '?'}body=${encodeURIComponent(words)}`;
+const numberOf = (key) => { const th = threads().find((t) => t.k === key); return (th && th.p) || ''; };
+
+/** Ask the server who is on the other side of a conversation and whether their lantern is lit, and keep what it says. */
+async function learnReach(key) {
+  if (!key || !reachAsked) return false;
+  const old = reachOf(key);
+  if (old.a && Date.now() - old.a < 30000) return false;                  // asked a moment ago
+  const r = await reach(await token(), key);
+  if (!r) { reachAsked = false; return false; }      // the server cannot say (asleep, or it has not been taught): stop asking for this visit
+  const next = { j: r.others > 0 ? 1 : 0, l: r.lit > 0 ? 1 : 0, a: Date.now() };
+  setReach(key, next);
+  return next.j !== old.j || next.l !== old.l;
+}
+
+/** What is known of one conversation, for its row on the shore. */
+function person(th, all) {
+  const theirs = all.filter((n) => !isMine(n));
+  const fresh = theirs.filter((n) => n.at > (th.s || 0));
+  const last = all[all.length - 1];
+  return { th, isNew: fresh.length > 0, open: fresh.length ? fresh[fresh.length - 1] : last, at: last ? last.at : (th.t || 0), count: all.length,
+    who: th.w || (theirs.length ? theirs[theirs.length - 1].name : '') || (all[0] && all[0].to) || '' };
+}
+const openNote = (f) => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k }); };
+
+// Your shore: everyone this phone sends bottles to, news first. A name sends them a bottle; a waiting bottle opens.
+// Drawn at once from what the phone remembers, then again when the server has answered.
+async function people() {
+  const el = $('people');
+  const mine = threads().slice(0, 12);
+  const turn = people.turn = (people.turn || 0) + 1;
+  const draw = (found) => {
+    el.textContent = '';
+    found.sort((a, b) => (b.isNew - a.isNew) || (b.at - a.at));
+    for (const f of found) {
+      const line = document.createElement('div');
+      line.className = 'person';
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'row' + (f.isNew ? ' new' : '');
+      const who = document.createElement('span'); who.className = 'rowWho'; who.textContent = f.who || 'Someone';
+      const sub = document.createElement('span'); sub.className = 'rowSub';
+      sub.textContent = f.isNew ? 'A new bottle washed up. Tap to open it'
+        : [f.count ? (f.count === 1 ? '1 bottle' : f.count + ' bottles') : 'No bottles yet', f.count ? when(f.at) : '', reachOf(f.th.k).l ? 'lantern lit' : ''].filter(Boolean).join(' · ');
+      row.append(who, sub);
+      row.onclick = () => (f.isNew ? openNote(f) : desk({ to: f.who, key: f.th.k }));
+      line.appendChild(row);
+      if (!f.isNew && f.open) {
+        const peek = document.createElement('button');
+        peek.type = 'button'; peek.className = 'peek'; peek.textContent = 'Read last';
+        peek.setAttribute('aria-label', `Read the last bottle with ${f.who || 'them'}`);
+        peek.onclick = () => openNote(f);
+        line.appendChild(peek);
+      }
+      el.appendChild(line);
+    }
+    $('homeLede').textContent = found.some((f) => f.isNew) ? 'A bottle is waiting for you.' : 'Tap a name to send a bottle.';
+  };
+  draw(mine.map((th) => person(th, kept(th.k))));
+  const fresh = await Promise.all(mine.map(async (th) => person(th, await notesFor(th.k))));
+  if (turn !== people.turn) return;
+  draw(fresh);
+  // Whose lantern is lit. The first is asked alone: if the server cannot say, the rest are not asked at all.
+  const changed = mine.length ? [await learnReach(mine[0].k), ...(await Promise.all(mine.slice(1, 8).map((th) => learnReach(th.k))))] : [];
+  if (turn === people.turn && changed.some(Boolean)) draw(fresh);
+}
 
 /** A notification was tapped. Bring in the newest bottle of the conversation it named. */
 async function follow(id) {
@@ -2569,7 +2643,22 @@ async function follow(id) {
   location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k }));
 }
 
-/** ctx: { to, key } when sending one back. Empty for a fresh bottle. */
+/** The words on the desk: who it is for, and whether it will go straight there or by a link. */
+function deskWords() {
+  const to = deskCtx.to || '', direct = !!(deskCtx.key && reachOf(deskCtx.key).l);
+  $('deskTitle').textContent = to ? `A bottle for ${to}` : (deskCtx.key ? 'Another bottle' : 'Message in a bottle');
+  $('deskLede').textContent = direct ? `Write your note. ${Whose(to)} lantern is lit, so your bottle goes straight to ${whose(to)} shore. No link to text.`
+    : to ? `Write your note. You get a link to text to ${to}, and your bottle washes up on their shore.`
+    : 'Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.';
+  $('make').textContent = direct ? (to ? `Send to ${to}` : 'Send it') : 'Create bottle';
+  // A number is only asked for when it would help: someone with no lantern lit and no number yet.
+  $('mobileRow').style.display = direct || (deskCtx.key && numberOf(deskCtx.key)) ? 'none' : '';
+}
+
+/**
+ * Open the desk. ctx: { to, key } to write to someone this phone already knows, { fresh: true } for someone new.
+ * With neither, a phone that has people is shown its shore, and a phone that has none is shown the empty desk.
+ */
 function desk(ctx) {
   deskCtx = ctx || {};
   const msg = $('msg'), who = $('who'), compose = $('compose');
@@ -2577,28 +2666,62 @@ function desk(ctx) {
   compose.classList.remove('done');
   compose.classList.add('show');
   compose.scrollTop = 0;
-  $('toChip').textContent = deskCtx.to ? 'To ' + deskCtx.to : '';
+  wire();
+  const known = threads().length > 0;
+  const home = known && !deskCtx.key && !deskCtx.to && !deskCtx.fresh;
+  compose.classList.toggle('home', home);
+  $('toHome').style.display = known && !home ? 'block' : 'none';
+  if (home) { people(); lantern(); count('home', Math.min(threads().length, 12) + ' people'); return; }
+  $('toChip').textContent = '';                       // the title already says who it is for
   $('forRow').style.display = deskCtx.to ? 'none' : '';
   $('forWho').value = '';
-  if (deskCtx.to) $('inbox').textContent = ''; else inbox();
-  $('deskTitle').textContent = deskCtx.to ? 'Send one back' : 'Message in a bottle';
-  $('deskLede').textContent = deskCtx.to
-    ? `Write your note. You get a link to text to ${deskCtx.to}, and your bottle washes up on their shore.`
-    : 'Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.';
+  $('mobile').value = '';
+  $('pick').style.display = navigator.contacts && navigator.contacts.select ? '' : 'none';
+  deskWords();
+  const key = deskCtx.key;
+  if (key) learnReach(key).then((changed) => { if (changed && deskCtx.key === key && !compose.classList.contains('done')) deskWords(); });
   msg.value = '';
   try { who.value = myName(); } catch {}
-  const choose = (m) => { deskMood = m; sky(m); for (const c of $('moods').children) c.classList.toggle('on', c.dataset.mood === m); };
-  choose((shown && shown.mood) || 'dusk');
-  const tally = () => { $('left').textContent = String(MAX_MESSAGE - msg.value.length); };
-  tally();
+  for (const c of $('moods').children) c.classList.toggle('on', c.dataset.mood === ((shown && shown.mood) || 'dusk'));
+  deskMood = (shown && shown.mood) || 'dusk';
+  sky(deskMood);
+  $('left').textContent = String(MAX_MESSAGE - msg.value.length);
   lantern();
   if (deskCtx.to) setTimeout(() => msg.focus(), 350);
+}
+
+/** The "bottle is ready" screen. how: 'link' it goes by a link, 'sending' it is on its way to a lit lantern. */
+function made(how, to, number, extra) {
+  const el = $('made');
+  el.classList.toggle('direct', how === 'sending');
+  el.classList.toggle('busy', how === 'sending');
+  $('madeTitle').textContent = how === 'sending' ? (to ? `Sending to ${to}` : 'Sending it') : 'Your bottle is ready';
+  $('madeLede').textContent = how === 'sending' ? 'Carrying it down to the water.'
+    : (to ? `Text this link to ${to}. The note travels inside the link itself.` : 'Send this link to one person. The note travels inside the link itself.') + extra;
+  $('link').value = madeLink;
+  $('try').href = madeLink;
+  // With their number, the phone's own Messages opens already addressed and written. Otherwise, the share sheet.
+  $('text').style.display = number ? 'block' : 'none';
+  $('text').textContent = to ? `Text it to ${to}` : 'Text it';
+  $('text').href = number ? textTo(number, sayWith(to) + ' ' + madeLink) : '#';
+  $('share').style.display = navigator.share ? '' : 'none';
+  $('share').className = number ? 'btn ghost' : 'btn';
+  $('share').textContent = number ? 'Share another way' : 'Share the link';
+  $('again').textContent = threads().length ? 'Back to your shore' : 'Write another';
+  $('compose').classList.add('done');
+  $('compose').scrollTop = 0;
+  lantern();
+}
+
+/** Everything on the desk that is tapped or typed. Wired once. */
+function wire() {
   if (deskReady) return;
   deskReady = true;
-  msg.addEventListener('input', tally);
+  const msg = $('msg'), who = $('who'), compose = $('compose');
+  msg.addEventListener('input', () => { $('left').textContent = String(MAX_MESSAGE - msg.value.length); });
 
   const share = async () => {
-    try { await navigator.share({ title: 'A message in a bottle', text: madeTo ? `${madeTo}, a bottle washed up for you.` : 'Something washed ashore for you.', url: madeLink }); count('share', 'sent', true); return true; }
+    try { await navigator.share({ title: 'A message in a bottle', text: sayWith(madeTo), url: madeLink }); count('share', 'sent', true); return true; }
     catch (e) { count('share', (e && e.name) === 'AbortError' ? 'closed without sending' : 'failed: ' + ((e && e.name) || ''), true); return false; }
   };
   $('desk').addEventListener('submit', (e) => {
@@ -2608,37 +2731,56 @@ function desk(ctx) {
     setName(name);
     let key = deskCtx.key || '', claim = '';
     try { if (!key) key = newKey(); claim = newClaim(); } catch {}
+    const to = deskCtx.to || $('forWho').value.trim();
+    const number = mobile($('mobile').value) || numberOf(key);
     // The link carries the note, the conversation's key, and one seat: whoever opens it first is the one it was for.
-    const b = { message: msg.value.trim(), name, mood: deskMood, to: deskCtx.to || $('forWho').value.trim(), key, claim };
-    madeTo = b.to;
+    const b = { message: msg.value.trim(), name, mood: deskMood, to, key, claim };
+    madeTo = to;
     const link = madeLink = linkFor(location.origin + location.pathname, b);
-    $('link').value = madeLink;
-    $('try').href = madeLink;
-    $('share').style.display = navigator.share ? '' : 'none';
-    $('madeLede').textContent = b.to
-      ? `Text this link to ${b.to}. The note travels inside the link itself.`
-      : 'Send this link to one person. The note travels inside the link itself.';
-    compose.classList.add('done');
-    compose.scrollTop = 0;
-    lantern();
     // A reply adds to a shore the two of you already share. Say what it will leave there.
     const before = deskCtx.key ? kept(key).length : 0;
-    if (before) $('madeLede').textContent += ` It is bottle ${before + 1} between you` + (before < MAX_SHELLS ? `, and it leaves ${(before + 1) % 5 ? 'a new shell' : 'a starfish'} on the shore you share.` : '.');
-    // The share sheet opens straight away, while this is still the same tap.
+    const leaves = before ? ` It is bottle ${before + 1} between you` + (before < MAX_SHELLS ? `, and it leaves ${(before + 1) % 5 ? 'a new shell' : 'a starfish'} on the shore you share.` : '.') : '';
+    // If their lantern is lit the bottle goes straight to their shore and their phone is told. No link to text.
+    const direct = !!(deskCtx.key && reachOf(key).l);
+    made(direct ? 'sending' : 'link', to, number, leaves);
     count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters`, true);
-    if (navigator.share) share(); else count('share', 'no share sheet on this browser', true);
+    // Going by link: Messages or the share sheet opens straight away, while this is still the same tap.
+    if (!direct) {
+      if (number) { count('share', 'opened Messages, already addressed', true); try { location.href = $('text').href; } catch {} }
+      else if (navigator.share) share();
+      else count('share', 'no share sheet on this browser', true);
+    }
     // Keep a scrambled copy with the conversation, so either of you can find it again. Not needed for the link to work.
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
-    remember(key, b.to, 0);
+    remember(key, to, 0, number);
     keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now() }]);
-    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now() }, claim)).then((ok) => {
-      // Only promised once the server has really taken it.
-      if (!ok) count('f_save', 'the server did not take the note', true);
-      if (ok && madeLink === link) $('madeLede').textContent += ` When ${b.to ? b.to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
+    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now() }, claim)).then(async (r) => {
+      if (!r.ok) count('f_save', 'the server did not take the note', true);
+      // Was the other phone told? The sender is given a few seconds to answer.
+      const told = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
+      if (told) setReach(key, { j: 1, l: 1 }); else if (r.ok && direct) setReach(key, { l: 0 });
+      if (told || direct) count('lantern', 'sending: ' + (told ? (direct ? 'went straight to their lit lantern' : 'by link, and their lantern was told as well') : r.ok ? 'their lantern did not answer' : 'the server could not be reached'), true);
+      if (madeLink !== link || !compose.classList.contains('done')) return;        // they have moved on to something else
+      const el = $('made'), lede = $('madeLede');
+      el.classList.remove('busy');
+      if (told) {
+        // Only said once the other phone's push service has really taken it.
+        el.classList.add('direct');
+        $('madeTitle').textContent = to ? `Sent to ${to}` : 'Sent';
+        lede.textContent = (direct ? `${Whose(to)} lantern is lit, so ${whose(to)} phone has been told.` : `${Whose(to)} lantern is lit, so ${whose(to)} phone has already been told. No need to text this one.`) + leaves;
+      } else if (direct) {
+        el.classList.remove('direct');
+        $('madeTitle').textContent = 'Your bottle is ready';
+        lede.textContent = r.ok
+          ? `It is on ${whose(to)} shore, but the lantern did not answer, so ${whose(to)} phone was not told. It will be waiting when ${to || 'they'} next ${to ? 'opens' : 'open'} Bottle. To be sure, text the link.`
+          : `The server could not be reached, so text ${to || 'them'} the link. The note travels inside it.`;
+      } else if (r.ok) {
+        lede.textContent += ` When ${to ? to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
+      }
     });
   });
-  for (const c of $('moods').children) c.addEventListener('click', () => choose(c.dataset.mood));
+  for (const c of $('moods').children) c.addEventListener('click', () => { deskMood = c.dataset.mood; sky(deskMood); for (const o of $('moods').children) o.classList.toggle('on', o === c); });
   $('link').addEventListener('focus', () => $('link').select());
   $('copy').addEventListener('click', async () => {
     let ok = false;
@@ -2650,9 +2792,47 @@ function desk(ctx) {
     setTimeout(() => { $('copy').textContent = 'Copy the link'; }, 3500);
   });
   $('share').addEventListener('click', share);
+  $('text').addEventListener('click', () => count('share', 'opened Messages, already addressed', true));
+  $('showLink').addEventListener('click', () => $('made').classList.remove('direct'));
   $('again').addEventListener('click', () => desk({}));
-  $('backToNote').addEventListener('click', () => { compose.classList.remove('show'); if (bottle) { sky(shown.mood); $('letter').classList.add('show'); } });
+  $('newOne').addEventListener('click', () => desk({ fresh: true }));
+  $('toHome').addEventListener('click', () => desk({}));
+  const back = () => { compose.classList.remove('show'); if (bottle) { sky(shown.mood); $('letter').classList.add('show'); } };
+  $('backToNote').addEventListener('click', back);
+  $('homeBack').addEventListener('click', back);
+  // Android: choose them from the phone's own contacts. The phone shows its list; only the one name and number chosen come back.
+  $('pick').addEventListener('click', async () => {
+    try {
+      const got = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+      const c = got && got[0];
+      if (!c) { count('pick', 'closed without choosing', true); return; }
+      const tel = mobile((c.tel || [])[0]);
+      if (tel) $('mobile').value = tel;
+      if (!deskCtx.to && !$('forWho').value && c.name && c.name[0]) $('forWho').value = String(c.name[0]).split(/\s+/)[0].slice(0, 40);
+      count('pick', tel ? 'chose a contact' : 'that contact had no number', true);
+    } catch (e) { count('pick', 'failed: ' + ((e && e.name) || ''), true); }
+  });
+  // Android: the browser offers to put the page on the home screen as an app. Keep the offer for a button on the shore.
+  let offer = null;
+  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); offer = e; $('install').style.display = 'block'; });
+  addEventListener('appinstalled', () => { $('install').style.display = 'none'; count('install', 'installed', true); });
+  $('install').addEventListener('click', async () => {
+    if (!offer) return;
+    try { offer.prompt(); const c = await offer.userChoice; count('install', (c && c.outcome) || '', true); } catch {}
+    offer = null; $('install').style.display = 'none';
+  });
 }
+
+/** The page has learned something new about this phone's people (the server answered, or the page came back to the front). */
+function homecoming() {
+  const compose = $('compose');
+  if (bottle && !compose.classList.contains('show')) return;
+  if (compose.classList.contains('done') || deskCtx.to || deskCtx.key || deskCtx.fresh) { lantern(); return; }
+  if (compose.classList.contains('home')) { people(); lantern(); }
+  else if (!$('msg').value && threads().length && compose.classList.contains('show')) desk({});      // an empty desk becomes the shore once there are people
+  else lantern();
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && $('compose').classList.contains('home') && !$('compose').classList.contains('done')) people(); });
 
 // What happens once, as the page opens: bring the shore over (Home Screen app), follow a notification, catch up with the server.
 async function arriveAndCatchUp() {
@@ -2662,12 +2842,12 @@ async function arriveAndCatchUp() {
     if (how !== 'here') count('carried', how);
     carriedLost = how === 'lost';
     if (!$('who').value) $('who').value = myName();
-    if (!bottle && !deskCtx.to) { inbox(); lantern(); }
+    homecoming();
   }
   // The Home Screen copy opened without its parcel code (the phone did not keep it in the address) and has nothing of its own: say how to bring the bottles over.
   if (ios && standalone && !code && !threads().length) { carriedLost = true; count('carried', 'no code in the address'); if (!bottle && !deskCtx.to) lantern(); }
   if (hop) return follow(hop[1]);
-  if (await pull() && !bottle && !deskCtx.to) { inbox(); lantern(); }
+  if (await pull()) homecoming();
   tend();
 }
 
