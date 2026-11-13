@@ -344,7 +344,9 @@ export class Scene {
   constructor(canvas) {
     this.canvas = canvas;
     const opts = { alpha: false, antialias: true, depth: true, stencil: false, powerPreference: 'high-performance' };
-    const gl = this.gl = canvas.getContext('webgl', opts) || canvas.getContext('experimental-webgl', opts);
+    // Ask the way that looks best first, then more and more plainly. Some phones refuse the first and grant the last.
+    const gl = this.gl = canvas.getContext('webgl', opts) || canvas.getContext('experimental-webgl', opts)
+      || canvas.getContext('webgl', { alpha: false, antialias: false, depth: true }) || canvas.getContext('webgl') || canvas.getContext('webgl2', { alpha: false, antialias: false, depth: true });
     if (!gl) throw new Error('WebGL is not available');
     this.lost = false;
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; });

@@ -428,7 +428,9 @@ class Scene {
   constructor(canvas) {
     this.canvas = canvas;
     const opts = { alpha: false, antialias: true, depth: true, stencil: false, powerPreference: 'high-performance' };
-    const gl = this.gl = canvas.getContext('webgl', opts) || canvas.getContext('experimental-webgl', opts);
+    // Ask the way that looks best first, then more and more plainly. Some phones refuse the first and grant the last.
+    const gl = this.gl = canvas.getContext('webgl', opts) || canvas.getContext('experimental-webgl', opts)
+      || canvas.getContext('webgl', { alpha: false, antialias: false, depth: true }) || canvas.getContext('webgl') || canvas.getContext('webgl2', { alpha: false, antialias: false, depth: true });
     if (!gl) throw new Error('WebGL is not available');
     this.lost = false;
     canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; });
@@ -1960,7 +1962,11 @@ async function arriveAndCatchUp() {
 // ---------------------------------------------------------------- the shore
 
 let scene = null;
-try { scene = qs.has('nogl') ? null : new Scene($('gl')); } catch (e) { scene = null; count('f_nogl', String((e && e.message) || 'no 3D').replace(/\s+/g, ' ')); }
+try { scene = qs.has('nogl') ? null : new Scene($('gl')); } catch (e) {
+  scene = null;
+  // Say enough to tell a real phone from a link preview or a locked-down browser: is the page on screen, how big, does the browser know 3D at all.
+  count('f_nogl', `${String((e && e.message) || 'no 3D').replace(/\s+/g, ' ').slice(0, 120)} | ${document.visibilityState} ${innerWidth}x${innerHeight} | 3D known to browser: ${typeof WebGLRenderingContext !== 'undefined'} | ${bottle ? 'a bottle' : 'the desk'}`);
+}
 if (!scene) count('f_nogl', 'no 3D was asked for');      // only reached with ?nogl: a real failure was counted above, and each kind counts once
 count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');   // ?nogl pretends there is no 3D, to test the fallback
 if (bottle) sky(bottle.mood);
