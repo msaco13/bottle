@@ -33,6 +33,7 @@ self.addEventListener('push', (e) => {
     let body = 'Tap to bring it in.';
     let url = d.t ? './#n.' + d.t : './';
     if (d.k === 'l') { title = who ? who + ' lit a lantern for you' : 'Someone lit a lantern for you'; body = 'Thinking of you. Tap to light one back.'; }
+    if (d.k === 's') { title = who ? who + ' wrote in the sand for you' : 'Something is written in the sand for you'; body = 'See it before the tide does.'; }
     if (kind === 'lit') { title = 'Notifications are on'; body = 'This is how you will hear that a bottle arrived.'; url = './'; }
     if (kind === 'watch') { title = 'The bottle needs a look'; body = d.text || 'Phones have reported problems.'; url = 'stats.html'; }
     const options = { body: body, icon: 'icon-192.png', badge: 'badge.png', tag: d.t || kind, renotify: true, data: { url: url } };

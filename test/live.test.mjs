@@ -2,6 +2,7 @@
 // It proves the promises about who can read what. It leaves a few scrambled test rows behind.
 import { newKey, newClaim, threadId, seal, add, addOpen, list, open, reach, rpc, notify, box, unbox, hex, b64, SERVER } from '../js/thread.js';
 import { newPic, put, get, nameOf } from '../js/pic.js';
+import { pack, unpack, SAND_TYPE } from '../js/sand.js';
 import assert from 'node:assert';
 
 const person = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); return b64(a); };     // what the server is shown for one phone
@@ -114,6 +115,18 @@ assert.equal((await fetch(where + await nameOf(pic), { method: 'DELETE', headers
 assert.equal((await get(pic)).type, 'image/jpeg', 'and it is still there');
 assert.deepEqual(await (await fetch(`${SERVER.url}/storage/v1/object/list/pictures`, { method: 'POST', headers: { ...head, 'content-type': 'application/json' }, body: JSON.stringify({ prefix: '', limit: 5 }) })).json(), [], 'nor list what is there');
 say('a picture is kept scrambled, comes back whole, and cannot be listed, changed or deleted from outside');
+
+// Written in the sand: kept the way a picture is, and it comes back as what was traced.
+const sand = newPic(), traced = [[0.1, 0.2, 0.3, 0.4], [0.5, 0.5]];
+assert.equal(await put(sand, pack(traced, 0.46), SAND_TYPE), true);
+const washedUp = await get(sand);
+assert.equal(washedUp.type, SAND_TYPE);
+assert.equal(unpack(new Uint8Array(await washedUp.blob.arrayBuffer())).strokes.length, 2);
+await wait(1100);
+assert.equal((await add(dad, key, { m: '', n: 'Dad', mood: 'dusk', to: 'Mike', id: 'sand' + Date.now(), t: Date.now(), p: sand, k: 's' }, null)).ok, true);
+const lastOne = (await list(mike, key)).pop();
+assert.deepEqual([lastOne.kind, lastOne.pic], ['s', sand], 'and the conversation remembers it as sand');
+say('what is written in the sand is kept scrambled, comes back as traced, and is remembered as sand');
 
 // Notifications: only real push services are accepted, and the private parts are out of reach.
 assert.equal(await rpc('push_save', { p_auth: dad, p_endpoint: 'https://evil.example/push', p_p256dh: 'B'.repeat(87), p_key: 'a'.repeat(22) }), undefined, 'only real push services');

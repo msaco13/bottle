@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://msaco13.github.io/bottle/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.500' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=afa71031a6">
+<link rel="stylesheet" href="css/style.css?v=a9a041a17a">
 </head>
 <body>
 <div id="stage">
@@ -103,6 +103,10 @@
         <button type="button" class="mood" id="picAdd">Add a picture or GIF</button>
         <div id="picShow"><img id="picThumb" alt=""><span id="picSay" aria-live="polite"></span><button type="button" class="link" id="picDrop">Remove</button></div>
       </div>
+      <div id="sandRow">
+        <button type="button" class="mood" id="sandAdd">Or write it in the sand</button>
+        <div id="sandShow"><canvas id="sandThumb" width="112" height="112"></canvas><span id="sandNote" aria-live="polite">Written in the sand. A wave takes it once they have seen it.</span><button type="button" class="link" id="sandDrop">Remove</button></div>
+      </div>
       <label id="moodsLabel">The sky they will open it under</label>
       <div id="moods" role="group" aria-labelledby="moodsLabel">
         <button type="button" class="mood on" data-mood="dusk">Dusk</button>
@@ -157,6 +161,23 @@
       <button class="btn ghost" id="homeClose" type="button">Close</button>
     </div>
   </div>
+
+  <!-- written in the sand: the wet sand to write on, and the same sand at the other end, where a wave takes it -->
+  <section id="sand">
+    <canvas id="sandCanvas"></canvas>
+    <div id="sandSay" aria-live="polite"></div>
+    <div id="sandBar">
+      <button type="button" class="btn ghost" id="sandClear">Smooth it over</button>
+      <button type="button" class="btn" id="sandDone">Done</button>
+    </div>
+    <div id="sandCard">
+      <h1 id="sandTitle">The tide took it</h1>
+      <p class="lede" id="sandLede"></p>
+      <button type="button" class="btn" id="sandBack">Write back in the sand</button>
+      <button type="button" class="btn ghost" id="sandBottle">Send a bottle</button>
+      <button type="button" class="link" id="sandHome">Back to your shore</button>
+    </div>
+  </section>
 
   <!-- the picture from a bottle, as large as the screen allows. A tap puts it away. -->
   <div id="picBig" role="dialog" aria-label="The picture, larger"><img id="picBigImg" alt=""></div>
@@ -215,6 +236,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain("a file failed to load"); }, true);   // or a file failed outright
 })();
 </script>
-<script defer src="app.js?v=afa71031a6"></script>
+<script defer src="app.js?v=a9a041a17a"></script>
 </body>
 </html>

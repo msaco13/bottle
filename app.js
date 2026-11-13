@@ -23,6 +23,7 @@ __m.code = (function () {
 //        g     this link is not one note but a beach many people are filling for one person (the key is the beach's).
 //              "i": the invitation, where a bottle is added.   "o": the beach itself, for the person it is for.
 //              message is what it is for ("Happy 40th"; may be empty), name is who started it, to is who it is for.
+//              "s": not a bottle at all, but something written in the sand (see sand.js). pic is the secret of what was written.
 // Plain base64 on purpose (no compression): it opens on every phone, old or new.
 //
 // PROMISE: every link ever made must keep opening. New things may only be added
@@ -44,7 +45,7 @@ function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = ''
     /^[A-Za-z0-9_-]{16,32}$/.test(key || '') ? key : '',
     /^[A-Za-z0-9_-]{8,32}$/.test(claim || '') ? claim : '',
     /^[A-Za-z0-9_-]{22}$/.test(pic || '') ? pic : '',
-    g === 'i' || g === 'o' ? g : '',
+    g === 'i' || g === 'o' || g === 's' ? g : '',
   ];
   while (list.length > 1 && list[list.length - 1] === '') list.pop();   // old-style links stay exactly as they were
   const bytes = new TextEncoder().encode(JSON.stringify(list));
@@ -68,7 +69,7 @@ function decode(hash) {
     const v = JSON.parse(new TextDecoder('utf-8', { fatal: false }).decode(bytes));
     const str = (x) => (typeof x === 'string' ? x : '');
     const pic = Array.isArray(v) && /^[A-Za-z0-9_-]{22}$/.test(str(v[6])) ? v[6] : '';
-    const g = Array.isArray(v) && (v[7] === 'i' || v[7] === 'o') && /^[A-Za-z0-9_-]{16,32}$/.test(str(v[4])) ? v[7] : '';
+    const g = Array.isArray(v) && (v[7] === 'i' || v[7] === 'o') && /^[A-Za-z0-9_-]{16,32}$/.test(str(v[4])) ? v[7] : (Array.isArray(v) && v[7] === 's' && pic ? 's' : '');
     if (!Array.isArray(v) || typeof v[0] !== 'string' || (!v[0].trim() && !pic && !g)) return null;      // a bottle has words, or a picture, or both. A beach needs neither.
     return {
       message: v[0].slice(0, MAX_MESSAGE),
@@ -1873,8 +1874,8 @@ async function add(auth, key, note, claim) {
     const thread = await threadId(key);
     const r = await rpc('bottle_add', { p_auth: auth, p_thread: thread, p_body: await seal(key, note), p_claim: claim ? await claimHash(claim) : null });
     if (r !== 'ok') return no;
-    // A lantern lit for someone (note.k === 'l') says so to the sender, so the other phone can be told what it is. Nothing else about a note is ever passed on.
-    return { ok: true, told: notify({ do: 'bottle', auth, thread, ...(note && note.k === 'l' ? { k: 'l' } : {}) }).then((n) => (n && n.sent > 0 ? n.sent : 0), () => 0) };
+    // A lantern lit for someone (note.k === 'l'), or something written in the sand ('s'), says so to the sender, so the other phone can be told what it is. Nothing else about a note is ever passed on.
+    return { ok: true, told: notify({ do: 'bottle', auth, thread, ...(note && (note.k === 'l' || note.k === 's') ? { k: note.k } : {}) }).then((n) => (n && n.sent > 0 ? n.sent : 0), () => 0) };
   } catch { return no; }
 }
 
@@ -1921,7 +1922,7 @@ async function list(auth, key) {
       seen.add(v.id);
       const note = { message: v.m, name: v.n || '', mood: v.mood || 'dusk', to: v.to || '', id: v.id, at: Date.parse(row.created_at) || v.t || 0 };
       if (typeof v.p === 'string' && /^[A-Za-z0-9_-]{22}$/.test(v.p)) note.pic = v.p;
-      if (v.k === 'l') note.kind = 'l';             // not a bottle: a lantern lit for the other person, with no words
+      if (v.k === 'l' || v.k === 's') note.kind = v.k;        // not a bottle: 'l' a lantern lit for the other person, 's' something written in the sand
       out.push(note);
     }
     return out.sort((a, b) => a.at - b.at);
@@ -1949,7 +1950,7 @@ __m.pic = (function () {
 const { SERVER, b64 } = __m.thread;
 const MAX_GIF = 3500000;          // a GIF is sent whole: this is the most the server will take, less a little
 const LONG_SIDE = 1600;                  // a photo's longer side, in dots, after it is made smaller
-const TYPES = ['application/octet-stream', 'image/jpeg', 'image/gif', 'image/png', 'image/webp'];
+const TYPES = ['application/octet-stream', 'image/jpeg', 'image/gif', 'image/png', 'image/webp', 'bottle/sand'];        // the last is not a picture: something written in the sand (sand.js)
 const subtle = () => (globalThis.crypto && globalThis.crypto.subtle) || null;
 const sha = async (text) => new Uint8Array(await subtle().digest('SHA-256', new TextEncoder().encode(text)));
 
@@ -2055,6 +2056,160 @@ async function get(secret, ms = 30000) {
 }
 
 return { MAX_GIF, newPic, isPic, nameOf, wrap, unwrap, prepare, put, get };
+})();
+
+// ---------------------------------------------------------------- sand.js
+__m.sand = (function () {
+// Written in the sand.
+//
+// Instead of a note in a bottle: write or draw on the wet sand with a finger. The other person
+// sees it appear on their own beach, as it was written, and then a wave takes it.
+//
+// What is sent is the path the finger took, nothing else: a list of strokes, each a list of
+// points. Like a picture it is too long for a link, so it is scrambled on the phone and kept
+// by the server under a name worked out from a secret that only travels in the link (pic.js).
+//
+// "Once" is kept by the phone that saw it: after the wave, that phone will not show it again.
+// It is a courtesy, not a lock. Someone who opens the same link on another phone sees it there.
+//
+// The packing and unpacking are pure and tested (test/sand.test.mjs). The painting needs a canvas.
+
+const SAND_TYPE = 'bottle/sand';
+const MAX_POINTS = 4000;
+const VERSION = 1;
+
+/**
+ * Pack what was written into bytes. strokes: [[x0, y0, x1, y1, ...], ...] with every number from 0 to 1 across the pad.
+ * aspect: the pad's width over its height, so it is shown in the same shape at the other end.
+ * One byte for the version, two for the shape, then for each stroke its length and its points, two bytes a number.
+ */
+function pack(strokes, aspect) {
+  const good = (strokes || []).filter((s) => Array.isArray(s) && s.length >= 2).map((s) => s.slice(0, s.length - (s.length % 2)));
+  let points = 0;
+  const kept = [];
+  for (const s of good) { if (points >= MAX_POINTS) break; const room = (MAX_POINTS - points) * 2, cut = s.slice(0, room); kept.push(cut); points += cut.length / 2; }
+  const out = new Uint8Array(3 + kept.reduce((n, s) => n + 2 + s.length * 2, 0)), view = new DataView(out.buffer);
+  out[0] = VERSION;
+  view.setUint16(1, Math.max(10, Math.min(1000, Math.round((aspect || 0.5) * 100))));
+  let o = 3;
+  for (const s of kept) {
+    view.setUint16(o, s.length / 2); o += 2;
+    for (const v of s) { view.setUint16(o, Math.max(0, Math.min(65535, Math.round(v * 65535)))); o += 2; }
+  }
+  return out;
+}
+
+/** Unpack it. Returns { aspect, strokes } or null if these bytes are not something written in the sand. Never throws. */
+function unpack(bytes) {
+  try {
+    const raw = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    if (raw.length < 3 || raw[0] !== VERSION) return null;
+    const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+    const aspect = view.getUint16(1) / 100, strokes = [];
+    let o = 3, points = 0;
+    while (o + 2 <= raw.length) {
+      const n = view.getUint16(o); o += 2;
+      if (!n || o + n * 4 > raw.length || points + n > MAX_POINTS) return null;
+      const s = new Array(n * 2);
+      for (let i = 0; i < n * 2; i++) { s[i] = view.getUint16(o) / 65535; o += 2; }
+      strokes.push(s); points += n;
+    }
+    return strokes.length ? { aspect, strokes } : null;
+  } catch { return null; }
+}
+
+/** How many points have been written. */
+const pointsIn = (strokes) => (strokes || []).reduce((n, s) => n + s.length / 2, 0);
+
+// ---------------------------------------------------------------- painting
+
+// The sand under each sky: dusk, night, dawn. Dry on top, a little darker where it is damp.
+const SAND = [
+  { top: '#7a5c48', low: '#5e4636', groove: '34,20,12', edge: '255,232,205', water: '150,190,196', foam: '250,236,228' },
+  { top: '#343a52', low: '#232840', groove: '6,8,20', edge: '170,190,230', water: '70,150,180', foam: '160,235,245' },
+  { top: '#b08e72', low: '#8f725c', groove: '60,38,24', edge: '255,246,228', water: '170,205,208', foam: '255,250,244' },
+];
+
+/** The part of a w by h screen that the writing fills: the pad's own shape, as large as fits, in the middle. */
+function frame(w, h, aspect) {
+  const fw = Math.min(w, h * aspect), fh = fw / aspect;
+  return { x: (w - fw) / 2, y: (h - fh) / 2, w: fw, h: fh };
+}
+
+/** A fine speckle, made once per canvas, so the sand is not a flat colour. */
+function grain(g) {
+  if (g.__grain) return g.__grain;
+  const c = g.canvas.ownerDocument.createElement('canvas');
+  c.width = c.height = 128;
+  const p = c.getContext('2d');
+  let s = 7;
+  const r = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+  for (let i = 0; i < 2600; i++) { p.fillStyle = r() < 0.5 ? 'rgba(255,240,220,0.09)' : 'rgba(20,10,6,0.11)'; p.fillRect(r() * 128, r() * 128, 1.3, 1.3); }
+  g.__grain = g.createPattern(c, 'repeat');
+  return g.__grain;
+}
+
+/**
+ * Paint the sand and what is written in it.
+ *   g       a 2D canvas context already scaled so one unit is one css pixel
+ *   w, h    the size of the canvas in css pixels
+ *   mood    0 dusk, 1 night, 2 dawn
+ *   strokes, aspect   what was written
+ *   shown   how much of it has been written so far, 0 to 1 (it appears stroke by stroke, as it was made)
+ *   wave    null, or { front: where the water's edge is, 0 (top) to 1 (bottom), back: true once it is running back }
+ */
+function paint(g, w, h, mood, strokes, aspect, shown = 1, wave = null) {
+  const L = SAND[mood] || SAND[0];
+  const bg = g.createLinearGradient(0, 0, 0, h);
+  bg.addColorStop(0, L.low); bg.addColorStop(1, L.top);
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  const speck = grain(g);
+  if (speck) { g.fillStyle = speck; g.fillRect(0, 0, w, h); }
+
+  const f = frame(w, h, aspect || 0.5), wide = Math.max(5, Math.min(w, h) * 0.021);
+  const edgeY = wave ? wave.front * (h + 60) - 30 : -1e9;          // above this line the water is, or has been
+  const total = pointsIn(strokes), upTo = Math.max(0, Math.min(1, shown)) * total;
+  if (total && !(wave && wave.back)) {
+    g.save();
+    if (wave) { g.beginPath(); g.rect(0, edgeY, w, h - edgeY + 2); g.clip(); }       // what the water has reached is gone
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    // a groove: the shadowed side, the cut itself, and the lit lip the finger pushed up
+    for (const [dx, dy, style, k] of [[1.6, 1.8, `rgba(${L.edge},0.20)`, 1.0], [0, 0, `rgba(${L.groove},0.62)`, 1.0], [-0.6, -0.8, `rgba(${L.groove},0.45)`, 0.45]]) {
+      g.strokeStyle = style; g.lineWidth = wide * k;
+      let done = 0;
+      for (const s of strokes) {
+        if (done >= upTo) break;
+        const n = Math.min(s.length / 2, Math.ceil(upTo - done));
+        g.beginPath();
+        for (let i = 0; i < n; i++) {
+          const x = f.x + s[i * 2] * f.w + dx, y = f.y + s[i * 2 + 1] * f.h + dy;
+          if (i) g.lineTo(x, y); else { g.moveTo(x, y); g.lineTo(x + 0.01, y); }       // a single tap leaves a dot
+        }
+        g.stroke();
+        done += s.length / 2;
+      }
+    }
+    g.restore();
+  }
+  if (wave) {
+    // the sheet of water, thin and glassy, and the line of foam at its edge
+    const sheet = g.createLinearGradient(0, edgeY - h * 0.5, 0, edgeY);
+    sheet.addColorStop(0, `rgba(${L.water},${wave.back ? 0.10 : 0.30})`); sheet.addColorStop(1, `rgba(${L.water},${wave.back ? 0.16 : 0.42})`);
+    g.fillStyle = sheet; g.fillRect(0, 0, w, Math.max(0, edgeY));
+    g.fillStyle = `rgba(${L.groove},${wave.back ? 0.16 : 0.0})`; g.fillRect(0, 0, w, h);          // sand the water has left is darker for a while
+    g.strokeStyle = `rgba(${L.foam},0.92)`; g.lineWidth = wave.back ? 5 : 11; g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath();
+    for (let x = -10; x <= w + 10; x += 14) { const y = edgeY + Math.sin(x * 0.045 + wave.front * 9) * 7 + Math.sin(x * 0.11 + wave.front * 17) * 3; if (x < 0) g.moveTo(x, y); else g.lineTo(x, y); }
+    g.stroke();
+    g.strokeStyle = `rgba(${L.foam},0.35)`; g.lineWidth = 24;
+    g.beginPath();
+    for (let x = -10; x <= w + 10; x += 14) { const y = edgeY - 12 + Math.sin(x * 0.045 + wave.front * 9) * 7; if (x < 0) g.moveTo(x, y); else g.lineTo(x, y); }
+    g.stroke();
+  }
+}
+
+return { SAND_TYPE, MAX_POINTS, pack, unpack, pointsIn, frame, paint };
 })();
 
 // ---------------------------------------------------------------- shore.js
@@ -2537,12 +2692,14 @@ const { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pu
 const { standing, light, douse, tend, ios, standalone } = __m.lantern;
 const { count } = __m.count;
 const { newPic, prepare, put, get } = __m.pic;
+const { SAND_TYPE, MAX_POINTS, pack, unpack, paint, pointsIn } = __m.sand;
 const $ = (id) => document.getElementById(id);
 const qs = new URLSearchParams(location.search);
 const linked = decode(location.hash) || decode(qs.get('b'));
 const invite = linked && linked.g === 'i' ? linked : null;       // an invitation to add a bottle to a beach someone is filling
 const beach = linked && linked.g === 'o' ? linked : null;        // that beach, opened by the person it is for
-const bottle = invite ? null : linked;                           // what is read here: one bottle, or a beach of them
+const sandMsg = linked && linked.g === 's' ? linked : null;      // not a bottle: something written in the sand for this phone
+const bottle = invite || sandMsg ? null : linked;                // what is read here: one bottle, or a beach of them
 const hop = /^#n\.([A-Za-z0-9_-]{22})$/.exec(location.hash);          // a notification was tapped: it names a conversation
 const seeing = qs.has('see');           // the writer looking at their own bottle from "See what they will see"
 const stage = $('stage');
@@ -2572,10 +2729,11 @@ const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (
 /** The notes of a conversation: what the server says now, joined with what this phone has already seen. */
 /** A lantern lit for someone: kept with the conversation like a note, but not a bottle. It leaves no shell and is never counted as one. */
 const isLamp = (n) => !!n && n.kind === 'l';
+const isSand = (n) => !!n && n.kind === 's';
 async function notesFor(key, lamps = false) {
   const fresh = await list(await token(), key);
   const all = fresh ? keep(key, fresh) : kept(key);        // if the server is asleep, the history is still here
-  return lamps ? all : all.filter((n) => !isLamp(n));
+  return lamps ? all : all.filter((n) => !isLamp(n) && !isSand(n));
 }
 
 // ---------------------------------------------------------------- what the conversation has left on the shore (see keeps.js)
@@ -3003,6 +3161,137 @@ async function joinOrStart(message, name, pic) {
   showGather({ k: key, to, o: why, name: starting ? name : invite.name }, starting ? 'started' : 'joined');
 }
 
+// ---------------------------------------------------------------- written in the sand (see sand.js)
+
+const QUICK = qs.has('dev') && qs.has('quick') ? 0.08 : 1;       // for a test: the writing and the wave in a fraction of the time
+let deskSand = null;         // what has been written for the desk's bottle: { strokes, aspect }
+const pad = { strokes: [], cur: null, aspect: 0.5, on: false, g: null, last: null };
+const washedOnes = () => { try { const v = JSON.parse(localStorage.getItem('bottle-washed') || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+const markWashed = (secret) => { try { localStorage.setItem('bottle-washed', JSON.stringify([secret, ...washedOnes().filter((x) => x !== secret)].slice(0, 300))); } catch {} };
+const sandSize = () => [stage.clientWidth || innerWidth, stage.clientHeight || innerHeight];
+/** Size the sand's canvas to the screen. Returns its drawing context, in css pixels. */
+function sandFit() {
+  const c = $('sandCanvas'), [w, h] = sandSize(), r = Math.min(devicePixelRatio || 1, 2);
+  c.width = Math.round(w * r); c.height = Math.round(h * r);
+  const g = c.getContext('2d');
+  g.setTransform(r, 0, 0, r, 0, 0);
+  return g;
+}
+/** The small copy on the desk that shows something has been written. */
+function sandThumb() {
+  const c = $('sandThumb'), g = c.getContext('2d');
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  paint(g, c.width, c.height, MOOD[deskMood] || 0, deskSand ? deskSand.strokes : [], deskSand ? deskSand.aspect : 0.5, 1, null);
+}
+function dropSand() {
+  deskSand = null;
+  $('desk').classList.remove('sand');
+  $('sandRow').classList.remove('has');
+  $('sandNote').textContent = 'Written in the sand. A wave takes it once they have seen it.';
+}
+/** Open the wet sand to write on. */
+function sandPad() {
+  const [w, h] = sandSize();
+  pad.strokes = deskSand ? deskSand.strokes.map((s) => s.slice()) : [];
+  pad.cur = null; pad.aspect = w / h; pad.on = true; pad.g = sandFit();
+  $('sand').className = 'show pad';
+  $('sandSay').textContent = 'Write or draw with a finger. A wave takes it once they have seen it.';
+  padDraw();
+}
+const padDraw = () => { const [w, h] = sandSize(); paint(pad.g, w, h, MOOD[deskMood] || 0, pad.strokes, pad.aspect, 1, null); };
+{
+  const c = $('sandCanvas');
+  const at = (e) => { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; };
+  c.addEventListener('pointerdown', (e) => {
+    if (!pad.on || pointsIn(pad.strokes) >= MAX_POINTS) return;
+    try { c.setPointerCapture(e.pointerId); } catch {}
+    const p = at(e);
+    pad.cur = [p[0], p[1]]; pad.last = [e.clientX, e.clientY];
+    pad.strokes.push(pad.cur);
+    $('sandSay').textContent = '';
+    padDraw();
+  });
+  c.addEventListener('pointermove', (e) => {
+    if (!pad.on || !pad.cur || pointsIn(pad.strokes) >= MAX_POINTS) return;
+    if (Math.hypot(e.clientX - pad.last[0], e.clientY - pad.last[1]) < 2.5) return;        // a point every few pixels is plenty
+    const p = at(e);
+    pad.cur.push(p[0], p[1]); pad.last = [e.clientX, e.clientY];
+    padDraw();
+  });
+  const lift = () => { pad.cur = null; };
+  c.addEventListener('pointerup', lift);
+  c.addEventListener('pointercancel', lift);
+  $('sandClear').addEventListener('click', () => { pad.strokes = []; pad.cur = null; $('sandSay').textContent = 'Smoothed over. Write again.'; padDraw(); });
+  $('sandDone').addEventListener('click', () => {
+    pad.on = false;
+    $('sand').className = '';
+    if (pointsIn(pad.strokes) < 1) { if (!deskSand) dropSand(); return; }
+    deskSand = { strokes: pad.strokes, aspect: pad.aspect };
+    $('desk').classList.add('sand');
+    $('sandRow').classList.add('has');
+    sandThumb();
+    count('sand', `written: ${pad.strokes.length} strokes, ${pointsIn(pad.strokes)} points`, true);
+  });
+}
+
+/** The card that follows the wave: it is gone, and here is what to do next. */
+function sandCard(how) {
+  const el = $('sand'), name = sandMsg.name || '';
+  el.className = 'show card';
+  const g = sandFit(), [w, h] = sandSize();
+  paint(g, w, h, MOOD[sandMsg.mood] || 0, [], 0.5, 1, null);
+  $('sandSay').textContent = '';
+  $('sandTitle').textContent = how === 'lost' ? 'It could not be brought in' : how === 'gone' ? 'The tide already took this one' : 'The tide took it';
+  $('sandLede').textContent = how === 'lost' ? 'What was written could not be fetched just now. Check your connection and try again.'
+    : how === 'gone' ? `${name || 'Someone'} wrote it in the sand for you, and a wave has been since.`
+    : `${name || 'Someone'} wrote that in the sand for you. Now it is gone, as sand is.`;
+  const back = $('sandBack');
+  back.textContent = how === 'lost' ? 'Try again' : name ? `Write back to ${name} in the sand` : 'Write back in the sand';
+  const reply = () => ({ to: name, key: sandSeat === 'taken' ? '' : sandMsg.key || '', fresh: true });
+  back.onclick = how === 'lost' ? () => location.reload() : () => { el.className = ''; desk(reply()); sandPad(); };
+  $('sandBottle').style.display = how === 'lost' ? 'none' : '';
+  $('sandBottle').onclick = () => { el.className = ''; desk(reply()); };
+  $('sandHome').textContent = threads().length || gathers().length ? 'Back to your shore' : 'Write something of your own';
+  $('sandHome').onclick = () => { el.className = ''; desk({}); };
+}
+let sandSeat = '';
+/** A link to something written in the sand was opened. Show the beach, and on a touch, the writing, and then the wave. */
+async function sandShow() {
+  const el = $('sand'), name = sandMsg.name || 'Someone', mood = MOOD[sandMsg.mood] || 0;
+  if (!seeing && washedOnes().includes(sandMsg.pic)) { count('sand', 'opened again after the tide'); sandCard('gone'); return; }
+  el.className = 'show view wait';
+  $('sandSay').textContent = `${name} wrote in the sand for you. Touch the sand`;
+  const fetched = get(sandMsg.pic).then(async (r) => (r && r.type === SAND_TYPE ? unpack(new Uint8Array(await r.blob.arrayBuffer())) : null));
+  await new Promise((res) => el.addEventListener('click', res, { once: true }));
+  $('sandSay').textContent = '';
+  // like opening a bottle, a touch takes this link's seat in the conversation, so the reply can go straight back
+  if (sandMsg.key && !seeing) token().then((auth) => open(auth, sandMsg.key, sandMsg.claim)).then((seat) => { sandSeat = seat || ''; if (seat && seat !== 'taken') remember(sandMsg.key, sandMsg.name, 0); });
+  const data = await fetched;
+  if (!data) { count('sand', 'could not be brought in', true); sandCard('lost'); return; }
+  const g = sandFit(), points = pointsIn(data.strokes);
+  el.classList.remove('wait');
+  const writing = Math.max(1.2, Math.min(6, points * 0.012)) * QUICK, holding = (2.6 + Math.min(4, points * 0.004)) * QUICK, coming = 2.0 * QUICK, going = 1.8 * QUICK;
+  count('sand', `seen: ${data.strokes.length} strokes, ${points} points`);
+  const t0 = performance.now();
+  await new Promise((res) => {
+    const step = (now) => {
+      const t = (now - t0) / 1000, [w, h] = sandSize();
+      let shown = 1, wave = null;
+      if (t < writing) shown = t / writing;
+      else if (t < writing + holding) shown = 1;
+      else if (t < writing + holding + coming) { const k = (t - writing - holding) / coming; wave = { front: k * k * (3 - 2 * k), back: false }; }
+      else if (t < writing + holding + coming + going) { const k = (t - writing - holding - coming) / going; wave = { front: 1 - k * k * (3 - 2 * k), back: true }; }
+      else { paint(g, w, h, mood, [], data.aspect, 1, null); res(); return; }
+      paint(g, w, h, mood, data.strokes, data.aspect, shown, wave);
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+  if (!seeing) { markWashed(sandMsg.pic); if (sandMsg.key && sandSeat && sandSeat !== 'taken') remember(sandMsg.key, sandMsg.name, Date.now()); }       // seen: it is no longer news on the shore
+  count('sand', 'the tide took it', true);
+  sandCard('took');
+}
+
 // ---------------------------------------------------------------- your shore (the people) and the writing desk
 
 let deskReady = false, deskCtx = {}, madeLink = '', madeTo = '', deskMood = 'dusk';
@@ -3052,7 +3341,8 @@ const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 /** The address of a bottle on this site. A visit that was opened as a test stays a test. */
 const addressOf = (b) => { const l = linkFor(location.origin + location.pathname, b); return qs.has('dev') ? l.replace('#', '?dev#') : l; };
 /** The words that travel with a link when it is texted or shared. */
-const sayWith = (to) => (to ? `${to}, a bottle washed up for you.` : 'Something washed ashore for you.');
+const sayWith = (to) => (madeSand ? (to ? `${to}, something is written in the sand for you. See it before the tide does.` : 'Something is written in the sand for you. See it before the tide does.') : to ? `${to}, a bottle washed up for you.` : 'Something washed ashore for you.');
+let madeSand = false;        // the thing just made was written in the sand, not put in a bottle
 /** An address that opens this phone's own Messages, already addressed and already written. The phone sends the text, nothing else does. */
 const textTo = (number, words) => `sms:${number}${ios ? '&' : '?'}body=${encodeURIComponent(words)}`;
 const numberOf = (key) => { const th = threads().find((t) => t.k === key); return (th && th.p) || ''; };
@@ -3073,7 +3363,7 @@ async function learnReach(key) {
 let lampHere = false;        // someone has lit a lantern for this phone, and it has not been answered yet
 const lampAt = new Map();    // when this phone last lit one for each person, so a thumb cannot send ten
 function person(th, every) {
-  const all = every.filter((n) => !isLamp(n)), lamps = every.filter((n) => isLamp(n) && !isMine(n));
+  const all = every.filter((n) => !isLamp(n) && (n.kind !== 's' || (!isMine(n) && n.at > (th.s || 0)))), lamps = every.filter((n) => isLamp(n) && !isMine(n));      // what was written in the sand counts only while it is news
   const lamp = lamps.filter((n) => n.at > (th.s || 0)).pop() || null;      // theirs, not yet seen
   const theirs = all.filter((n) => !isMine(n));
   const fresh = theirs.filter((n) => n.at > (th.s || 0));
@@ -3098,7 +3388,7 @@ function pickWords(count) {
   $('newOne').disabled = on && n < 2;
   if (on) $('homeLede').textContent = 'Tap everyone this bottle is for. Each of them gets their own.';
 }
-const openNote = (f) => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k, pic: f.open.pic }); };
+const openNote = (f) => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k, pic: f.open.pic, g: f.open.kind === 's' ? 's' : '' }); };
 
 // Your shore: everyone this phone sends bottles to, news first. A name sends them a bottle; a waiting bottle opens.
 // Drawn at once from what the phone remembers, then again when the server has answered.
@@ -3135,7 +3425,7 @@ async function people() {
       row.className = 'row' + (f.isNew || (f.lamp && !picking) ? ' new' : '');
       const who = document.createElement('span'); who.className = 'rowWho'; who.textContent = f.who || 'Someone';
       const sub = document.createElement('span'); sub.className = 'rowSub';
-      sub.textContent = f.isNew ? 'A new bottle washed up. Tap to open it'
+      sub.textContent = f.isNew ? (f.open.kind === 's' ? 'Wrote in the sand for you. See it before the tide does' : 'A new bottle washed up. Tap to open it')
         : f.lamp && !picking ? `Lit a lantern for you \u00b7 ${when(f.lamp.at)}`
         : [f.count ? (f.count === 1 ? '1 bottle' : f.count + ' bottles') : 'No bottles yet', f.count ? when(f.at) : '', reachOf(f.th.k).l ? 'notifications on' : ''].filter(Boolean).join(' · ');
       row.append(who, sub);
@@ -3210,7 +3500,7 @@ async function follow(id) {
   if (!pick) return home();
   count('followed', isLamp(pick) ? 'a lantern was tapped' : 'a notification was tapped');
   if (isLamp(pick)) { home(); homecoming(); return; }         // not a bottle to open: it is on the shore, by their name
-  location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k, pic: pick.pic }));
+  location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k, pic: pick.pic, g: pick.kind === 's' ? 's' : '' }));
 }
 
 /** The words on the desk: who it is for, and whether it will go straight there or by a link. */
@@ -3278,6 +3568,8 @@ function desk(ctx) {
   if (key) learnReach(key).then((changed) => { if (changed && deskCtx.key === key && !compose.classList.contains('done')) deskWords(); });
   msg.value = '';
   dropPic();
+  dropSand();
+  $('sandRow').style.display = deskCtx.many || deskCtx.join || deskCtx.gather ? 'none' : '';
   try { who.value = myName(); } catch {}
   for (const c of $('moods').children) c.classList.toggle('on', c.dataset.mood === ((shown && shown.mood) || 'dusk'));
   deskMood = (shown && shown.mood) || 'dusk';
@@ -3293,8 +3585,9 @@ function made(how, to, number, extra) {
   el.classList.remove('many', 'gather', 'joined');
   el.classList.toggle('direct', how === 'sending');
   el.classList.toggle('busy', how === 'sending');
-  $('madeTitle').textContent = how === 'sending' ? (to ? `Sending to ${to}` : 'Sending it') : 'Your bottle is ready';
+  $('madeTitle').textContent = how === 'sending' ? (to ? `Sending to ${to}` : 'Sending it') : madeSand ? 'It is written in the sand' : 'Your bottle is ready';
   $('madeLede').textContent = how === 'sending' ? 'Carrying it down to the water.'
+    : madeSand ? (to ? `Text this link to ${to}. ` : 'Send this link to one person. ') + 'What you wrote is waiting on the sand, and a wave takes it once it has been seen.'
     : (to ? `Text this link to ${to}. The note travels inside the link itself.` : 'Send this link to one person. The note travels inside the link itself.') + extra;
   $('link').value = madeLink;
   $('try').href = madeLink.replace('#', (qs.has('dev') ? '?dev&see' : '?see') + '#');
@@ -3395,7 +3688,18 @@ function wire() {
   };
   $('desk').addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (!msg.value.trim() && !deskPic) { msg.focus(); return; }
+    if (!msg.value.trim() && !deskPic && !deskSand) { msg.focus(); return; }
+    // What was written in the sand is left with the server first. If it will not go, nothing is sent in its place.
+    let sandSecret = '';
+    if (deskSand) {
+      const label = $('make').textContent;
+      $('make').disabled = true; $('make').textContent = 'Taking it down to the sand';
+      const secret = newPic(), ok = await put(secret, pack(deskSand.strokes, deskSand.aspect), SAND_TYPE);
+      $('make').disabled = false; $('make').textContent = label;
+      if (!ok) { $('sandNote').textContent = 'It could not be sent just now. Check your connection and try again.'; count('sand', 'could not be sent', true); return; }
+      sandSecret = secret;
+    }
+    madeSand = !!sandSecret;
     // A picture still on its way is waited for. One that would not go is never left out without a word.
     if (deskPic && deskPic.state === 'working') {
       const label = $('make').textContent;
@@ -3404,7 +3708,7 @@ function wire() {
       $('make').disabled = false; $('make').textContent = label;
     }
     if (deskPic && deskPic.state !== 'ready') { $('picShow').scrollIntoView({ block: 'center' }); return; }
-    const pic = deskPic ? deskPic.secret : '';
+    const pic = sandSecret || (deskPic ? deskPic.secret : ''), kind = sandSecret ? 's' : '', words = sandSecret ? '' : msg.value.trim();
     const name = who.value.trim();
     setName(name);
     if (deskCtx.join || deskCtx.gather) { joinOrStart(msg.value.trim(), name, pic); return; }
@@ -3414,11 +3718,11 @@ function wire() {
     const to = deskCtx.to || $('forWho').value.trim();
     const number = mobile($('mobile').value) || numberOf(key);
     // The link carries the note, the conversation's key, and one seat: whoever opens it first is the one it was for.
-    const b = { message: msg.value.trim(), name, mood: deskMood, to, key, claim, pic };
+    const b = { message: words, name, mood: deskMood, to, key, claim, pic, g: kind };
     madeTo = to;
     const link = madeLink = linkFor(location.origin + location.pathname, b);
     // A reply adds to a shore the two of you already share. Say what it will leave there.
-    const before = deskCtx.key ? kept(key).filter((n) => !isLamp(n)).length : 0;
+    const before = deskCtx.key && !deskSand ? kept(key).filter((n) => !isLamp(n) && !isSand(n)).length : 0;
     const leaves = before ? ` It is bottle ${before + 1} between you` + (before < MAX_SHELLS ? `, and it leaves ${(before + 1) % 5 ? 'a new shell' : 'a starfish'} on the shore you share.` : '.') : '';
     // If their lantern is lit the bottle goes straight to their shore and their phone is told. No link to text.
     const direct = !!(deskCtx.key && reachOf(key).l);
@@ -3434,8 +3738,8 @@ function wire() {
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(key, to, 0, number);
-    keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now(), ...(pic ? { pic } : {}) }]);
-    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now(), ...(pic ? { p: pic } : {}) }, claim)).then(async (r) => {
+    keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now(), ...(pic ? { pic } : {}), ...(kind ? { kind } : {}) }]);
+    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now(), ...(pic ? { p: pic } : {}), ...(kind ? { k: kind } : {}) }, claim)).then(async (r) => {
       if (!r.ok) count('f_save', 'the server did not take the note', true);
       // Was the other phone told? The sender is given a few seconds to answer.
       const told = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
@@ -3461,6 +3765,9 @@ function wire() {
     });
   });
   for (const c of $('moods').children) c.addEventListener('click', () => { deskMood = c.dataset.mood; sky(deskMood); for (const o of $('moods').children) o.classList.toggle('on', o === c); });
+  $('sandAdd').addEventListener('click', () => sandPad());
+  $('sandShow').addEventListener('click', (e) => { if (e.target.id !== 'sandDrop') sandPad(); });       // a tap on what was written opens it to change
+  $('sandDrop').addEventListener('click', () => { dropSand(); count('sand', 'removed', true); });
   $('picAdd').addEventListener('click', () => $('picFile').click());
   $('picFile').addEventListener('change', () => tuckPic($('picFile').files && $('picFile').files[0]));
   $('picDrop').addEventListener('click', () => { dropPic(); count('pic', 'removed', true); });
@@ -3517,7 +3824,7 @@ function wire() {
 /** The page has learned something new about this phone's people (the server answered, or the page came back to the front). */
 function homecoming() {
   const compose = $('compose');
-  if (bottle && !compose.classList.contains('show')) return;
+  if ((bottle || sandMsg) && !compose.classList.contains('show')) return;
   if (compose.classList.contains('done') || deskCtx.to || deskCtx.key || deskCtx.fresh || deskCtx.many || deskCtx.join || deskCtx.gather) { lantern(); return; }
   if (compose.classList.contains('home')) { people(); lantern(); }
   else if (!$('msg').value && threads().length && compose.classList.contains('show')) desk({});      // an empty desk becomes the shore once there are people
@@ -3628,8 +3935,9 @@ else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState}
 count(bottle ? (seeing ? 'see' : 's_open') : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
 if (bottle) sky(bottle.mood);
 if (beach) { shoreKeeps(readOnes().length); beachLoad(); }
-else if (bottle) { const known = bottle.key ? kept(bottle.key).filter((n) => !isLamp(n)) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
+else if (bottle) { const known = bottle.key ? kept(bottle.key).filter((n) => !isLamp(n) && !isSand(n)) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
 if (invite) count('gather', 'opened an invitation');
+if (sandMsg) count('sand', 'opened');
 lantern();
 arriveAndCatchUp();
 const ready = () => { window.__bottleReady = true; const p = $('plain'); if (p) p.className = ''; };
@@ -3638,7 +3946,7 @@ if (!scene) {
   // Nothing to draw on at all. The words still get through.
   ready();
   $('veil').classList.add('up');
-  if (bottle) showLetter(true); else desk(invite ? { join: true } : {});
+  if (bottle) showLetter(true); else if (sandMsg) sandShow(); else desk(invite ? { join: true } : {});
 } else {
   run();
 }
@@ -3647,7 +3955,7 @@ function run() {
   story = new Story(scene);
   const audio = new Shore();
   const reading = !!bottle;
-  if (!reading) desk(invite ? { join: true } : {});
+  if (sandMsg) sandShow(); else if (!reading) desk(invite ? { join: true } : {});
   let W = 0, H = 0, quality = 1;
 
   function screenAngle() {
@@ -3830,7 +4138,7 @@ function run() {
     scene.cam.target = [look[0] * 1.5 * amount, camY - look[1] * 1.1 * amount, -1.5];
     scene.draw({
       time: t,
-      dim: reading ? (held ? 0.55 * Math.min(1, story.lift) + (story.state === 'reading' ? 0.25 : 0) : 0) : 0.35,
+      dim: reading ? (held ? 0.55 * Math.min(1, story.lift) + (story.state === 'reading' ? 0.25 : 0) : 0) : (sandMsg && $('sand').classList.contains('wait') ? 0 : 0.35),
       ripples: story.ripples,
       shadow: reading && story.visible && !held ? [story.bx, story.bz + 0.03, 0.27, 1] : [0, 0, 1, 0],
       bottle: reading && story.visible ? story.bottleMatrix() : null,

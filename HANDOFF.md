@@ -4,7 +4,7 @@ Write a note, get one link, text it to someone. They tap it and a bottle washes 
 
 Live: https://msaco13.github.io/bottle/ (the page with no message is the writing page). Stats: https://msaco13.github.io/bottle/stats.html
 
-Last updated: 2026-11-13, late afternoon. Published: keepsakes, Your shore, one bottle for several people, pictures and GIFs, and a beach full of bottles from many people. Michael has an Android, no iPhone. On 2026-11-13 he cleared the assistant to merge this repository's pull requests and to change the Bottle database without asking each time. Touching no other Supabase project still holds.
+Last updated: 2026-11-13, late afternoon. Published: keepsakes, Your shore, one bottle for several people, pictures and GIFs, a beach full of bottles from many people, a lantern lit for someone, and writing in the sand. Michael has an Android, no iPhone. On 2026-11-13 he cleared the assistant to merge this repository's pull requests and to change the Bottle database without asking each time. Touching no other Supabase project still holds.
 
 **Money, changed 2026-11-13.** Michael moved the Supabase organization that holds Bottle ("aisimulationcenter.com") to the Pro plan. Per Supabase's docs that day: $25 a month for the organization with $10 of compute credit that covers one project; every other running project adds at least $10 a month, and Bottle's Nano size is billed at that rate; paid projects are never paused for being idle; 100 GB of file storage and 250 GB of egress are included, and more is only billed if the spend cap is switched off. Not checked: how many other projects share that organization, and whether the spend cap is on. Pro is now the baseline. Say so before anything that would cost more.
 
@@ -41,6 +41,19 @@ What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a
 - The server knows a shore only by the hash of its token. It cannot work the secret back out.
 - The phone also keeps the notes it has already seen (`bottle-notes`), so the history is still there if the server is asleep.
 - Clearing the browser's data makes a new, empty shore. Old links still open.
+
+## Written in the sand
+
+Not a bottle at all. Write or draw on the wet sand with a finger; the other person sees it appear on their own beach as it was written, and then a wave takes it.
+
+- **Writing**: "Or write it in the sand" on the desk (to one person, new or known; not for several, not on a beach from everyone). A full-screen pad of wet sand. "Smooth it over" clears it. What was written shows small on the desk in place of the words and the picture.
+- **What is sent** is the path the finger took: strokes of points, packed two bytes a number (`js/sand.js`, pure and tested; at most 4,000 points, about 16 KB). It is scrambled and kept by the server exactly as a picture is (`pic.js`, the same bucket, marked as sand inside the scrambled bytes). The link carries its secret in `pic` and says `g: "s"`.
+- **Seeing it**: the live beach, with "Mike wrote in the sand for you. Touch the sand". On the touch the sand fills the screen, the writing appears stroke by stroke, stays a few seconds, and a wave runs up and takes it. Then a card: "The tide took it", with "Write back to Mike in the sand", "Send a bottle" and the way back to the shore. The touch takes the link's seat in the conversation, like opening a bottle.
+- **"Once" is a courtesy, not a lock.** The phone that saw it remembers (`bottle-washed`) and will only say the tide has been. The same link on another phone shows it there. The server still holds the scrambled strokes, like every picture.
+- It is kept with the conversation as a note with no words and `k: "s"`, listed as `kind: 's'`. On Your shore it is news until seen ("Wrote in the sand for you. See it before the tide does") and after that it is not counted as a bottle, leaves no shell, and is not among the earlier notes.
+- The notification sender passes `k: "s"` on too (redeployed again, version 6, checked the same way), so the other phone says "Mike wrote in the sand for you".
+- It is drawn on its own flat canvas over the beach, the same on every phone, so it does not depend on the 3D beach at all.
+- Tested: `test/sand.test.mjs`, 17 browser checks (131 in all), and `test/live.test.mjs` against the real server. **Not tested**: a real finger on a real phone, and how handwriting feels at phone speed.
 
 ## A lantern lit for someone
 
@@ -105,7 +118,7 @@ What turns it from a link maker into something you open to send. No accounts, no
 - The number is kept with the person in this phone's list, which is scrambled before its copy goes to the server, like the names. What is known of each lantern (`bottle-reach`) stays on the phone.
 - Android: "Put Bottle on your home screen" appears on the shore when Chrome offers to install it.
 - Sending results are counted under "Lantern (notifications)" on the stats page, as "sending: went straight to their lit lantern" and so on.
-- Tested with `test/app.browser.mjs` (114 checks with pictures, unsigned notes, the small things, a beach from everyone and lanterns, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
+- Tested with `test/app.browser.mjs` (131 checks with pictures, unsigned notes, the small things, a beach from everyone, lanterns and sand, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
 - **Not tested**: any real phone. Whether `sms:` opens Messages with the words in place on a real iPhone and Android. The contact picker. The install offer. And everything about iPhone lanterns, as before: direct sending to an iPhone depends on it.
 - **One bottle for several people** ("One bottle for several people" on the shore, when it has two or more): tick up to eight names, write one note, and each gets their own bottle in their own conversation with its own seat. It goes straight to anyone whose lantern is lit. Each of the others gets one button that texts or shares their own link. A group text cannot carry it: one link has one seat.
 
@@ -210,6 +223,7 @@ js/story.js       the story as a state machine (pure, tested)
 js/audio.js       surf and effects, synthesised
 js/thread.js      conversations: keys, encryption, seats, the server calls
 js/pic.js         a picture in a bottle: made smaller, scrambled, kept on the server, fetched back
+js/sand.js        written in the sand: packing the strokes, and painting the sand, the writing and the wave
 js/shore.js       this phone's memory, its secret, the copy on the server, the parcel for the Home Screen
 js/lantern.js     notifications: where the phone stands, lighting, putting out
 js/count.js       the counter
@@ -220,7 +234,7 @@ stats.html        the stats page
 ops/notify/       the notification sender (deployed to Supabase) and its Web Push code
 ops/make-icons.mjs  draws the icons
 ops/watch.yml     the GitHub schedule for the watch (not switched on)
-test/             code, keeps, story, flat, thread, pic, push (npm test); live, watch and app.browser (by hand)
+test/             code, keeps, story, flat, thread, pic, sand, push (npm test); live, watch and app.browser (by hand)
 ops/sql/          server functions added since the first build, kept here so the database can be rebuilt
 ```
 
