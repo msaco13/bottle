@@ -80,6 +80,116 @@ function linkFor(base, b) {
 return { MAX_MESSAGE, MAX_NAME, MOODS, encode, decode, linkFor };
 })();
 
+// ---------------------------------------------------------------- keeps.js
+__m.keeps = (function () {
+// Keepsakes: what a conversation leaves on its shore.
+//
+// Every bottle sent back and forth leaves a shell on the dry sand, and lights one star.
+// Every fifth bottle leaves a starfish instead. Ten bottles join the stars into a figure
+// with a name of its own.
+//
+// Nothing here is stored and nothing is sent. Where each shell lies and how the stars are
+// laid out is worked out from the conversation's key, which both phones already hold, so
+// the two of you see the same shore. How many there are is the number of notes this phone
+// already knows of. A stranger with a forwarded link knows of one note, and sees one shell.
+//
+// Pure: no page, no server. Tested in test/keeps.test.mjs.
+
+const MAX_SHELLS = 12;
+const STARS = 10;
+/** Where the lantern stands on the sand (scene.js and flat.js draw it there). Shells keep clear of it. */
+const LAMP = [0.27, 1.16];
+
+/** A steady stream of numbers from 0 to 1, the same every time for the same words. */
+function stream(text) {
+  let h = 1779033703 ^ text.length;
+  for (let i = 0; i < text.length; i++) { h = Math.imul(h ^ text.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+  let a = h >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** How far left or right of the middle a phone held upright can see the dry sand, this far up the beach. Less a margin. */
+const reach = (z) => 0.277 * (0.337 + (2.75 - z) * 0.961) - 0.08;
+
+const FIRST = ['Quiet', 'Patient', 'Wandering', 'Faithful', 'Little', 'Sleeping', 'Bright', 'Listening', 'Returning', 'Barefoot', 'Salt', 'Lantern'];
+const SECOND = ['Oar', 'Heron', 'Anchor', 'Gull', 'Sail', 'Shell', 'Tide', 'Dolphin', 'Lighthouse', 'Kite', 'Compass', 'Otter'];
+
+/**
+ * The keepsakes of a conversation.
+ *   seed   the conversation's key (or, for a link from before conversations, the note itself)
+ *   count  how many bottles have gone between the two of you
+ * Shell 3 is in the same place whether there are 3 shells or 12, so the shore only ever gains.
+ * Each shell: { x, z, r, turn, kind (0 scallop, 1 sea snail, 2 starfish), tint, a }. Each star: { u, v, a }.
+ * a is how far it has faded in, 0 to 1: see grow().
+ */
+function keepsakes(seed, count) {
+  const n = Math.max(0, Math.floor(count) || 0);
+  const rs = stream('shells:' + seed), shells = [];
+  for (let i = 0; i < MAX_SHELLS; i++) {
+    const kind = i % 5 === 4 ? 2 : (rs() < 0.55 ? 0 : 1);
+    const r = [0.041, 0.036, 0.056][kind] + rs() * 0.009;
+    // They lie where the highest tide leaves things: a band of sand just above the water's reach, and above the line of words
+    // at the foot of the screen. Of a couple of hundred places tried, the one with the most room round it wins.
+    let x = 0, z = 0, most = -9;
+    for (let turn = 0; turn < 240; turn++) {
+      const cz = 1.02 + rs() * 0.21, cx = (rs() * 2 - 1) * reach(cz);
+      let room = Math.hypot(cx - LAMP[0], cz - LAMP[1]) - 0.05 - r;
+      for (const s of shells) room = Math.min(room, Math.hypot(cx - s.x, cz - s.z) - s.r - r);
+      if (room > most) { most = room; x = cx; z = cz; }
+    }
+    shells.push({ x, z, r, turn: rs() * 6.283, kind, tint: rs(), a: 0 });
+  }
+  // The stars run left to right across the sky, wandering up and down, so the line that joins them never crosses itself.
+  const rt = stream('stars:' + seed), stars = [];
+  let v = 0.2 + rt() * 0.6;
+  for (let i = 0; i < STARS; i++) {
+    v += (rt() - 0.5) * 0.95;
+    if (v < 0.04) v = 0.08 - v;
+    if (v > 0.96) v = 1.92 - v;
+    stars.push({ u: -1 + 2 * (i + 0.5 + (rt() - 0.5) * 0.6) / STARS, v, a: 0 });
+  }
+  const rn = stream('name:' + seed);
+  const name = 'The ' + FIRST[Math.floor(rn() * FIRST.length)] + ' ' + SECOND[Math.floor(rn() * SECOND.length)];
+  return { count: n, shells: shells.slice(0, Math.min(n, MAX_SHELLS)), stars: stars.slice(0, Math.min(n, STARS)), whole: n >= STARS, join: 0, name };
+}
+
+/** Where a star hangs: the x and y of its direction from the viewer. wide: the picture is wider than it is tall, and shows less sky. */
+function starAt(star, wide) {
+  return wide ? [star.u * 0.30, 0.035 + star.v * 0.07] : [-0.07 + star.u * 0.14, 0.12 + star.v * 0.085];
+}
+
+/** Let new keepsakes fade in, one after another. Called once a frame. */
+function grow(k, dt) {
+  if (!k) return;
+  for (const list of [k.shells, k.stars]) {
+    for (const s of list) {
+      if (s.a >= 1) continue;
+      s.a = Math.min(1, s.a + dt * 1.5);
+      if (s.a < 0.55) break;                           // the next one waits its turn
+    }
+  }
+  const done = k.whole && k.stars.every((s) => s.a >= 1);
+  k.join = Math.max(0, Math.min(1, k.join + (done ? dt : -dt) * 0.8));
+}
+
+/** The one line under a note that says what the shore is keeping. '' when there is nothing to say. */
+function keepLine(k) {
+  if (!k || k.count < 1) return '';
+  const n = k.count;
+  if (n === 1) return 'This bottle left a shell on the sand. Every bottle between you leaves one, and lights a star.';
+  if (n < STARS) return `${n} shells on this shore, one for every bottle between you. ${STARS - n === 1 ? 'One more bottle' : (STARS - n) + ' more bottles'} and your stars join up.`;
+  return `${n} bottles between you. Your stars have joined up: ${k.name}.`;
+}
+
+return { MAX_SHELLS, STARS, keepsakes, starAt, grow, keepLine };
+})();
+
 // ---------------------------------------------------------------- scene.js
 __m.scene = (function () {
 // The shoreline at dusk, and the bottle. Raw WebGL, no libraries, so it loads fast on a phone.
@@ -90,6 +200,7 @@ __m.scene = (function () {
 // The bottle, cork and note are real 3D shapes drawn over it. The glass bends
 // the beach behind it and reflects the same sky.
 
+const { MAX_SHELLS, STARS, starAt } = __m.keeps;
 // ---------------------------------------------------------------- small maths
 
 const M = {
@@ -176,6 +287,12 @@ uniform vec4 uBottle;         // x, z, size, how much shadow
 uniform vec3 uRip[3];         // x, z, age in seconds (negative: none)
 uniform float uDim;
 uniform float uLamp;          // 1 when this phone is listening for bottles: a lantern glows on the dry sand
+#ifdef KEEPS
+uniform vec4 uShell[12];      // what the conversation has left on the sand. Each: x, z, size, turn
+uniform vec4 uShellK[12];     // kind (0 scallop, 1 sea snail, 2 starfish), tint, how far it has faded in
+uniform vec3 uStar[10];       // its stars: x and y of the direction each hangs in, and how bright
+uniform float uJoin;          // 1 once all ten are lit and the figure is whole
+#endif
 ${SKY}
 float swash(float x, float t) {
   float ph = fract(t / 7.0 - x * 0.035);
@@ -211,6 +328,29 @@ void main() {
         col += vec3(0.85, 0.92, 1.0) * tail * (1.0 - smoothstep(0.0, 0.0035, across)) * sin(ph / 0.9 * 3.14159) * 1.5 * (1.0 - mask);
       }
     }
+#ifdef KEEPS
+    // the stars this conversation has lit, and the lines that join them. Sums are kept small so they stay exact on every phone.
+    if (uStar[0].z > 0.0 && rd.y > 0.01 && rd.y < 0.32 && abs(rd.x) < 0.45) {
+      float sum = 0.0;
+      vec3 prev = vec3(0.0);
+      for (int i = 0; i < 10; i++) {
+        vec3 s = uStar[i];
+        if (s.z > 0.0) {
+          vec2 q = clamp((rd.xy - s.xy) * 100.0, -8.0, 8.0);
+          float d2 = dot(q, q);
+          sum += s.z * (0.80 + 0.20 * sin(uTime * 1.7 + float(i) * 2.4)) * (exp(-d2 * 9.0) * 1.7 + exp(-d2 * 0.9) * 0.30);
+          if (prev.z > 0.0) {
+            vec2 ab = (s.xy - prev.xy) * 100.0, ap = clamp((rd.xy - prev.xy) * 100.0, -60.0, 60.0);
+            float len2 = max(dot(ab, ab), 0.01), h = clamp(dot(ap, ab) / len2, 0.0, 1.0);
+            float off = length(ap - ab * h), gap = min(h, 1.0 - h) * sqrt(len2);
+            sum += min(s.z, prev.z) * (1.0 - smoothstep(0.05, 0.20, off)) * smoothstep(0.7, 1.6, gap) * (0.16 + 0.16 * uJoin);
+          }
+        }
+        prev = s;
+      }
+      col += pick(vec3(1.0, 0.90, 0.74), vec3(0.90, 0.95, 1.0), vec3(1.0, 0.97, 0.90)) * sum * (1.0 - 0.85 * mask) * pickf(0.90, 1.0, 0.55);
+    }
+#endif
   } else {
     float tt = -uCam.y / rd.y;
     vec3 p = uCam + rd * tt;
@@ -234,6 +374,51 @@ void main() {
     float fr = pow(1.0 - max(dot(-rd, rn), 0.0), 4.0);
     vec3 wetCol = sand * 0.50 + sky(R) * (0.07 + 0.62 * fr) * (0.45 + 0.55 * film);
     col = mix(sand, wetCol, wet);
+#ifdef KEEPS
+    // shells and starfish on the dry sand, each with the short shadow the low light gives it
+    if (uShellK[0].z > 0.0 && z > 0.90 && z < 1.70 && abs(x) < 0.80) {
+      vec3 light = pick(vec3(1.0, 0.94, 0.88), vec3(0.40, 0.48, 0.68), vec3(1.16, 1.10, 1.04));
+      for (int i = 0; i < 12; i++) {
+        vec4 s = uShell[i];
+        vec4 k = uShellK[i];
+        if (k.z > 0.0) {
+          vec2 d = (p.xz - s.xy) / s.z;
+          col *= 1.0 - 0.42 * k.z * (1.0 - smoothstep(0.50, 1.20, length(d - vec2(0.06, 0.24))));
+          if (dot(d, d) < 1.6) {
+            float cs = cos(s.w), sn = sin(s.w);
+            vec2 q = vec2(d.x * cs - d.y * sn, d.x * sn + d.y * cs);
+            float cover = 0.0;
+            vec3 sc = vec3(0.0);
+            vec3 blush = mix(vec3(0.94, 0.58, 0.50), vec3(0.74, 0.64, 0.86), k.y);
+            if (k.x < 0.5) {
+              // a scallop: a ribbed fan opening from its hinge
+              vec2 hh = q - vec2(0.0, -0.72);
+              float a = atan(hh.x, hh.y), r = length(hh);
+              float fan = 1.62 * (1.0 - 0.34 * a * a) * (0.965 + 0.035 * cos(a * 13.0));
+              cover = (1.0 - smoothstep(fan - 0.12, fan, r)) * (1.0 - smoothstep(1.00, 1.10, abs(a)));
+              cover = max(cover, (1.0 - smoothstep(0.24, 0.34, abs(hh.x))) * (1.0 - smoothstep(0.08, 0.16, abs(hh.y))));
+              sc = mix(vec3(0.80, 0.66, 0.56), vec3(0.99, 0.94, 0.86), 0.5 + 0.5 * cos(a * 13.0)) * (0.88 + 0.12 * sin(r * 11.0));
+              sc = mix(sc, blush, 0.42 * (1.0 - smoothstep(0.2, 1.5, r)));
+            } else if (k.x < 1.5) {
+              // a sea snail seen from above: one band winding in to the middle
+              float r = length(q * vec2(1.0, 1.14)), a = atan(q.y, q.x);
+              cover = 1.0 - smoothstep(0.76, 0.88, r);
+              float wind = 0.5 + 0.5 * sin(a + 10.0 * sqrt(r + 0.02));
+              sc = mix(mix(vec3(0.52, 0.36, 0.27), blush * 0.8, 0.35), vec3(0.97, 0.91, 0.82), smoothstep(0.25, 0.70, wind)) * (1.08 - 0.30 * r);
+            } else {
+              // a starfish: five arms
+              float r = length(q), a = atan(q.y, q.x);
+              float arm = 0.30 + 0.70 * pow(0.5 + 0.5 * cos(a * 5.0), 2.4);
+              cover = 1.0 - smoothstep(arm - 0.12, arm, r);
+              sc = mix(vec3(0.98, 0.66, 0.38), vec3(0.84, 0.36, 0.22), smoothstep(0.0, 0.9, r)) * (0.90 + 0.10 * cos(a * 5.0));
+              sc += vec3(0.10, 0.08, 0.05) * step(0.80, hash(floor(q * 9.0)));
+            }
+            col = mix(col, sc * light, cover * k.z);
+          }
+        }
+      }
+    }
+#endif
     float lampFlicker = 0.86 + 0.14 * vnoise(vec2(uTime * 7.0, 3.3));
     float lampAway = length(p.xz - vec2(0.27, 1.16));
     col += vec3(1.0, 0.60, 0.24) * uLamp * lampFlicker * 0.60 * exp(-lampAway * lampAway * 7.0);      // its pool of light on the sand
@@ -431,6 +616,7 @@ class Camera {
     this.W = 1; this.H = 1; this.scale = 1;
     this.cam = { pos: [0, 1.22, 2.75], target: [0, 0.0, -1.5], fov: 62 * Math.PI / 180 };
     this.mood = 0; this.lamp = 0;
+    this.keeps = null;          // what the conversation has left here: see keeps.js
   }
   basis() {
     const c = this.cam, f = norm(sub(c.target, c.pos)), r = norm(cross(f, [0, 1, 0])), u = cross(r, f);
@@ -458,6 +644,9 @@ class Camera {
 }
 
 // How to ask a phone for a 3D drawing surface, best first. Safari on an iPhone sometimes refuses the first and grants a later one.
+// For a test: build the shore as a phone with a small graphics chip would, without shells or stars.
+const NO_KEEPS = typeof location !== 'undefined' && /[?&]dev\b/.test(location.search) && /[?&]nokeeps\b/.test(location.search);
+
 const ASKS = [
   ['webgl', { alpha: false, antialias: true, depth: true, stencil: false, powerPreference: 'high-performance' }, 'smooth edges'],
   ['webgl', { alpha: false, antialias: true, depth: true, stencil: false }, 'smooth edges, default power'],
@@ -488,7 +677,13 @@ class Scene {
     const hp = gl.getShaderPrecisionFormat ? gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT) : null;
     this.highp = !!(hp && hp.precision > 0);
     const fit = (src) => (this.highp ? src : src.replace('precision highp float;', 'precision mediump float;'));
-    this.shore = this._program(QUAD_VS, fit(SHORE_FS));
+    // The shells and stars ask more of the phone's graphics chip. If it has little room, or will not build that shader, the plain shore is built instead.
+    this.shore = null;
+    this.keepsOn = false;
+    let room = 0;
+    try { room = gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS) || 0; } catch (e) { room = 0; }
+    if (room >= 96 && !NO_KEEPS) { try { this.shore = this._program(QUAD_VS, fit('#define KEEPS\n' + SHORE_FS)); this.keepsOn = true; } catch (e) { this.shore = null; } }
+    if (!this.shore) this.shore = this._program(QUAD_VS, fit(SHORE_FS));
     this.blit = this._program(QUAD_VS, fit(BLIT_FS));
     this.glass = this._program(MESH_VS, fit(GLASS_FS));
     this.solid = this._program(MESH_VS, fit(SOLID_FS));
@@ -522,6 +717,7 @@ class Scene {
     this._frame = 0;
     this.mood = 0;              // 0 dusk, 1 night, 2 dawn
     this.lamp = 0;              // 1 when the lantern is lit
+    this.keeps = null;          // what the conversation has left here: see keeps.js
   }
 
   /** What this phone gave us, in a few words. */
@@ -529,7 +725,7 @@ class Scene {
     const gl = this.gl;
     let chip = '';
     try { const x = gl.getExtension('WEBGL_debug_renderer_info'); chip = String(x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).replace(/\s+/g, ' ').slice(0, 70); } catch (e) { chip = ''; }
-    return `3D beach | ${this.kind}${this.highp ? '' : ', half precision'}${this.direct ? ', glass does not bend the view' : ''} | ${chip} | ${this.canvas.width}x${this.canvas.height}`;
+    return `3D beach | ${this.kind}${this.highp ? '' : ', half precision'}${this.direct ? ', glass does not bend the view' : ''}${this.keepsOn ? '' : ', no keepsakes'} | ${chip} | ${this.canvas.width}x${this.canvas.height}`;
   }
 
   /** Let go of everything, so the phone has the memory back. */
@@ -645,6 +841,16 @@ class Scene {
     gl.uniform3fv(u.uRip, rip);
     gl.uniform1f(u.uDim, s.dim || 0);
     gl.uniform1f(u.uLamp, this.lamp || 0);
+    if (this.keepsOn) {
+      const k = this.keeps, sh = new Float32Array(MAX_SHELLS * 4), kd = new Float32Array(MAX_SHELLS * 4), st = new Float32Array(STARS * 3);
+      if (k) {
+        k.shells.forEach((s, i) => { sh.set([s.x, s.z, s.r, s.turn], i * 4); kd.set([s.kind, s.tint, s.a, 0], i * 4); });
+        k.stars.forEach((s, i) => { const at = starAt(s, this.W > this.H); st.set([at[0], at[1], s.a], i * 3); });
+      }
+      for (let i = 0; i < MAX_SHELLS; i++) if (!sh[i * 4 + 2]) sh[i * 4 + 2] = 1;      // never a size of nothing to divide by
+      gl.uniform4fv(u.uShell, sh); gl.uniform4fv(u.uShellK, kd); gl.uniform3fv(u.uStar, st);
+      gl.uniform1f(u.uJoin, k ? k.join : 0);
+    }
     this._quad();
 
     // 2. onto the screen
@@ -726,6 +932,7 @@ __m.flat = (function () {
 // Plain canvas drawing only. No images, nothing to download.
 
 const { M, swash, Camera, SUNS, BOTTLE, CORK, NOTE } = __m.scene;
+const { starAt } = __m.keeps;
 // sky from the horizon up, the sea far and near, sand far and near, foam, the sun or moon and its glow: dusk, night, dawn
 const LOOK = [
   { sky: ['#ff8038', '#e05c61', '#664278', '#171f4d', '#070a22'], sea: ['#c8643f', '#16323c'], sand: ['#6b5244', '#8a6a52'], wet: '#4a3a3a', foam: '#e6cbc6', sun: '#ffe9bf', glow: '255,150,70', glint: '255,200,130', glass: ['#bdf5e6', '#5fae9c', '#12403a'], paper: '#f6ecd6', dim: 1 },
@@ -827,6 +1034,30 @@ class Flat extends Camera {
       g.restore();
     }
 
+    // ---- the stars this conversation has lit, and the lines that join them
+    const keeps = this.keeps;
+    if (keeps && keeps.stars.length) {
+      const tone = this.mood === 1 ? '230,242,255' : this.mood === 2 ? '255,248,230' : '255,230,190', strength = this.mood === 2 ? 0.55 : 1;
+      const pts = keeps.stars.map((st) => { const at = starAt(st, W > H); return far([at[0], at[1], -Math.sqrt(Math.max(0, 1 - at[0] * at[0] - at[1] * at[1]))]); });
+      g.globalCompositeOperation = 'lighter';
+      g.lineWidth = 1; g.lineCap = 'round';
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], c = pts[i], len = Math.hypot(c[0] - a[0], c[1] - a[1]), lit = Math.min(keeps.stars[i].a, keeps.stars[i - 1].a);
+        if (len < 14 || lit <= 0) continue;
+        const ux = (c[0] - a[0]) / len, uy = (c[1] - a[1]) / len;
+        g.strokeStyle = `rgba(${tone},${((0.20 + 0.20 * keeps.join) * lit * strength).toFixed(3)})`;
+        g.beginPath(); g.moveTo(a[0] + ux * 6, a[1] + uy * 6); g.lineTo(c[0] - ux * 6, c[1] - uy * 6); g.stroke();
+      }
+      pts.forEach((p, i) => {
+        const lit = keeps.stars[i].a * strength * (0.80 + 0.20 * Math.sin(t * 1.7 + i * 2.4));
+        if (lit <= 0) return;
+        const halo = g.createRadialGradient(p[0], p[1], 0, p[0], p[1], 8);
+        halo.addColorStop(0, `rgba(${tone},${Math.min(1, lit).toFixed(3)})`); halo.addColorStop(0.3, `rgba(${tone},${(lit * 0.35).toFixed(3)})`); halo.addColorStop(1, `rgba(${tone},0)`);
+        g.fillStyle = halo; g.fillRect(p[0] - 8, p[1] - 8, 16, 16);
+      });
+      g.globalCompositeOperation = 'source-over';
+    }
+
     // ---- sand, everywhere below the horizon first
     const sand = g.createLinearGradient(0, hy, 0, H);
     sand.addColorStop(0, L.sand[0]); sand.addColorStop(1, L.sand[1]);
@@ -898,6 +1129,53 @@ class Flat extends Camera {
       g.beginPath(); g.ellipse(c[0], c[1], Math.abs(ex[0] - c[0]) + 1, Math.abs(ez[1] - c[1]) + 1, 0, 0, 6.283); g.stroke();
     }
     g.globalAlpha = 1;
+
+    // ---- shells and starfish on the dry sand, laid flat on the ground as the beach is seen
+    if (keeps && keeps.shells.length) {
+      const shade = this.mood === 1 ? [0.40, 0.48, 0.68] : this.mood === 2 ? [1.16, 1.10, 1.04] : [1.0, 0.94, 0.88];
+      const ink = (r, gr, bl) => `rgb(${Math.min(255, Math.round(r * shade[0]))},${Math.min(255, Math.round(gr * shade[1]))},${Math.min(255, Math.round(bl * shade[2]))})`;
+      for (const sh of keeps.shells) {
+        if (sh.a <= 0) continue;
+        const c = P([sh.x, 0, sh.z]), ex = P([sh.x + sh.r, 0, sh.z]), ez = P([sh.x, 0, sh.z + sh.r]);
+        g.save();
+        g.globalAlpha = sh.a;
+        g.transform(ex[0] - c[0], ex[1] - c[1], ez[0] - c[0], ez[1] - c[1], c[0], c[1]);      // from here on, one unit is the shell's own size on the sand
+        g.fillStyle = 'rgba(8,6,14,0.34)';
+        g.beginPath(); g.arc(0.06, 0.24, 0.95, 0, 6.283); g.fill();
+        g.rotate(-sh.turn);
+        const blush = [240 - 51 * sh.tint, 148 + 15 * sh.tint, 128 + 92 * sh.tint];
+        if (sh.kind === 0) {
+          const fan = (a) => 1.62 * (1 - 0.34 * a * a);
+          g.beginPath(); g.moveTo(-0.3, -0.84); g.lineTo(-0.3, -0.62);
+          for (let a = -1.05; a <= 1.051; a += 0.15) g.lineTo(Math.sin(a) * fan(a), -0.72 + Math.cos(a) * fan(a));
+          g.lineTo(0.3, -0.62); g.lineTo(0.3, -0.84); g.closePath();
+          g.fillStyle = ink(240, 222, 200); g.fill();
+          g.fillStyle = ink(blush[0], blush[1], blush[2]); g.globalAlpha = sh.a * 0.4;
+          g.beginPath(); g.arc(0, -0.5, 0.5, 0, 6.283); g.fill();
+          g.globalAlpha = sh.a;
+          g.strokeStyle = ink(190, 156, 132); g.lineWidth = 0.07;
+          g.beginPath();
+          for (let a = -0.9; a <= 0.91; a += 0.3) { g.moveTo(0, -0.72); g.lineTo(Math.sin(a) * fan(a) * 0.94, -0.72 + Math.cos(a) * fan(a) * 0.94); }
+          g.stroke();
+        } else if (sh.kind === 1) {
+          g.fillStyle = ink(244, 230, 208);
+          g.beginPath(); g.ellipse(0, 0, 0.84, 0.74, 0, 0, 6.283); g.fill();
+          g.strokeStyle = ink(150 + 0.2 * blush[0], 92 + 0.2 * blush[1], 70 + 0.2 * blush[2]); g.lineWidth = 0.16; g.lineCap = 'round';
+          g.beginPath();
+          for (let k = 0; k <= 40; k++) { const a = k * 0.33, r = 0.70 * (1 - k / 44); const x = Math.cos(a) * r, y = Math.sin(a) * r * 0.88; if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+          g.stroke();
+        } else {
+          g.beginPath();
+          for (let k = 0; k <= 60; k++) { const a = k / 60 * 6.283, r = 0.30 + 0.70 * Math.pow(0.5 + 0.5 * Math.cos(a * 5), 2.4); if (k) g.lineTo(Math.cos(a) * r, Math.sin(a) * r); else g.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+          g.closePath();
+          g.fillStyle = ink(232, 128, 72); g.fill();
+          g.fillStyle = ink(250, 176, 104);
+          g.beginPath(); g.arc(0, 0, 0.26, 0, 6.283); g.fill();
+        }
+        g.restore();
+      }
+      g.globalAlpha = 1;
+    }
 
     // ---- the lantern, when this phone is listening for bottles
     if (this.lamp) {
@@ -1987,6 +2265,7 @@ __m.main = (function () {
 // After a note is read, sending one back is one tap: the desk opens already addressed.
 
 const { decode, linkFor, MAX_MESSAGE } = __m.code;
+const { keepsakes, grow, keepLine, MAX_SHELLS } = __m.keeps;
 const { Scene, swash, DRY_LINE, MOOD } = __m.scene;
 const { Flat } = __m.flat;
 const { Story } = __m.story;
@@ -2027,6 +2306,32 @@ const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (
 async function notesFor(key) {
   const fresh = await list(await token(), key);
   return fresh ? keep(key, fresh) : kept(key);        // if the server is asleep, the history is still here
+}
+
+// ---------------------------------------------------------------- what the conversation has left on the shore (see keeps.js)
+
+let keeps = null;
+/** Is this note already among those ones? */
+const among = (all, b) => all.some((n) => same(n, b));
+/**
+ * Lay out the shells and stars for however many bottles this phone knows have gone between the two of you.
+ * It only ever grows while the page is open, and what is already lying there stays as it is.
+ */
+function shoreKeeps(n) {
+  if (!bottle) return;
+  if (qs.has('dev') && qs.get('keeps')) n = Number(qs.get('keeps')) || n;       // for looking at a fuller shore while building
+  if (keeps && n <= keeps.count) return;
+  const next = keepsakes(bottle.key || bottle.message, n);
+  if (keeps) { next.join = keeps.join; next.shells.forEach((s, i) => { if (keeps.shells[i]) s.a = keeps.shells[i].a; }); next.stars.forEach((s, i) => { if (keeps.stars[i]) s.a = keeps.stars[i].a; }); }
+  else { for (const s of next.shells) s.a = 1; for (const s of next.stars) s.a = 1; next.join = next.whole ? 1 : 0; }      // what was already here is simply here
+  keeps = next;
+  if (scene) scene.keeps = keeps;
+  keepSay();
+}
+/** The line under the note that says what the shore is keeping. Only for a conversation this phone belongs to. */
+function keepSay() {
+  const el = $('keepNote');
+  if (el) el.textContent = keeps && bottle && bottle.key && seat !== 'taken' ? keepLine(keeps) : '';
 }
 
 /** Put a sky over the shore: 'dusk', 'night' or 'dawn'. */
@@ -2096,10 +2401,12 @@ async function shelf() {
   if (seat === 'taken') {
     $('sealNote').textContent = 'This bottle was opened on another phone first, so the notes before it stay there. You can still send one back.';
     if (shown === bottle) address(bottle);
+    keepSay();
     return;
   }
   if (shown === bottle) address(bottle);
   const all = await notesFor(bottle.key);
+  shoreKeeps(all.length + (among(all, bottle) ? 0 : 1));
   if (!all.length) return;
   const here = all.find((n) => same(n, bottle));
   if (here) { bottle.id = here.id; bottle.at = here.at; if (shown === bottle) address(bottle); }      // now it is known for certain whose note this is
@@ -2314,6 +2621,9 @@ function desk(ctx) {
     compose.classList.add('done');
     compose.scrollTop = 0;
     lantern();
+    // A reply adds to a shore the two of you already share. Say what it will leave there.
+    const before = deskCtx.key ? kept(key).length : 0;
+    if (before) $('madeLede').textContent += ` It is bottle ${before + 1} between you` + (before < MAX_SHELLS ? `, and it leaves ${(before + 1) % 5 ? 'a new shell' : 'a starfish'} on the shore you share.` : '.');
     // The share sheet opens straight away, while this is still the same tap.
     count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters`, true);
     if (navigator.share) share(); else count('share', 'no share sheet on this browser', true);
@@ -2405,6 +2715,7 @@ function use(next, note) {
   const old = scene;
   scene = next;
   if (old) scene.mood = old.mood;
+  scene.keeps = keeps;
   if (story) story.view = scene;
   document.documentElement.classList.toggle('flat', !!scene.flat);
   refit(true);
@@ -2445,6 +2756,7 @@ if (scene) setTimeout(() => count('view', scene.info() + (scene.flat ? ` | 3D re
 else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight}`);
 count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
 if (bottle) sky(bottle.mood);
+if (bottle) { const known = bottle.key ? kept(bottle.key) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
 lantern();
 arriveAndCatchUp();
 const ready = () => { window.__bottleReady = true; const p = $('plain'); if (p) p.className = ''; };
@@ -2592,6 +2904,7 @@ function run() {
 
   function frame(dt) {
     if (reading) story.update(dt); else story.t += dt;
+    grow(keeps, dt);
     for (const ev of story.events) {
       if (ev === 'reveal') showLetter(false);
       if (ev === 'pop') spray();

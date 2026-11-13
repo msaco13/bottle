@@ -97,8 +97,8 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 .chip.new { box-shadow: 0 0 0 2px rgba(255, 201, 138, 0.55); }
 #after.show { opacity: 1; }
 #newest { margin-bottom: 8px; }
-#sealNote, .lanternSay { margin: 8px 0 0; max-width: 30em; font-size: 14px; line-height: 1.4; color: var(--dim); text-align: center; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7); }
-#sealNote:empty { display: none; }
+#sealNote, #keepNote, .lanternSay { margin: 8px 0 0; max-width: 30em; font-size: 14px; line-height: 1.4; color: var(--dim); text-align: center; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7); }
+#sealNote:empty, #keepNote:empty { display: none; }
 /* The lantern: one line and one button, wherever it is offered */
 .lantern { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .lantern:empty { display: none; }

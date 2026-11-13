@@ -3,6 +3,7 @@
 import { Flat } from '../js/flat.js';
 import { Story } from '../js/story.js';
 import { DRY_LINE } from '../js/scene.js';
+import { keepsakes, grow } from '../js/keeps.js';
 import assert from 'node:assert';
 
 // a canvas that accepts every drawing call and counts them
@@ -27,6 +28,10 @@ for (const mood of [0, 1, 2]) {
   view.mood = mood; view.lamp = mood === 1 ? 1 : 0;
   paint();
 }
+// and with everything a long conversation leaves on the shore: shells, a starfish, the joined stars
+view.keeps = keepsakes('abcdefghijklmnopqrstuv', 12);
+for (let i = 0; i < 400; i++) grow(view.keeps, 1 / 60);
+for (const mood of [0, 1, 2]) { view.mood = mood; paint(); }
 story.down(195, 600); story.up(); seen.push(story.state);
 run(12);
 assert(story.seen, 'the bottle comes into sight');

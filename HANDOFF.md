@@ -4,7 +4,9 @@ Write a note, get one link, text it to someone. They tap it and a bottle washes 
 
 Live: https://msaco13.github.io/bottle/ (the page with no message is the writing page). Stats: https://msaco13.github.io/bottle/stats.html
 
-Last updated: 2026-11-13, early morning. Published. Nobody has yet confirmed what a real phone shows. Michael has an Android, no iPhone.
+Last updated: 2026-11-13, midday. Everything up to "A test visit stays a test" (77dff3f) is published. **Keepsakes (below) are on the branch `claude/bottle-handoff-rw7a7x` and are NOT published until that branch is merged into `main`.** Michael has an Android, no iPhone.
+
+What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a person): at 6:51 am Miami an "iPhone iOS 18.7 · Safari 27" drew the 3D beach on "Apple GPU" at 57 pictures a second, granted motion, popped the cork by tilt, read the note and took its seat. An Android (Adreno 750) also drew 3D. Chrome dressed as an iPhone does not report "Apple GPU", so these are taken to be real phones. That is the first sign the 3D shaders run on Apple's driver.
 
 ## The promises
 
@@ -35,6 +37,19 @@ Last updated: 2026-11-13, early morning. Published. Nobody has yet confirmed wha
 - The server knows a shore only by the hash of its token. It cannot work the secret back out.
 - The phone also keeps the notes it has already seen (`bottle-notes`), so the history is still there if the server is asleep.
 - Clearing the browser's data makes a new, empty shore. Old links still open.
+
+## Keepsakes: a shore that remembers (not yet published)
+
+The reason to come back. Every bottle sent back and forth leaves something on that conversation's beach.
+
+- One shell on the sand for every bottle between the two people, up to 12. Every fifth is a starfish. One star lit for every bottle, up to 10. At ten the stars are joined into a figure with a name of its own ("The Quiet Oar").
+- `js/keeps.js` (pure, tested). Where each shell lies, the shape of the stars and the name are worked out from the conversation's key, which both phones already hold. So both people see the same shore, nothing new is stored, and nothing new is sent. The server learns nothing. The link format did not change.
+- How many: the number of notes this phone knows of (`kept`, then the server's list once the seat is taken). It only grows while the page is open. New ones fade in one after another.
+- A stranger with a forwarded link knows of one note: one shell, one star, and no line of words. A link from before conversations (no key) gets one shell from the note itself.
+- Under the note: "4 shells on this shore, one for every bottle between you. 6 more bottles and your stars join up." On the "bottle is ready" screen for a reply: "It is bottle 5 between you, and it leaves a starfish on the shore you share."
+- Drawn twice, like everything else: in the beach shader (`#ifdef KEEPS` in `js/scene.js`) and on the flat beach (`js/flat.js`). Shells lie in a narrow band of sand above the tide and above the line of words (z 1.02 to 1.23).
+- **The 3D beach is never lost for a shell.** The beach shader is built with keepsakes only if the graphics chip has room (96 uniform slots), and if that build fails the plain beach shader is built instead. The drawing report then says "no keepsakes", so the stats page shows which phones did not get them.
+- Known limit: after 12 bottles the sand stops gaining shells, and after 10 the sky stops gaining stars. The line of words still counts.
 
 ## The lantern (notifications)
 
@@ -112,6 +127,7 @@ app.js            BUILT. Never edit. Made from js/ by build.mjs
 build.mjs         packs js/ into app.js, stamps versions and the server address
 css/style.css
 js/code.js        the link format (pure, tested)
+js/keeps.js       what a conversation leaves on its shore: shells, stars, the figure's name (pure, tested)
 js/scene.js       the 3D shore: shaders, skies, glass, cork and note, the lantern, the camera
 js/flat.js        the same shore painted flat, for a phone that will not give 3D
 js/story.js       the story as a state machine (pure, tested)
@@ -127,10 +143,10 @@ stats.html        the stats page
 ops/notify/       the notification sender (deployed to Supabase) and its Web Push code
 ops/make-icons.mjs  draws the icons
 ops/watch.yml     the GitHub schedule for the watch (not switched on)
-test/             code, story, flat, thread, push (npm test); live and watch (by hand)
+test/             code, keeps, story, flat, thread, push (npm test); live and watch (by hand)
 ```
 
-Run locally: `npm start`. Add `?dev` for a console handle (`dev.run(seconds)`, `dev.hold = true`, `dev.story`, `dev.scene`). With `?dev`: `&lantern=home|can|lit|safari|blocked` shows each lantern state, `&standalone` pretends to be the Home Screen app, `&flat` forces the flat beach, `&nocanvas` pretends nothing can be drawn at all. `dev.lose()` takes the 3D away mid-story.
+Run locally: `npm start`. Add `?dev` for a console handle (`dev.run(seconds)`, `dev.hold = true`, `dev.story`, `dev.scene`). With `?dev`: `&lantern=home|can|lit|safari|blocked` shows each lantern state, `&standalone` pretends to be the Home Screen app, `&flat` forces the flat beach, `&keeps=12` shows the shore of a 12-bottle conversation, `&nokeeps` builds the 3D beach without shells or stars, `&nocanvas` pretends nothing can be drawn at all. `dev.lose()` takes the 3D away mid-story.
 
 ## Publishing
 
@@ -147,9 +163,13 @@ One machine: a Windows PC on the home network.
 - In simulation only: the iPhone card, the parcel carrying a shore into an empty copy, the stranger's view of a taken bottle.
 - **The iPhone suite** (real Chrome made up as an iPhone 15: its name, screen, touch; run against the live site): a healthy iPhone gets 3D and the whole story by touch; 3D refused twice then granted; 3D never available (as in Lockdown Mode) plays the whole story flat; 3D handed over dead; 3D taken away mid-story and given back; a phone that cannot draw into a texture; a phone with half precision only; a phone held at 30 a second keeps its sharpness; a link preview counts as nothing; a person counts. All ten pass.
 
+- Keepsakes (2026-11-13, a cloud Linux machine, Chromium with a software graphics chip, local files, server calls blocked): `test/keeps.test.mjs` checks 300 shores (same on both phones, only ever gaining, every shell on screen above the line of words, none on another). Looked at by eye in 3D and flat, under all three skies, upright and wide, at 3, 4, 7 and 12 bottles, and with `&nokeeps`.
+
 ## Not tested (say this out loud)
 
-- **No real phone has been watched.** Not iPhone Safari, not Android Chrome.
+- **Keepsakes on any real phone.** The longer beach shader has only been built by Chromium's software chip. Whether Apple's and Qualcomm's drivers build it, and what it costs in pictures a second, is unknown. If a phone refuses it, that phone gets the plain 3D beach and reports "no keepsakes".
+
+- **No real phone has been watched by a person.** Not iPhone Safari, not Android Chrome. The counter says one of each drew the 3D beach on 2026-11-13 (see the top).
 - **No WebKit engine at all.** A test build of WebKit was downloaded and Windows refused to run it (code-integrity policy). So everything iPhone is proven only in Chrome wearing an iPhone's name. Chrome and Safari read shaders with the same translator, but they hand them to different graphics drivers. Whether Apple's driver draws these shaders correctly is unproven.
 - **iPhone notifications, all of it**: whether "Add to Home Screen" keeps the parcel code in the address, whether the Home Screen copy then has the conversations, whether Apple's push service accepts these messages, whether the notification shows and opens the bottle. Apple's service was never contacted.
 - Android notifications on a phone (desktop Chrome uses the same service, so this is the likeliest to work).
@@ -164,6 +184,10 @@ One machine: a Windows PC on the home network.
 - The alarm that leaves the building (GitHub email) still needs the `workflow` permission.
 
 ## Next ideas, not started
+
+- The daily tide: one small question on everyone's desk each day, one tap to bottle the answer to someone in "Your bottles".
+- Bottles that arrive later ("wash up at sunrise"). An honest lock needs the server to hold the key, which bends promise 2 for those bottles.
+- Something for conversations past 12 bottles (sea glass, a second figure in the sky).
 
 - After the first real iPhone test: fix whatever the Home Screen path gets wrong.
 - Show "the first notification arrived" in the page, from the note `sw.js` leaves.

@@ -4,6 +4,7 @@
 // After a note is read, sending one back is one tap: the desk opens already addressed.
 
 import { decode, linkFor, MAX_MESSAGE } from './code.js';
+import { keepsakes, grow, keepLine, MAX_SHELLS } from './keeps.js';
 import { Scene, swash, DRY_LINE, MOOD } from './scene.js';
 import { Flat } from './flat.js';
 import { Story } from './story.js';
@@ -45,6 +46,32 @@ const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (
 async function notesFor(key) {
   const fresh = await list(await token(), key);
   return fresh ? keep(key, fresh) : kept(key);        // if the server is asleep, the history is still here
+}
+
+// ---------------------------------------------------------------- what the conversation has left on the shore (see keeps.js)
+
+let keeps = null;
+/** Is this note already among those ones? */
+const among = (all, b) => all.some((n) => same(n, b));
+/**
+ * Lay out the shells and stars for however many bottles this phone knows have gone between the two of you.
+ * It only ever grows while the page is open, and what is already lying there stays as it is.
+ */
+function shoreKeeps(n) {
+  if (!bottle) return;
+  if (qs.has('dev') && qs.get('keeps')) n = Number(qs.get('keeps')) || n;       // for looking at a fuller shore while building
+  if (keeps && n <= keeps.count) return;
+  const next = keepsakes(bottle.key || bottle.message, n);
+  if (keeps) { next.join = keeps.join; next.shells.forEach((s, i) => { if (keeps.shells[i]) s.a = keeps.shells[i].a; }); next.stars.forEach((s, i) => { if (keeps.stars[i]) s.a = keeps.stars[i].a; }); }
+  else { for (const s of next.shells) s.a = 1; for (const s of next.stars) s.a = 1; next.join = next.whole ? 1 : 0; }      // what was already here is simply here
+  keeps = next;
+  if (scene) scene.keeps = keeps;
+  keepSay();
+}
+/** The line under the note that says what the shore is keeping. Only for a conversation this phone belongs to. */
+function keepSay() {
+  const el = $('keepNote');
+  if (el) el.textContent = keeps && bottle && bottle.key && seat !== 'taken' ? keepLine(keeps) : '';
 }
 
 /** Put a sky over the shore: 'dusk', 'night' or 'dawn'. */
@@ -114,10 +141,12 @@ async function shelf() {
   if (seat === 'taken') {
     $('sealNote').textContent = 'This bottle was opened on another phone first, so the notes before it stay there. You can still send one back.';
     if (shown === bottle) address(bottle);
+    keepSay();
     return;
   }
   if (shown === bottle) address(bottle);
   const all = await notesFor(bottle.key);
+  shoreKeeps(all.length + (among(all, bottle) ? 0 : 1));
   if (!all.length) return;
   const here = all.find((n) => same(n, bottle));
   if (here) { bottle.id = here.id; bottle.at = here.at; if (shown === bottle) address(bottle); }      // now it is known for certain whose note this is
@@ -332,6 +361,9 @@ function desk(ctx) {
     compose.classList.add('done');
     compose.scrollTop = 0;
     lantern();
+    // A reply adds to a shore the two of you already share. Say what it will leave there.
+    const before = deskCtx.key ? kept(key).length : 0;
+    if (before) $('madeLede').textContent += ` It is bottle ${before + 1} between you` + (before < MAX_SHELLS ? `, and it leaves ${(before + 1) % 5 ? 'a new shell' : 'a starfish'} on the shore you share.` : '.');
     // The share sheet opens straight away, while this is still the same tap.
     count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters`, true);
     if (navigator.share) share(); else count('share', 'no share sheet on this browser', true);
@@ -423,6 +455,7 @@ function use(next, note) {
   const old = scene;
   scene = next;
   if (old) scene.mood = old.mood;
+  scene.keeps = keeps;
   if (story) story.view = scene;
   document.documentElement.classList.toggle('flat', !!scene.flat);
   refit(true);
@@ -463,6 +496,7 @@ if (scene) setTimeout(() => count('view', scene.info() + (scene.flat ? ` | 3D re
 else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight}`);
 count(bottle ? 's_open' : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
 if (bottle) sky(bottle.mood);
+if (bottle) { const known = bottle.key ? kept(bottle.key) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
 lantern();
 arriveAndCatchUp();
 const ready = () => { window.__bottleReady = true; const p = $('plain'); if (p) p.className = ''; };
@@ -610,6 +644,7 @@ function run() {
 
   function frame(dt) {
     if (reading) story.update(dt); else story.t += dt;
+    grow(keeps, dt);
     for (const ev of story.events) {
       if (ev === 'reveal') showLetter(false);
       if (ev === 'pop') spray();
