@@ -4,7 +4,9 @@ Write a note, get one link, text it to someone. They tap it and a bottle washes 
 
 Live: https://msaco13.github.io/bottle/ (the page with no message is the writing page). Stats: https://msaco13.github.io/bottle/stats.html
 
-Last updated: 2026-11-13, midday. Published, keepsakes included (merged 11:11 am Miami, live version `54013169e2`, checked byte for byte against `main`). Michael has an Android, no iPhone.
+Last updated: 2026-11-13, afternoon. Keepsakes are published (live version `54013169e2`). **"Your shore" (the people list and sending without texting, below) is on the branch `claude/bottle-handoff-rw7a7x` and is NOT published until that branch is merged into `main`. Its server function `bottle_reach` is NOT yet applied to the database** (`ops/sql/bottle_reach.sql`); the page works without it. Michael has an Android, no iPhone.
+
+Keepsakes on a real phone, 2026-11-13: Michael's Android (Adreno 750) drew the 3D beach with keepsakes at 65 pictures a second, and the twelve-shell night shore at 71, both at full sharpness (his screenshots, and the counter).
 
 What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a person): at 6:51 am Miami an "iPhone iOS 18.7 · Safari 27" drew the 3D beach on "Apple GPU" at 57 pictures a second, granted motion, popped the cork by tilt, read the note and took its seat. An Android (Adreno 750) also drew 3D. Chrome dressed as an iPhone does not report "Apple GPU", so these are taken to be real phones. That is the first sign the 3D shaders run on Apple's driver.
 
@@ -38,6 +40,22 @@ What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a
 - The phone also keeps the notes it has already seen (`bottle-notes`), so the history is still there if the server is asleep.
 - Clearing the browser's data makes a new, empty shore. Old links still open.
 
+## Your shore: people, and sending without texting (not yet published)
+
+What turns it from a link maker into something you open to send. No accounts, no phone numbers on the server, nothing paid.
+
+- **A phone with conversations opens on "Your shore"**: one row per person, a waiting bottle first. Tap a name to write to them. "Read last" opens the last bottle. "A bottle for someone new" is the old desk. A phone with no conversations sees the old desk, unchanged.
+- **The first bottle to someone still goes by link.** That is what joins the two phones (the seat). If a mobile number was given, one button opens the phone's own Messages already addressed and written (`sms:` link; an iPhone wants `&body=`, Android `?body=`). The phone sends the text. Nothing here can send one, and never will at $0. On Android Chrome a "Contacts" button fills the name and number from the phone's own contact picker.
+- **After that, if their lantern is lit, there is no link to text.** The button says "Send to Jorge". The note is saved to the conversation, the sender tells their lantern, and the page says "Sent to Jorge" only once the push service has really taken it. The link is still one tap away ("Text the link as well").
+- **Every fallback ends in the link**, which never needs the server: lantern silent ("It is on Jorge's shore, but the lantern did not answer... To be sure, text the link"), server down, no lantern.
+- **How the page knows a lantern is lit**: `bottle_reach` (new, `ops/sql/bottle_reach.sql`) tells a member two counts: how many other phones have joined, how many of those have a lantern. Until it is applied the page asks once per visit, gets no answer, and instead learns from each send (the sender already answers how many phones it told). So the first send after a lantern is lit still opens the share sheet, and then says no text was needed.
+- The number is kept with the person in this phone's list, which is scrambled before its copy goes to the server, like the names. What is known of each lantern (`bottle-reach`) stays on the phone.
+- Android: "Put Bottle on your home screen" appears on the shore when Chrome offers to install it.
+- Sending results are counted under "Lantern (notifications)" on the stats page, as "sending: went straight to their lit lantern" and so on.
+- Tested with `test/app.browser.mjs` (31 checks, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link.
+- **Not tested**: any real phone. Whether `sms:` opens Messages with the words in place on a real iPhone and Android. The contact picker. The install offer. And everything about iPhone lanterns, as before: direct sending to an iPhone depends on it.
+- Not built yet: one bottle to several people at once.
+
 ## Keepsakes: a shore that remembers
 
 The reason to come back. Every bottle sent back and forth leaves something on that conversation's beach.
@@ -66,7 +84,7 @@ The reason to come back. Every bottle sent back and forth leaves something on th
 
 - Project `bottle`, ref `segtizidayglyouweszn`, us-east-1, free plan, $0. It holds nothing else. Never touch the other projects in the account.
 - Tables, all locked (row security on, no policies): `bottles`, `threads`, `members`, `shores`, `push_subs`, `handoffs`, `events`, and `private.settings`.
-- Everything goes through functions. Open to the page: `bottle_open`, `bottle_list`, `bottle_add`, `shore_get`, `shore_put`, `handoff_put`, `handoff_take`, `push_save`, `push_drop`, `push_key`, `alerts_set`, `log_event`, `event_stats`, and the two old ones `thread_bottles` and `add_bottle` (old open conversations only). Only the notification sender may call `vapid_init`, `push_plan`, `push_self`, `push_gone`, `watch_plan`.
+- Everything goes through functions. Open to the page: `bottle_reach` (once applied), `bottle_open`, `bottle_list`, `bottle_add`, `shore_get`, `shore_put`, `handoff_put`, `handoff_take`, `push_save`, `push_drop`, `push_key`, `alerts_set`, `log_event`, `event_stats`, and the two old ones `thread_bottles` and `add_bottle` (old open conversations only). Only the notification sender may call `vapid_init`, `push_plan`, `push_self`, `push_gone`, `watch_plan`.
 - Brakes: 400 notes per conversation, one a second per conversation, 300 a minute overall, 600 counter events a minute.
 - The address, publishable key and public notification key are in `js/thread.js`. All three are meant to be public. No secret is in the repo.
 - Every hour the database itself calls the sender (`pg_cron` job `bottle-watch`). That checks for problems (see "The alarm") and keeps the project from sitting idle. **Not proven**: whether that inside-out call counts as activity to Supabase's one-week pause. If the project does pause, Supabase emails first, Restore is one button, and nothing is lost. While paused: bottles open, replies send, the history each phone has already seen is still shown, and new notifications do not go out.
@@ -143,7 +161,8 @@ stats.html        the stats page
 ops/notify/       the notification sender (deployed to Supabase) and its Web Push code
 ops/make-icons.mjs  draws the icons
 ops/watch.yml     the GitHub schedule for the watch (not switched on)
-test/             code, keeps, story, flat, thread, push (npm test); live and watch (by hand)
+test/             code, keeps, story, flat, thread, push (npm test); live, watch and app.browser (by hand)
+ops/sql/          server functions added since the first build, kept here so the database can be rebuilt
 ```
 
 Run locally: `npm start`. Add `?dev` for a console handle (`dev.run(seconds)`, `dev.hold = true`, `dev.story`, `dev.scene`). With `?dev`: `&lantern=home|can|lit|safari|blocked` shows each lantern state, `&standalone` pretends to be the Home Screen app, `&flat` forces the flat beach, `&keeps=12` shows the shore of a 12-bottle conversation, `&nokeeps` builds the 3D beach without shells or stars, `&nocanvas` pretends nothing can be drawn at all. `dev.lose()` takes the 3D away mid-story.
@@ -185,6 +204,8 @@ One machine: a Windows PC on the home network.
 
 ## Next ideas, not started
 
+- A beach full of bottles for one person from many (birthdays, farewells): one "add your bottle" link for the group, one link for the person. The old open conversations (key alone lets you add) may be most of the server side. Needs no notifications.
+- One bottle to several people at once.
 - The daily tide: one small question on everyone's desk each day, one tap to bottle the answer to someone in "Your bottles".
 - Bottles that arrive later ("wash up at sunrise"). An honest lock needs the server to hold the key, which bends promise 2 for those bottles.
 - Something for conversations past 12 bottles (sea glass, a second figure in the sky).

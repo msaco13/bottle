@@ -124,16 +124,33 @@ export async function open(auth, key, claim) {
   } catch { return null; }
 }
 
-/** Put a note in its conversation, with the seat its link will carry. note: { m, n, mood, to, id, t }. Resolves true if the server took it. */
+/**
+ * Put a note in its conversation, with the seat its link will carry. note: { m, n, mood, to, id, t }.
+ * Resolves { ok, told }: ok if the server took it, and told is a promise of how many of the other side's phones
+ * were told by their lanterns (0 if none is lit, or the sender could not be reached). The link never waits on either.
+ */
 export async function add(auth, key, note, claim) {
-  if (!key || !auth || !subtle()) return false;
+  const no = { ok: false, told: Promise.resolve(0) };
+  if (!key || !auth || !subtle()) return no;
   try {
     const thread = await threadId(key);
     const r = await rpc('bottle_add', { p_auth: auth, p_thread: thread, p_body: await seal(key, note), p_claim: claim ? await claimHash(claim) : null });
-    if (r !== 'ok') return false;
-    notify({ do: 'bottle', auth, thread });          // tell the other side's lantern. Not waited on.
-    return true;
-  } catch { return false; }
+    if (r !== 'ok') return no;
+    return { ok: true, told: notify({ do: 'bottle', auth, thread }).then((n) => (n && n.sent > 0 ? n.sent : 0), () => 0) };
+  } catch { return no; }
+}
+
+/**
+ * Who else is in a conversation, and can they be told? Resolves { others, lit }: how many other phones have joined,
+ * and how many of those have a lantern lit. null if the server could not say (asleep, or it does not know how yet).
+ * It tells a member a count and nothing more.
+ */
+export async function reach(auth, key) {
+  if (!key || !auth || !subtle()) return null;
+  try {
+    const r = await rpc('bottle_reach', { p_auth: auth, p_thread: await threadId(key) }, 4000);
+    return r && typeof r.others === 'number' ? { others: r.others, lit: r.lit || 0 } : null;
+  } catch { return null; }
 }
 
 /** Every note in a conversation this phone belongs to, oldest first. null if the server could not be asked. */

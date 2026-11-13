@@ -12,7 +12,7 @@ const dad = person(), mike = person(), stranger = person();
 const key = newKey(), seat1 = newClaim(), seat2 = newClaim();
 
 // Dad writes to Mike. The conversation is his until someone opens the bottle.
-assert.equal(await add(dad, key, note('Same bench, Sunday at 9?', 'Dad', 'Mike'), seat1), true);
+assert.equal((await add(dad, key, note('Same bench, Sunday at 9?', 'Dad', 'Mike'), seat1)).ok, true);
 assert.equal((await list(dad, key)).length, 1);
 assert.deepEqual(await list(mike, key), [], 'before opening the bottle, even the right person sees nothing');
 assert.deepEqual(await list(null, key), []);
@@ -28,7 +28,7 @@ say('the first phone to open a bottle joins the conversation');
 // Mike forwards the link. The stranger has everything Mike had: the key and the seat. It is not enough.
 assert.equal(await open(stranger, key, seat1), 'taken');
 assert.deepEqual(await list(stranger, key), [], 'a forwarded link must not show the conversation');
-assert.equal(await add(stranger, key, note('let me in', 'X', 'Dad'), newClaim()), false, 'a forwarded link must not let a stranger write into it');
+assert.equal((await add(stranger, key, note('let me in', 'X', 'Dad'), newClaim())).ok, false, 'a forwarded link must not let a stranger write into it');
 assert.equal(await open(stranger, key, newClaim()), 'taken', 'nor does guessing a seat');
 assert.equal(await rpc('add_bottle', { p_thread: await threadId(key), p_body: await seal(key, note('old way in', 'X', '')) }), undefined, 'nor the door the first version used');
 assert.deepEqual(await rpc('thread_bottles', { p_thread: await threadId(key) }), []);
@@ -36,7 +36,7 @@ say('a forwarded link shows a stranger nothing and lets them add nothing');
 
 // Mike sends one back. Dad, already in the conversation, opens it, and that uses its seat up too.
 await wait(1100);
-assert.equal(await add(mike, key, note('See you there.', 'Mike', 'Dad'), seat2), true);
+assert.equal((await add(mike, key, note('See you there.', 'Mike', 'Dad'), seat2)).ok, true);
 assert.equal(await open(dad, key, seat2), 'member');
 assert.equal((await list(dad, key)).length, 2);
 assert.equal(await open(stranger, key, seat2), 'taken', 'a reply forwarded on after it was read has no free seat either');
