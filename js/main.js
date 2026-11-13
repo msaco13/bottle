@@ -41,11 +41,16 @@ function showLetter(instant, note) {
     if (/^\s+$/.test(p)) { words.appendChild(document.createTextNode(p)); return; }
     const s = document.createElement('span');
     s.textContent = p;
+    s.style.transform = `rotate(${((Math.random() - 0.5) * 2.6).toFixed(2)}deg) translateY(${((Math.random() - 0.5) * 1.8).toFixed(1)}px)`;
     s.style.animationDelay = instant ? '0s' : (1.3 + i * per).toFixed(2) + 's';
     words.appendChild(s);
   });
   const sign = $('sign');
   sign.textContent = b.name ? '~ ' + b.name : '';
+  const seal = $('seal');
+  seal.textContent = b.name ? Array.from(b.name.trim())[0].toUpperCase() : '';
+  seal.style.display = b.name ? '' : 'none';
+  seal.style.animationDelay = instant ? '0s' : (2.0 + parts.length * per).toFixed(2) + 's';
   sign.style.animationDelay = instant ? '0s' : (1.6 + parts.length * per).toFixed(2) + 's';
   // Sending one back is the obvious next thing, and it is already addressed.
   const mine = b.name && b.name === myName();
@@ -65,6 +70,8 @@ function showLetter(instant, note) {
 async function shelf() {
   const el = $('shelf');
   el.textContent = '';
+  const old = $('newest'); if (old) old.remove();
+  $('reply').classList.remove('ghost');
   if (!bottle || !bottle.key) return;
   const all = await list(bottle.key);
   if (!all.length) return;
@@ -72,6 +79,17 @@ async function shelf() {
   const newer = here ? all.filter((n) => n.at > here.at) : [];
   const others = all.filter((n) => !same(n, bottle));
   if (!others.length) return;
+  if (newer.length) {
+    const go = document.createElement('button');
+    go.className = 'btn';
+    go.id = 'newest';
+    const from = newer[newer.length - 1].name;
+    go.textContent = from ? `Read the new bottle from ${from}` : 'Read the newest bottle';
+    go.onclick = () => { showLetter(false, newer[newer.length - 1]); go.remove(); $('reply').classList.remove('ghost'); head.textContent = 'Bottles between you (' + all.length + ')'; for (const c of row.children) c.classList.toggle('on', c === row.firstChild); };
+    // A new bottle is the first thing to do, so it goes above everything else.
+    $('after').insertBefore(go, $('reply'));
+    $('reply').classList.add('ghost');
+  }
   const head = document.createElement('div');
   head.className = 'shelfHead';
   head.textContent = newer.length ? (newer.length === 1 ? 'A newer bottle has washed up since this one' : `${newer.length} newer bottles have washed up since this one`) : `Bottles between you (${all.length})`;
@@ -268,6 +286,8 @@ function run() {
 
   // ---- one frame
   const hintEl = $('hint'), finger = $('finger');
+  const look = [0, 0], rest = [0, 1];
+  let camY = reading ? 0.44 : 0.1;
   let hintText = null, cueT = 0, slow = 0, last = performance.now(), started = false;
 
   function frame(dt) {
@@ -300,6 +320,17 @@ function run() {
 
     const held = story.state !== 'arrive' && story.state !== 'adrift';
     const zs = swash(story.bx, t);
+    // The camera. It starts on the horizon, comes down to the sand when the bottle shows, and follows the phone a little.
+    const goalY = !reading ? 0.1 : story.state === 'arrive' ? 0.44 : story.state === 'adrift' ? (story.seen ? 0.0 : 0.3) : 0.16;
+    camY += (goalY - camY) * Math.min(1, dt * 1.1);
+    let lx = 0.035 * Math.sin(t * 0.21), ly = 0.02 * Math.sin(t * 0.17 + 1);
+    if (story.motion) {
+      rest[0] += (story.g[0] - rest[0]) * Math.min(1, dt / 3); rest[1] += (story.g[1] - rest[1]) * Math.min(1, dt / 3);
+      lx += Math.max(-0.4, Math.min(0.4, story.g[0] - rest[0])); ly += Math.max(-0.4, Math.min(0.4, story.g[1] - rest[1]));
+    }
+    look[0] += (lx - look[0]) * Math.min(1, dt * 5); look[1] += (ly - look[1]) * Math.min(1, dt * 5);
+    const amount = held ? 0.3 : story.grab ? 0.15 : 1;      // steady while something is in your hand
+    scene.cam.target = [look[0] * 1.5 * amount, camY - look[1] * 1.1 * amount, -1.5];
     scene.draw({
       time: t,
       dim: reading ? (held ? 0.55 * Math.min(1, story.lift) + (story.state === 'reading' ? 0.25 : 0) : 0) : 0.35,

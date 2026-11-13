@@ -11,8 +11,9 @@
 // earlier notes goes missing.
 
 export const SERVER = {
-  url: '',   // set once, when the Bottle database exists
-  key: '',   // its public (anonymous) key. Safe to publish: it can only call the two functions below.
+  url: 'https://segtizidayglyouweszn.supabase.co',     // the Bottle project. It holds nothing else.
+  // Its publishable key. It is meant to be public: all it can do is call the two functions below.
+  key: 'sb_publishable_2XYYYTBW-AEQN6IaXllIjQ_mQkYc4PP',
 };
 
 const b64 = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };

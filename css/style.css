@@ -63,7 +63,12 @@ html, body {
   100% { clip-path: inset(0 0 0 0); transform: none; }
 }
 #words { white-space: pre-wrap; overflow-wrap: anywhere; }
-#words span { opacity: 0; animation: ink 0.5s ease forwards; }
+#words span { display: inline-block; opacity: 0; animation: ink 0.5s ease forwards; }
+/* a wax seal with the sender's initial, pressed on once the words are down */
+#seal { position: absolute; left: 22px; bottom: 16px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 700; color: rgba(255, 220, 210, 0.85); text-shadow: 0 -1px 0 rgba(60, 0, 0, 0.6); background: radial-gradient(circle at 35% 30%, #d8483a, #8f1d18 62%, #6b1210); box-shadow: 0 3px 8px rgba(60, 10, 0, 0.45), inset 0 0 0 3px rgba(255, 255, 255, 0.07), inset 0 -4px 8px rgba(0, 0, 0, 0.35); opacity: 0; transform: rotate(-12deg) scale(1.7); }
+#letter.show #seal { animation: stamp 0.35s cubic-bezier(0.3, 1.5, 0.5, 1) forwards; }
+@keyframes stamp { from { opacity: 0; transform: rotate(-12deg) scale(1.7); } to { opacity: 1; transform: rotate(-12deg) scale(1); } }
+#paper { padding-bottom: 68px; }
 @keyframes ink { from { opacity: 0; filter: blur(2px); } to { opacity: 1; filter: none; } }
 #sign { margin-top: 20px; text-align: right; font-size: 1.05em; opacity: 0; }
 #letter.show #sign { animation: ink 0.9s ease forwards; }
@@ -84,6 +89,7 @@ html, body {
 .chip.on { border-color: var(--gold); color: var(--gold); }
 .chip.new { box-shadow: 0 0 0 2px rgba(255, 201, 138, 0.55); }
 #after.show { opacity: 1; }
+#newest { margin-bottom: 8px; }
 
 /* The safety net: the note on its own, when the beach cannot load */
 #plain { position: fixed; inset: 0; z-index: 9; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px 6%; background: linear-gradient(180deg, #1b1740, #5b3052 60%, #2b2330); }
