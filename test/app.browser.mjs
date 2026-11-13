@@ -91,7 +91,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   await p.page.waitForTimeout(900);
   check('a phone with people opens on its shore', await p.shown('home') && !(await p.shown('desk')));
   const rows = await p.page.evaluate(() => [...document.querySelectorAll('#people .row')].map((r) => r.textContent));
-  check('everyone is listed, newest first, and a lit lantern is shown', rows.length === 2 && rows[0].startsWith('Jorge') && rows[0].includes('2 bottles') && rows[0].includes('lantern lit'), rows.join(' / '));
+  check('everyone is listed, newest first, and a lit lantern is shown', rows.length === 2 && rows[0].startsWith('Jorge') && rows[0].includes('2 bottles') && rows[0].includes('notifications on'), rows.join(' / '));
   await p.shot('2-home');
   await p.page.click('#people .row');
   await p.page.waitForTimeout(500);
@@ -117,7 +117,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   await p.page.waitForTimeout(700);
   await p.page.click('#people .row'); await p.page.waitForTimeout(400);
   await p.page.fill('#msg', 'Are you there?'); await p.page.click('#make'); await p.page.waitForTimeout(1200);
-  check('lantern silent: the page says so and offers the link', (await p.text('madeTitle')) === 'Your bottle is ready' && (await p.text('madeLede')).includes('the lantern did not answer') && await p.shown('link'), await p.text('madeLede'));
+  check('lantern silent: the page says so and offers the link', (await p.text('madeTitle')) === 'Your bottle is ready' && (await p.text('madeLede')).includes('phone could not be told this time') && await p.shown('link'), await p.text('madeLede'));
   await p.shot('3-made-silent');
   await p.ctx.close();
 }
@@ -135,7 +135,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   const p = await phone({ seed: jorge, sent: 1 });
   await p.page.waitForTimeout(900);
   const rows = await p.page.evaluate(() => [...document.querySelectorAll('#people .row')].map((r) => r.textContent));
-  check('untaught server: the shore still lists everyone', rows.length === 2 && !rows[0].includes('lantern lit'), rows.join(' / '));
+  check('untaught server: the shore still lists everyone', rows.length === 2 && !rows[0].includes('notifications on'), rows.join(' / '));
   check('untaught server: asked once, then left alone', p.calls.filter((c) => c === 'bottle_reach').length === 1, String(p.calls.filter((c) => c === 'bottle_reach').length));
   await p.page.click('#people .row'); await p.page.waitForTimeout(400);
   check('untaught server: a link is made as before', (await p.text('make')) === 'Create bottle');

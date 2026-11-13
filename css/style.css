@@ -50,7 +50,7 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 #skip.show { opacity: 0.85; pointer-events: auto; }
 
 /* The note */
-#letter { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: calc(var(--top) + 8px) 6% calc(var(--bottom) + 8px); opacity: 0; pointer-events: none; }
+#letter { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 22px; overflow-y: auto; touch-action: pan-y; scrollbar-width: none; padding: calc(var(--top) + 8px) 6% calc(var(--bottom) + 8px); opacity: 0; pointer-events: none; }
 #letter.show { opacity: 1; pointer-events: auto; }
 #paper {
   position: relative; width: min(100%, 440px); max-height: 76%; overflow-y: auto; padding: 34px 30px 30px; border-radius: 3px;
@@ -63,7 +63,10 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
   transform-origin: 50% 0; clip-path: inset(0 0 100% 0); touch-action: pan-y; scrollbar-width: none;
   -webkit-user-select: text; user-select: text;
 }
-#paper::-webkit-scrollbar { display: none; }
+#paper::-webkit-scrollbar, #letter::-webkit-scrollbar { display: none; }
+/* The paper is never squeezed by what is under it. Together they sit in the middle when they fit, and the page scrolls when they do not. */
+#paper { flex: none; margin-top: auto; }
+#after { flex: none; margin-bottom: auto; }
 #letter.show #paper { animation: unroll 1.7s cubic-bezier(0.25, 0.8, 0.25, 1) 0.15s forwards; }
 @keyframes unroll {
   0% { clip-path: inset(0 0 100% 0); transform: perspective(900px) rotateX(-28deg) scale(0.92); }
@@ -94,7 +97,7 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 #picDrop { padding: 6px 4px; text-shadow: none; }
 #words span { display: inline-block; opacity: 0; animation: ink 0.5s ease forwards; }
 /* a wax seal with the sender's initial, pressed on once the words are down */
-#seal { position: relative; left: -8px; margin: 6px 0 -52px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 700; color: rgba(255, 220, 210, 0.85); text-shadow: 0 -1px 0 rgba(60, 0, 0, 0.6); background: radial-gradient(circle at 35% 30%, #d8483a, #8f1d18 62%, #6b1210); box-shadow: 0 3px 8px rgba(60, 10, 0, 0.45), inset 0 0 0 3px rgba(255, 255, 255, 0.07), inset 0 -4px 8px rgba(0, 0, 0, 0.35); opacity: 0; transform: rotate(-12deg) scale(1.7); }
+#seal { position: relative; left: -8px; margin: 6px 0 -56px; width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: Georgia, "Times New Roman", serif; font-size: 22px; font-weight: 700; color: rgba(255, 220, 210, 0.85); text-shadow: 0 -1px 0 rgba(60, 0, 0, 0.6); background: radial-gradient(circle at 35% 30%, #d8483a, #8f1d18 62%, #6b1210); box-shadow: 0 3px 8px rgba(60, 10, 0, 0.45), inset 0 0 0 3px rgba(255, 255, 255, 0.07), inset 0 -4px 8px rgba(0, 0, 0, 0.35); opacity: 0; transform: rotate(-12deg) scale(1.7); }
 #letter.show #seal { animation: stamp 0.35s cubic-bezier(0.3, 1.5, 0.5, 1) forwards; }
 @keyframes stamp { from { opacity: 0; transform: rotate(-12deg) scale(1.7); } to { opacity: 1; transform: rotate(-12deg) scale(1); } }
 #paper { padding-bottom: 68px; }
