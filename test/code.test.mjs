@@ -129,3 +129,24 @@ console.log('code ok');
   assert.equal(Object.keys(TUCKS).every((k) => /^[a-z]$/.test(k) && typeof TUCKS[k] === 'string'), true);
 }
 console.log('tuck ok');
+
+// a bottle sealed until a time: a tenth field, minutes since 1970 in base 36, and only on a bottle
+{
+  const K = 'abcdefghijklmnopqrstuv', P = 'pppppppppppppppppppppp';
+  const T = Date.UTC(2027, 0, 1, 12, 30);
+  const b = decode(encode('Open on New Year', 'Mike', 'dusk', 'Ana', K, 'seatseatseatseat', '', '', '', T));
+  assert.equal(b.when, T, 'to the minute');
+  assert.equal('tuck' in b, false);
+  assert.equal(decode(encode('both', 'Mike', 'dusk', 'Ana', K, '', '', '', 'f', T + 29000)).when, T, 'seconds are dropped');
+  assert.equal(decode(encode('both', 'Mike', 'dusk', 'Ana', K, '', '', '', 'f', T)).tuck, 'f', 'something tucked in and a time travel together');
+  assert.equal(decode(linkFor('https://a.test/', { message: 'hi', name: 'M', when: T }).split('#')[1]).when, T, 'linkFor carries it');
+  assert.equal('when' in decode(encode('no time', 'Mike', 'dusk', 'Ana', K)), false, 'a bottle without one reads exactly as before');
+  assert.equal(encode('plain', 'Mike'), encode('plain', 'Mike', 'dusk', '', '', '', '', '', '', 0), 'and its link is byte for byte the same');
+  assert.equal(encode('plain', 'Mike'), encode('plain', 'Mike', 'dusk', '', '', '', '', '', '', -5));
+  assert.equal(encode('plain', 'Mike'), encode('plain', 'Mike', 'dusk', '', '', '', '', '', '', 'soon'), 'what is not a time is dropped');
+  assert.equal('when' in decode(encode('', 'Mike', 'dusk', 'Ana', K, '', P, 's', '', T)), false, 'what is written in the sand cannot be sealed');
+  const odd = new TextEncoder().encode(JSON.stringify(['hello', 'Zed', '', '', '', '', '', '', '', 'zzzzzzzzz']));
+  let bin = ''; for (const c of odd) bin += String.fromCharCode(c);
+  assert.equal('when' in decode('1.' + btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')), false, 'a time that is not one is ignored, and the bottle still opens');
+}
+console.log('sealed until ok');

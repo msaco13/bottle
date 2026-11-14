@@ -185,6 +185,7 @@ export async function list(auth, key) {
       const note = { message: v.m, name: v.n || '', mood: v.mood || 'dusk', to: v.to || '', id: v.id, at: Date.parse(row.created_at) || v.t || 0 };
       if (typeof v.p === 'string' && /^[A-Za-z0-9_-]{22}$/.test(v.p)) note.pic = v.p;
       if (typeof v.x === 'string' && /^[a-z]$/.test(v.x)) note.tuck = v.x;      // something small tucked in with the note (see TUCKS in code.js)
+      if (typeof v.w === 'number' && v.w > 0) note.when = v.w;                  // sealed until this time (see "when" in code.js)
       if (v.k === 'l' || v.k === 's') note.kind = v.k;        // not a bottle: 'l' a lantern lit for the other person, 's' something written in the sand
       out.push(note);
     }
