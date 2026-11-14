@@ -1,7 +1,8 @@
 // Message in a bottle. One page, two faces:
 //   a link with a message after the #  ->  the shore, and a bottle to open
 //   no message                         ->  the writing desk
-// After a note is read, sending one back is one tap: the desk opens already addressed.
+// After a note is read, writing back is one tap: the desk opens already addressed, and the page says in plain
+// words how the reply gets there (straight to their phone, or one tap that texts it). Nothing is ever copied by hand.
 
 import { decode, linkFor, MAX_MESSAGE } from './code.js';
 import { keepsakes, grow, keepLine, MAX_SHELLS } from './keeps.js';
@@ -181,10 +182,18 @@ function address(b) {
   const mine = isMine(b) || (!b.name && !!known && b.to === known);       // an unsigned note addressed to them is this phone's own
   const other = (mine ? b.to : b.name) || (theirsUnsigned(b) ? known : '');
   const key = seat === 'taken' ? '' : (bottle.key || b.key || '');       // a taken seat: the reply starts a conversation of its own
-  $('reply').textContent = (mine ? 'Send another' : 'Send one back') + (other ? ' to ' + other : '');
-  $('reply').onclick = () => desk({ to: other || '', key, fresh: true });
+  $('reply').textContent = (mine ? 'Send another' : 'Write back') + (other ? ' to ' + other : '');
+  $('reply').classList.toggle('call', !mine);
+  // back: this is an answer to their note. me: the name their note was addressed to, to sign with if this phone has none yet.
+  $('reply').onclick = () => desk({ to: other || '', key, fresh: true, back: !mine, me: mine ? '' : (b.to || '') });
+  // The question everyone has at this point is "how do I answer, do I copy something?". Answer it before it is asked.
+  $('replyHow').textContent = mine ? (other && key ? `When ${other} writes back, it shows up here.` : '')
+    : key && reachOf(key).l ? `It goes straight to ${whose(other)} phone. Nothing to copy, nothing to text.`
+    : 'Write your note, then one tap sends it back. Nothing to copy or paste.';
   if (asked && key) remember(key, other, b.at || 0);
 }
+/** The line over the earlier notes: it is a conversation, so say so. */
+const between = (n) => { const w = withWho(), c = n === 1 ? '1 bottle' : n + ' bottles'; return w ? `You and ${w}: ${c} so far` : `Your conversation: ${c} so far`; };
 
 // The earlier notes of this conversation. Nothing here is needed to read the note or to reply.
 async function shelf() {
@@ -200,12 +209,14 @@ async function shelf() {
   asked = true;
   count('seal', seat || 'the server did not answer');
   if (seat === 'taken') {
-    $('sealNote').textContent = 'This bottle was opened on another phone first, so the notes before it stay there. You can still send one back.';
+    $('sealNote').textContent = 'This bottle was opened on another phone first, so the notes before it stay there. You can still write back.';
     if (shown === bottle) address(bottle);
     keepSay();
     return;
   }
   if (shown === bottle) address(bottle);
+  // Does their phone have notifications on? Then the line under the button can say the reply goes straight there.
+  learnReach(bottle.key).then((changed) => { if (changed && shown && !beach) address(shown); });
   const all = await notesFor(bottle.key);
   shoreKeeps(all.length + (among(all, bottle) ? 0 : 1));
   if (!all.length) return;
@@ -220,14 +231,14 @@ async function shelf() {
     go.id = 'newest';
     const from = newer[newer.length - 1].name || (theirsUnsigned(newer[newer.length - 1]) ? withWho() : '');
     go.textContent = from ? `Read the new bottle from ${from}` : 'Read the newest bottle';
-    go.onclick = () => { showLetter(false, newer[newer.length - 1]); go.remove(); $('reply').classList.remove('ghost'); head.textContent = 'Bottles between you (' + all.length + ')'; for (const c of row.children) c.classList.toggle('on', c === row.firstChild); };
+    go.onclick = () => { showLetter(false, newer[newer.length - 1]); go.remove(); $('reply').classList.remove('ghost'); head.textContent = between(all.length); for (const c of row.children) c.classList.toggle('on', c === row.firstChild); };
     // A new bottle is the first thing to do, so it goes above everything else.
     $('after').insertBefore(go, $('reply'));
     $('reply').classList.add('ghost');
   }
   const head = document.createElement('div');
   head.className = 'shelfHead';
-  head.textContent = newer.length ? (newer.length === 1 ? 'A newer bottle has washed up since this one' : `${newer.length} newer bottles have washed up since this one`) : `Bottles between you (${all.length})`;
+  head.textContent = newer.length ? (newer.length === 1 ? 'A newer bottle has washed up since this one' : `${newer.length} newer bottles have washed up since this one`) : between(all.length);
   el.appendChild(head);
   const row = document.createElement('div');
   row.className = 'shelfRow';
@@ -364,7 +375,8 @@ function stillOut(t) {
 /** The button under a note from a beach: the next bottle, or, after the last, a bottle of their own. */
 function beachButtons() {
   const btn = $('reply'), left = unread().length;
-  btn.classList.remove('ghost');
+  btn.classList.remove('ghost', 'call');
+  $('replyHow').textContent = '';
   if (!beachNotes) { btn.textContent = 'Try again'; btn.onclick = () => location.reload(); return; }
   if (left) { btn.textContent = left === 1 ? 'Bring in the last bottle' : `Bring in the next bottle (${left} left)`; btn.onclick = nextBottle; }
   else { btn.textContent = 'Write a bottle of your own'; btn.onclick = () => desk({ fresh: true }); }
@@ -432,7 +444,7 @@ function passOn(shareId, copyId, link, words, copyLabel) {
 function showGather(g, how) {
   const el = $('made'), links = beachLinks(g), who = g.to || 'them', compose = $('compose');
   el.className = how === 'joined' ? 'gather joined' : 'gather';
-  madeLink = '';
+  madeLink = ''; madeSt = null; $('madeNext').textContent = '';
   $('madeTitle').textContent = how === 'joined' ? 'Your bottle is in the water' : how === 'started' ? 'The beach is started' : `The beach for ${who}`;
   $('madeLede').textContent = how === 'joined' ? `${g.to || 'They'} will find it washed up with all the others. Know someone else who should add one? Pass the invitation on.`
     : `Send the invitation to everyone who should add a bottle. When it is time, send ${who} the beach, and every bottle will be waiting there.`;
@@ -570,7 +582,7 @@ function sandCard(how) {
     : `${name || 'Someone'} wrote that in the sand for you. Now it is gone, as sand is.`;
   const back = $('sandBack');
   back.textContent = how === 'lost' ? 'Try again' : name ? `Write back to ${name} in the sand` : 'Write back in the sand';
-  const reply = () => ({ to: name, key: sandSeat === 'taken' ? '' : sandMsg.key || '', fresh: true });
+  const reply = () => ({ to: name, key: sandSeat === 'taken' ? '' : sandMsg.key || '', fresh: true, back: true, me: sandMsg.to || '' });
   back.onclick = how === 'lost' ? () => location.reload() : () => { el.className = ''; desk(reply()); sandPad(); };
   $('sandBottle').style.display = how === 'lost' ? 'none' : '';
   $('sandBottle').onclick = () => { el.className = ''; desk(reply()); };
@@ -618,6 +630,9 @@ async function sandShow() {
 // ---------------------------------------------------------------- your shore (the people) and the writing desk
 
 let deskReady = false, deskCtx = {}, madeLink = '', madeTo = '', deskMood = 'dusk';
+let mobileOpen = false;      // the field for their number is behind one small link, so the desk asks for a name and a note and little else
+/** Show the way to give a number, or the field itself once it has been asked for. want: would a number help here at all? */
+const mobileShow = (want) => { $('mobileAsk').style.display = want && !mobileOpen ? 'block' : 'none'; $('mobileRow').style.display = want && mobileOpen ? 'flex' : 'none'; };
 // The picture being tucked into the bottle on the desk, if any: { secret, state: 'working' | 'ready' | 'failed', done: a promise of true or false, url }
 let deskPic = null;
 function dropPic() {
@@ -664,7 +679,7 @@ const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 /** The address of a bottle on this site. A visit that was opened as a test stays a test. */
 const addressOf = (b) => { const l = linkFor(location.origin + location.pathname, b); return qs.has('dev') ? l.replace('#', '?dev#') : l; };
 /** The words that travel with a link when it is texted or shared. */
-const sayWith = (to) => (madeSand ? (to ? `${to}, something is written in the sand for you. See it before the tide does.` : 'Something is written in the sand for you. See it before the tide does.') : to ? `${to}, a bottle washed up for you.` : 'Something washed ashore for you.');
+const sayWith = (to) => (madeSand ? (to ? `${to}, something is written in the sand for you. See it before the tide does.` : 'Something is written in the sand for you. See it before the tide does.') : to ? `${to}, a bottle washed up for you. Open it, then write back:` : 'A bottle washed up for you. Open it, then write back:');
 let madeSand = false;        // the thing just made was written in the sand, not put in a bottle
 /** An address that opens this phone's own Messages, already addressed and already written. The phone sends the text, nothing else does. */
 const textTo = (number, words) => `sms:${number}${ios ? '&' : '?'}body=${encodeURIComponent(words)}`;
@@ -829,6 +844,8 @@ async function follow(id) {
 /** The words on the desk: who it is for, and whether it will go straight there or by a link. */
 function deskWords() {
   $('desk').classList.toggle('gather', !!deskCtx.gather);
+  // the three steps are for someone starting from nothing; anyone else is told how this one bottle gets there
+  $('desk').classList.toggle('first', !deskCtx.to && !deskCtx.key && !deskCtx.many && !deskCtx.join && !deskCtx.gather);
   $('gatherSay').textContent = deskCtx.join ? gatherSaid : '';
   if (deskCtx.join || deskCtx.gather) {
     const who = (invite && deskCtx.join && invite.to) || 'someone';
@@ -837,7 +854,7 @@ function deskWords() {
       ? `${invite.name || 'Someone'} is filling a beach with bottles for ${who}${invite.message ? ': ' + invite.message : ''}. Add yours. ${invite.to || 'They'} will find them all washed up together.`
       : 'For a birthday, a farewell, a big day. You get one link for everyone to add a bottle, and one link for the person, who finds them all washed up together.';
     $('make').textContent = deskCtx.join ? 'Add my bottle' : 'Start the beach';
-    $('mobileRow').style.display = 'none';
+    mobileShow(false);
     return;
   }
   if (deskCtx.many) {
@@ -846,17 +863,17 @@ function deskWords() {
     $('deskLede').textContent = 'Write one note. Each of them gets their own bottle. '
       + (lit === all.length ? 'All of them have notifications on, so there are no links to text.' : lit ? `${lit} of them ${lit === 1 ? 'has' : 'have'} notifications on and will be told. You get a link to text to the ${all.length - lit === 1 ? 'other' : 'others'}.` : 'You get a link to text to each.');
     $('make').textContent = `Send to ${all.length} people`;
-    $('mobileRow').style.display = 'none';
+    mobileShow(false);
     return;
   }
-  const to = deskCtx.to || '', direct = !!(deskCtx.key && reachOf(deskCtx.key).l);
-  $('deskTitle').textContent = to ? `A bottle for ${to}` : (deskCtx.key ? 'Another bottle' : 'Message in a bottle');
-  $('deskLede').textContent = direct ? `Write your note. ${to || 'They'} ${to ? 'has' : 'have'} notifications on, so your bottle goes straight to ${whose(to)} phone. No link to text.`
-    : to ? `Write your note. You get a link to text to ${to}, and your bottle washes up on their shore.`
-    : 'Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.';
-  $('make').textContent = direct ? (to ? `Send to ${to}` : 'Send it') : 'Create bottle';
+  const to = deskCtx.to || '', direct = !!(deskCtx.key && reachOf(deskCtx.key).l), back = !!deskCtx.back;
+  $('deskTitle').textContent = to ? (back ? `Write back to ${to}` : `A bottle for ${to}`) : (deskCtx.key ? (back ? 'Write back' : 'Another bottle') : 'Message in a bottle');
+  $('deskLede').textContent = direct ? `Write your note and tap send. ${to || 'They'} ${to ? 'has' : 'have'} notifications on, so it goes straight to ${whose(to)} phone. Nothing to copy or text.`
+    : to || deskCtx.key ? `Write your note. Then one tap sends it to ${to || 'them'}, already written out. Nothing to copy or paste.`
+    : 'Back and forth, as often as you both like. No app to download, no account.';
+  $('make').textContent = direct ? (to ? `Send to ${to}` : 'Send it') : 'Seal it and send';
   // A number is only asked for when it would help: someone with no lantern lit and no number yet.
-  $('mobileRow').style.display = direct || (deskCtx.key && numberOf(deskCtx.key)) ? 'none' : '';
+  mobileShow(!(direct || (deskCtx.key && numberOf(deskCtx.key))));
 }
 
 /**
@@ -884,6 +901,7 @@ function desk(ctx) {
   if (deskCtx.join) { gatherSaid = ''; list(null, invite.key).then((all) => { gatherSaid = sofar(all); if (deskCtx.join && !compose.classList.contains('done')) $('gatherSay').textContent = gatherSaid; }); }
   $('forWho').value = '';
   $('mobile').value = '';
+  mobileOpen = false;
   $('pick').style.display = navigator.contacts && navigator.contacts.select ? '' : 'none';
   deskWords();
   if (deskCtx.many) { const who = deskCtx.many; Promise.all(who.map((p) => learnReach(p.key))).then((c) => { if (c.some(Boolean) && deskCtx.many === who && !compose.classList.contains('done')) deskWords(); }); }
@@ -893,7 +911,7 @@ function desk(ctx) {
   dropPic();
   dropSand();
   $('sandRow').style.display = deskCtx.many || deskCtx.join || deskCtx.gather ? 'none' : '';
-  try { who.value = myName(); } catch {}
+  try { who.value = myName() || deskCtx.me || ''; } catch {}      // answering a note addressed "For Ana" on a phone with no name yet: sign it Ana
   for (const c of $('moods').children) c.classList.toggle('on', c.dataset.mood === ((shown && shown.mood) || 'dusk'));
   deskMood = (shown && shown.mood) || 'dusk';
   sky(deskMood);
@@ -902,30 +920,67 @@ function desk(ctx) {
   if (deskCtx.to || deskCtx.many) setTimeout(() => msg.focus(), 350);
 }
 
-/** The "bottle is ready" screen. how: 'link' it goes by a link, 'sending' it is on its way to a lit lantern. */
+/**
+ * The screen after "Seal it and send". how: 'link' it goes by a link, 'sending' it is on its way to a lit lantern.
+ * By link there is exactly one thing left to do, and the screen says so: one button that sends it. The raw link is
+ * kept out of sight wherever the phone has a share sheet, because a bare link is what makes people think they must
+ * copy and paste. Once it has been handed over, the screen turns to what happens next.
+ */
+let madeSt = null;           // what the screen is showing: { mode: 'link' | 'direct' | 'told' | 'fallback', to, number, extra, sand, passed, saved, showLink, texting }
+const copyLabel = () => (madeSt && !madeSt.passed && (navigator.share || madeSt.number) ? 'Copy the link instead' : 'Copy the link');
 function made(how, to, number, extra) {
   const el = $('made');
-  el.classList.remove('many', 'gather', 'joined');
+  el.classList.remove('many', 'gather', 'joined', 'passed');
   el.classList.toggle('direct', how === 'sending');
   el.classList.toggle('busy', how === 'sending');
-  $('madeTitle').textContent = how === 'sending' ? (to ? `Sending to ${to}` : 'Sending it') : madeSand ? 'It is written in the sand' : 'Your bottle is ready';
-  $('madeLede').textContent = how === 'sending' ? 'Carrying it down to the water.'
-    : madeSand ? (to ? `Text this link to ${to}. ` : 'Send this link to one person. ') + 'What you wrote is waiting on the sand, and a wave takes it once it has been seen.'
-    : (to ? `Text this link to ${to}. The note travels inside the link itself.` : 'Send this link to one person. The note travels inside the link itself.') + extra;
+  madeSt = { mode: how === 'sending' ? 'direct' : 'link', to, number, extra, sand: madeSand, passed: false, saved: false, showLink: false, texting: false };
+  $('madeNext').textContent = '';
+  if (how === 'sending') { $('madeTitle').textContent = to ? `Sending to ${to}` : 'Sending it'; $('madeLede').textContent = 'Carrying it down to the water.'; }
   $('link').value = madeLink;
   $('try').href = madeLink.replace('#', (qs.has('dev') ? '?dev&see' : '?see') + '#');
   // With their number, the phone's own Messages opens already addressed and written. Otherwise, the share sheet.
   $('text').style.display = number ? 'block' : 'none';
-  $('text').textContent = to ? `Text it to ${to}` : 'Text it';
   $('text').href = number ? textTo(number, sayWith(to) + ' ' + madeLink) : '#';
   $('share').style.display = navigator.share ? '' : 'none';
-  $('share').className = number ? 'btn ghost' : 'btn';
-  $('share').textContent = number ? 'Share another way' : 'Share the link';
   $('again').textContent = threads().length ? 'Back to your shore' : 'Write another';
+  madeWords();
   $('compose').classList.add('done');
   $('compose').scrollTop = 0;
   lantern();
 }
+/** The buttons of that screen, and, while it is going by link, its words. Drawn again whenever something is learned. */
+function madeWords() {
+  const st = madeSt, el = $('made');
+  if (!st) return;
+  const to = st.to, sheet = !!navigator.share, easy = sheet || !!st.number;
+  el.classList.toggle('sheet', easy && !st.showLink);      // one tap can send it: the bare link stays out of sight
+  $('text').textContent = to ? `Text it to ${to}` : 'Text it';
+  $('text').className = st.passed ? 'btn ghost' : 'btn';
+  $('share').className = st.number || st.passed ? 'btn ghost' : 'btn';
+  $('share').textContent = st.passed ? 'Send it again' : st.number ? 'Send it another way' : to ? `Send it to ${to}` : 'Send it';
+  $('copy').textContent = copyLabel();
+  if (st.mode !== 'link') return;
+  el.classList.toggle('passed', st.passed);
+  const they = to || 'they', s3 = (one, many) => (to ? one : many);
+  $('madeTitle').textContent = st.passed ? 'Off it goes' : st.sand ? 'It is written in the sand' : easy ? `Last step: send it${to ? ' to ' + to : ''}` : 'Your bottle is ready';
+  const paste = `Copy the link and paste it into a message${to ? ' to ' + to : ''}.`;
+  $('madeLede').textContent = st.passed
+      ? (st.sand ? `When ${they} ${s3('taps', 'tap')} it, what you wrote is waiting on the sand, and a wave takes it once it has been seen.`
+        : `When ${they} ${s3('taps', 'tap')} it, your bottle washes up on their beach.` + st.extra)
+    : st.sand ? 'What you wrote is waiting on the sand, and a wave takes it once it has been seen. ' + (easy ? 'One tap sends it. Nothing to copy or paste.' : paste)
+    : easy ? 'Your note is inside the link, so one tap sends the whole bottle. Nothing to copy or paste.' + st.extra
+    : paste + ' Your note travels inside the link itself.' + st.extra;
+  // Only said once the server really has the note: that is what lets the answer find its way back here.
+  $('madeNext').textContent = st.saved ? `When ${they} ${s3('writes', 'write')} back, it shows up here.` : '';
+}
+/** The link has been handed to Messages or the share sheet: turn the screen to what happens next. */
+function handedOver() {
+  if (!madeSt || madeSt.mode === 'direct' || madeSt.mode === 'told' || !$('compose').classList.contains('done')) return;
+  madeSt.mode = 'link'; madeSt.passed = true; madeSt.texting = false;
+  madeWords();
+}
+// Messages was opened with the text already written. When the page comes back to the front, take it that it went.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && madeSt && madeSt.texting) handedOver(); });
 
 /**
  * One note, a bottle each. Every person gets their own bottle in their own conversation, with its own seat.
@@ -935,8 +990,9 @@ function sendMany(message, name, pic) {
   const who = deskCtx.many, el = $('made'), list = $('sentList');
   const run = sendMany.run = (sendMany.run || 0) + 1;
   madeLink = ''; madeTo = '';
-  el.classList.remove('direct', 'busy', 'gather', 'joined');
+  el.classList.remove('direct', 'busy', 'gather', 'joined', 'passed', 'sheet');
   el.classList.add('many');
+  madeSt = null; $('madeNext').textContent = '';
   $('madeTitle').textContent = `Sending to ${who.length} people`;
   $('madeLede').textContent = 'Carrying them down to the water.';
   $('again').textContent = 'Back to your shore';
@@ -1006,7 +1062,7 @@ function wire() {
   msg.addEventListener('input', () => { $('left').textContent = String(MAX_MESSAGE - msg.value.length); });
 
   const share = async () => {
-    try { await navigator.share({ title: 'A message in a bottle', text: sayWith(madeTo), url: madeLink }); count('share', 'sent', true); return true; }
+    try { await navigator.share({ title: 'A message in a bottle', text: sayWith(madeTo), url: madeLink }); count('share', 'sent', true); handedOver(); return true; }
     catch (e) { count('share', (e && e.name) === 'AbortError' ? 'closed without sending' : 'failed: ' + ((e && e.name) || ''), true); return false; }
   };
   $('desk').addEventListener('submit', async (e) => {
@@ -1053,7 +1109,7 @@ function wire() {
     count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters${pic ? ', with a picture' : ''}`, true);
     // Going by link: Messages or the share sheet opens straight away, while this is still the same tap.
     if (!direct) {
-      if (number) { count('share', 'opened Messages, already addressed', true); try { location.href = $('text').href; } catch {} }
+      if (number) { count('share', 'opened Messages, already addressed', true); madeSt.texting = true; try { location.href = $('text').href; } catch {} }
       else if (navigator.share) share();
       else count('share', 'no share sheet on this browser', true);
     }
@@ -1073,21 +1129,23 @@ function wire() {
       el.classList.remove('busy');
       if (told) {
         // Only said once the other phone's push service has really taken it.
+        if (madeSt) madeSt.mode = 'told';
+        el.classList.remove('passed'); $('madeNext').textContent = '';
         el.classList.add('direct');
         $('madeTitle').textContent = to ? `Sent to ${to}` : 'Sent';
         lede.textContent = (direct ? `${Whose(to)} phone has been told. No link needed.` : `${to || 'They'} ${to ? 'has' : 'have'} notifications on, so ${whose(to)} phone has already been told. No need to text this one.`) + leaves;
       } else if (direct) {
+        if (madeSt) madeSt.mode = 'fallback';
         el.classList.remove('direct');
         $('madeTitle').textContent = 'Your bottle is ready';
         lede.textContent = r.ok
           ? `It is saved for ${to || 'them'}, but ${whose(to)} phone could not be told this time. It will be waiting when ${to || 'they'} next ${to ? 'opens' : 'open'} Bottle. To be sure, text the link.`
           : `The server could not be reached, so text ${to || 'them'} the link. The note travels inside it.`;
-      } else if (r.ok) {
-        lede.textContent += ` When ${to ? to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
-      }
+      } else if (madeSt) { madeSt.saved = !!r.ok; madeWords(); }
     });
   });
   for (const c of $('moods').children) c.addEventListener('click', () => { deskMood = c.dataset.mood; sky(deskMood); for (const o of $('moods').children) o.classList.toggle('on', o === c); });
+  $('mobileAsk').addEventListener('click', () => { mobileOpen = true; mobileShow(true); $('mobile').focus(); });
   $('sandAdd').addEventListener('click', () => sandPad());
   $('sandShow').addEventListener('click', (e) => { if (e.target.id !== 'sandDrop') sandPad(); });       // a tap on what was written opens it to change
   $('sandDrop').addEventListener('click', () => { dropSand(); count('sand', 'removed', true); });
@@ -1101,11 +1159,12 @@ function wire() {
       try { $('link').select(); ok = document.execCommand('copy'); } catch {}
     }
     count('copy', ok ? 'copied' : 'could not copy', true);
+    if (!ok && madeSt) { madeSt.showLink = true; madeWords(); }      // it could not be copied for them: show the link to press and hold
     $('copy').textContent = ok ? 'Copied. Now paste it in a text.' : 'Press and hold the link above to copy it';
-    setTimeout(() => { $('copy').textContent = 'Copy the link'; }, 3500);
+    setTimeout(() => { $('copy').textContent = copyLabel(); }, 3500);
   });
   $('share').addEventListener('click', share);
-  $('text').addEventListener('click', () => count('share', 'opened Messages, already addressed', true));
+  $('text').addEventListener('click', () => { count('share', 'opened Messages, already addressed', true); if (madeSt) madeSt.texting = true; });
   $('showLink').addEventListener('click', () => $('made').classList.remove('direct'));
   $('again').addEventListener('click', () => desk({}));
   $('gatherA').addEventListener('click', () => desk({ gather: true }));
@@ -1133,16 +1192,28 @@ function wire() {
       count('pick', tel ? 'chose a contact' : 'that contact had no number', true);
     } catch (e) { count('pick', 'failed: ' + ((e && e.name) || ''), true); }
   });
-  // Android: the browser offers to put the page on the home screen as an app. Keep the offer for a button on the shore.
-  let offer = null;
-  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); offer = e; $('install').style.display = 'block'; });
-  addEventListener('appinstalled', () => { $('install').style.display = 'none'; count('install', 'installed', true); });
-  $('install').addEventListener('click', async () => {
-    if (!offer) return;
-    try { offer.prompt(); const c = await offer.userChoice; count('install', (c && c.outcome) || '', true); } catch {}
-    offer = null; $('install').style.display = 'none';
-  });
 }
+
+// ---------------------------------------------------------------- keeping it, and how it works
+//
+// Android: the browser offers to put the page on the home screen as an app. The offer is kept for a plain button
+// under a note, on the "last step" screen and on the shore, so the first bottle someone reads can become a place
+// they come back to. (An iPhone has no such offer: its way is the Home Screen card, opened from "Turn on notifications".)
+let installOffer = null;
+const keepShow = () => { for (const b of document.querySelectorAll('.keep')) b.style.display = installOffer ? 'block' : 'none'; };
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installOffer = e; keepShow(); count('install', 'offered by the browser'); });
+addEventListener('appinstalled', () => { installOffer = null; keepShow(); count('install', 'installed', true); });
+for (const b of document.querySelectorAll('.keep')) b.addEventListener('click', async () => {
+  if (!installOffer) return;
+  const offer = installOffer;
+  installOffer = null;
+  try { offer.prompt(); const c = await offer.userChoice; count('install', ((c && c.outcome) || '') + ' (' + b.id + ')', true); } catch {}
+  keepShow();
+});
+// "How Bottle works": five lines, a tap away wherever someone might be wondering.
+for (const b of document.querySelectorAll('.how')) b.addEventListener('click', () => { $('howcard').classList.add('show'); count('how', 'opened', true); });
+$('howClose').addEventListener('click', () => $('howcard').classList.remove('show'));
+$('howcard').addEventListener('click', (e) => { if (e.target.id === 'howcard') $('howcard').classList.remove('show'); });
 
 /** The page has learned something new about this phone's people (the server answered, or the page came back to the front). */
 function homecoming() {
