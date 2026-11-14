@@ -1,4 +1,4 @@
-import { encode, decode, linkFor, MAX_MESSAGE } from '../js/code.js';
+import { encode, decode, linkFor, MAX_MESSAGE, TUCKS } from '../js/code.js';
 import assert from 'node:assert';
 import fs from 'node:fs';
 
@@ -112,3 +112,20 @@ assert.equal(decode('#' + e.slice(0, 20) + '\n ' + e.slice(20)).name, 'Sam');
   assert.equal('g' in decode(encode('words', 'Mike', 'dusk', 'Ana', KEY, '', '', 's')), false);
 }
 console.log('code ok');
+
+// something tucked in with the note: a ninth field, one letter, and only on a bottle
+{
+  const K = 'abcdefghijklmnopqrstuv', P = 'pppppppppppppppppppppp';
+  const b = decode(encode('With a flower', 'Mike', 'dusk', 'Ana', K, 'seatseatseatseat', '', '', 'f'));
+  assert.equal(b.tuck, 'f');
+  assert.equal(b.message, 'With a flower');
+  assert.equal(decode(linkFor('https://a.test/', { message: 'hi', name: 'M', tuck: 'q' }).split('#')[1]).tuck, 'q', 'linkFor carries it');
+  assert.equal('tuck' in decode(encode('nothing tucked in', 'Mike', 'dusk', 'Ana', K)), false, 'a bottle without one reads exactly as before');
+  assert.equal(encode('plain', 'Mike'), encode('plain', 'Mike', 'dusk', '', '', '', '', '', ''), 'and its link is byte for byte the same');
+  assert.equal('tuck' in decode(encode('odd', 'Mike', 'dusk', '', '', '', '', '', 'z')), false, 'a letter that is not one of them is dropped');
+  assert.equal(encode('odd', 'Mike', 'dusk', '', '', '', '', '', 'z'), encode('odd', 'Mike'));
+  assert.equal('tuck' in decode(encode('', 'Mike', 'dusk', 'Ana', K, '', P, 's', 'f')), false, 'what is written in the sand carries nothing');
+  assert.equal(decode(encode('', 'Mike', 'dusk', 'Ana', K, '', P, '', 'h')).tuck, 'h', 'a picture and something tucked in travel together');
+  assert.equal(Object.keys(TUCKS).every((k) => /^[a-z]$/.test(k) && typeof TUCKS[k] === 'string'), true);
+}
+console.log('tuck ok');

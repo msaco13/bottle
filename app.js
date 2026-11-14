@@ -24,6 +24,8 @@ __m.code = (function () {
 //              "i": the invitation, where a bottle is added.   "o": the beach itself, for the person it is for.
 //              message is what it is for ("Happy 40th"; may be empty), name is who started it, to is who it is for.
 //              "s": not a bottle at all, but something written in the sand (see sand.js). pic is the secret of what was written.
+//   [message, name, mood, to, key, claim, pic, g, tuck]  added later still, optional:
+//        tuck  one letter: something small tucked in with the note (a pressed flower, a feather...). See TUCKS.
 // Plain base64 on purpose (no compression): it opens on every phone, old or new.
 //
 // PROMISE: every link ever made must keep opening. New things may only be added
@@ -34,9 +36,12 @@ const MAX_MESSAGE = 600;
 const MAX_NAME = 40;
 const MOODS = { dusk: '', night: 'n', dawn: 'a' };
 const MOOD_OF = { n: 'night', a: 'dawn' };
+/** What can be tucked into a bottle with the note: one letter in the link, and the words for it. The drawings are in main.js. */
+const TUCKS = { f: 'a pressed flower', c: 'a four-leaf clover', q: 'a feather', k: 'a small key', h: 'a heart-shaped stone', t: 'a ticket' };
+const isTuck = (x) => typeof x === 'string' && Object.prototype.hasOwnProperty.call(TUCKS, x);
 
 /** bottle: { message, name, mood, to, key, claim, pic } */
-function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '', g = '') {
+function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '', g = '', tuck = '') {
   const list = [
     String(message).slice(0, MAX_MESSAGE),
     String(name || '').trim().slice(0, MAX_NAME),
@@ -46,6 +51,7 @@ function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = ''
     /^[A-Za-z0-9_-]{8,32}$/.test(claim || '') ? claim : '',
     /^[A-Za-z0-9_-]{22}$/.test(pic || '') ? pic : '',
     g === 'i' || g === 'o' || g === 's' ? g : '',
+    isTuck(tuck) && !g ? tuck : '',                    // only a bottle carries one: not an invitation, a beach from everyone, or the sand
   ];
   while (list.length > 1 && list[list.length - 1] === '') list.pop();   // old-style links stay exactly as they were
   const bytes = new TextEncoder().encode(JSON.stringify(list));
@@ -80,6 +86,7 @@ function decode(hash) {
       claim: /^[A-Za-z0-9_-]{8,32}$/.test(str(v[5])) ? v[5] : '',
       ...(pic ? { pic } : {}),          // only there when the bottle carries one: every older link reads exactly as it always did
       ...(g ? { g } : {}),
+      ...(!g && isTuck(v[8]) ? { tuck: v[8] } : {}),
     };
   } catch {
     return null;
@@ -87,15 +94,18 @@ function decode(hash) {
 }
 
 function linkFor(base, b) {
-  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic, b.g);
+  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic, b.g, b.tuck);
 }
 
-return { MAX_MESSAGE, MAX_NAME, MOODS, encode, decode, linkFor };
+return { MAX_MESSAGE, MAX_NAME, MOODS, TUCKS, encode, decode, linkFor };
 })();
 
 // ---------------------------------------------------------------- keeps.js
 __m.keeps = (function () {
-// Keepsakes: what a conversation leaves on its shore.
+// Keepsakes: what a conversation leaves on its beach.
+//
+// One word, one meaning: a BEACH is the place two people share. Each pair has their own, with a name of its own
+// ("Heron Cove"), worked out from the conversation's key so both phones call it the same thing.
 //
 // Every bottle sent back and forth leaves a shell on the dry sand, and lights one star.
 // Every fifth bottle leaves a starfish instead. Ten bottles join the stars into a figure
@@ -129,6 +139,15 @@ function stream(text) {
 
 /** How far left or right of the middle a phone held upright can see the dry sand, this far up the beach. Less a margin. */
 const reach = (z) => 0.277 * (0.337 + (2.75 - z) * 0.961) - 0.08;
+
+// The name of a beach: one of 16 x 6 = 96. Two of someone's beaches may share a name now and then; nothing depends on it.
+const PLACE_A = ['Heron', 'Amber', 'Driftwood', 'Lantern', 'Sandpiper', 'Otter', 'Pelican', 'Coral', 'Moonrise', 'Saltgrass', 'Seaglass', 'Juniper', 'Indigo', 'Marlin', 'Tern', 'Osprey'];
+const PLACE_B = ['Cove', 'Bay', 'Sands', 'Point', 'Landing', 'Shoal'];
+/** The name of the beach a conversation shares. The same on both phones, and it never changes. */
+function placeName(seed) {
+  const r = stream('place:' + seed);
+  return PLACE_A[Math.floor(r() * PLACE_A.length)] + ' ' + PLACE_B[Math.floor(r() * PLACE_B.length)];
+}
 
 const FIRST = ['Quiet', 'Patient', 'Wandering', 'Faithful', 'Little', 'Sleeping', 'Bright', 'Listening', 'Returning', 'Barefoot', 'Salt', 'Lantern'];
 const SECOND = ['Oar', 'Heron', 'Anchor', 'Gull', 'Sail', 'Shell', 'Tide', 'Dolphin', 'Lighthouse', 'Kite', 'Compass', 'Otter'];
@@ -169,7 +188,7 @@ function keepsakes(seed, count) {
   }
   const rn = stream('name:' + seed);
   const name = 'The ' + FIRST[Math.floor(rn() * FIRST.length)] + ' ' + SECOND[Math.floor(rn() * SECOND.length)];
-  return { count: n, shells: shells.slice(0, Math.min(n, MAX_SHELLS)), stars: stars.slice(0, Math.min(n, STARS)), whole: n >= STARS, join: 0, name };
+  return { count: n, shells: shells.slice(0, Math.min(n, MAX_SHELLS)), stars: stars.slice(0, Math.min(n, STARS)), whole: n >= STARS, join: 0, name, place: placeName(seed) };
 }
 
 /** Where a star hangs: the x and y of its direction from the viewer. wide: the picture is wider than it is tall, and shows less sky. */
@@ -191,16 +210,19 @@ function grow(k, dt) {
   k.join = Math.max(0, Math.min(1, k.join + (done ? dt : -dt) * 0.8));
 }
 
-/** The one line under a note that says what the shore is keeping. '' when there is nothing to say. */
-function keepLine(k) {
+/**
+ * The one line under a note that says where it washed up and what that beach is keeping. '' when there is nothing to say.
+ * who: the other person, when this phone knows their name.
+ */
+function keepLine(k, who = '') {
   if (!k || k.count < 1) return '';
-  const n = k.count;
-  if (n === 1) return 'This bottle left a shell on the sand. Every bottle between you leaves one, and lights a star.';
-  if (n < STARS) return `${n} shells on this shore, one for every bottle between you. ${STARS - n === 1 ? 'One more bottle' : (STARS - n) + ' more bottles'} and your stars join up.`;
-  return `${n} bottles between you. Your stars have joined up: ${k.name}.`;
+  const n = k.count, yours = who ? `the beach you share with ${who}` : 'the beach the two of you share';
+  if (n === 1) return `This is ${k.place}, ${yours}. Every bottle between you leaves a shell here and lights a star.`;
+  if (n < STARS) return `${k.place}, ${yours}: ${n} shells, one for every bottle between you. ${STARS - n === 1 ? 'One more bottle' : (STARS - n) + ' more bottles'} and your stars join up.`;
+  return `${k.place}, ${yours}: ${n} bottles between you. Your stars have joined up: ${k.name}.`;
 }
 
-return { MAX_SHELLS, STARS, keepsakes, starAt, grow, keepLine };
+return { MAX_SHELLS, STARS, placeName, keepsakes, starAt, grow, keepLine };
 })();
 
 // ---------------------------------------------------------------- scene.js
@@ -1922,6 +1944,7 @@ async function list(auth, key) {
       seen.add(v.id);
       const note = { message: v.m, name: v.n || '', mood: v.mood || 'dusk', to: v.to || '', id: v.id, at: Date.parse(row.created_at) || v.t || 0 };
       if (typeof v.p === 'string' && /^[A-Za-z0-9_-]{22}$/.test(v.p)) note.pic = v.p;
+      if (typeof v.x === 'string' && /^[a-z]$/.test(v.x)) note.tuck = v.x;      // something small tucked in with the note (see TUCKS in code.js)
       if (v.k === 'l' || v.k === 's') note.kind = v.k;        // not a bottle: 'l' a lantern lit for the other person, 's' something written in the sand
       out.push(note);
     }
@@ -2679,10 +2702,11 @@ __m.main = (function () {
 // Message in a bottle. One page, two faces:
 //   a link with a message after the #  ->  the shore, and a bottle to open
 //   no message                         ->  the writing desk
-// After a note is read, sending one back is one tap: the desk opens already addressed.
+// After a note is read, writing back is one tap: the desk opens already addressed, and the page says in plain
+// words how the reply gets there (straight to their phone, or one tap that texts it). Nothing is ever copied by hand.
 
-const { decode, linkFor, MAX_MESSAGE } = __m.code;
-const { keepsakes, grow, keepLine, MAX_SHELLS } = __m.keeps;
+const { decode, linkFor, MAX_MESSAGE, TUCKS } = __m.code;
+const { keepsakes, grow, keepLine, placeName, MAX_SHELLS } = __m.keeps;
 const { Scene, swash, DRY_LINE, MOOD } = __m.scene;
 const { Flat } = __m.flat;
 const { Story, floating } = __m.story;
@@ -2702,6 +2726,7 @@ const sandMsg = linked && linked.g === 's' ? linked : null;      // not a bottle
 const bottle = invite || sandMsg ? null : linked;                // what is read here: one bottle, or a beach of them
 const hop = /^#n\.([A-Za-z0-9_-]{22})$/.exec(location.hash);          // a notification was tapped: it names a conversation
 const seeing = qs.has('see');           // the writer looking at their own bottle from "See what they will see"
+const rereading = qs.has('re');         // a bottle picked up again from its beach: straight to the note, no story to play through
 const stage = $('stage');
 const isIOS = ios;
 const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 600;
@@ -2759,9 +2784,27 @@ function shoreKeeps(n) {
 /** The line under the note that says what the shore is keeping. Only for a conversation this phone belongs to. */
 function keepSay() {
   const el = $('keepNote');
-  if (beach) { if (el) el.textContent = beachNotes && beachNotes.length ? `${opened()} of ${beachNotes.length} opened. Each one leaves a shell on your shore, and lights a star.` : ''; return; }
-  if (el) el.textContent = keeps && bottle && bottle.key && seat !== 'taken' ? keepLine(keeps) : '';
+  if (beach) { if (el) el.textContent = beachNotes && beachNotes.length ? `${opened()} of ${beachNotes.length} opened. Each one leaves a shell on this beach, and lights a star.` : ''; $('toBeach').style.display = 'none'; return; }
+  const ours = !!(keeps && bottle && bottle.key && seat !== 'taken');
+  if (el) el.textContent = ours ? keepLine(keeps, withWho()) : '';
+  // The beach can be walked: its shells are the bottles between the two of you. Offered once this phone knows the conversation.
+  const walk = $('toBeach'), can = ours && !rereading && !seeing && threads().some((t) => t.k === bottle.key);
+  walk.style.display = can ? 'block' : 'none';
+  if (can) { walk.textContent = `Visit ${placeName(bottle.key)}`; walk.onclick = () => visit(bottle.key); }
 }
+
+// ---------------------------------------------------------------- something small tucked in with the note (the letters are TUCKS in code.js)
+//
+// Drawn here as small pictures. It lies on the paper under the words, and afterwards it stands by that bottle's shell on the beach.
+const TUCK_ART = {
+  f: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 26C24 33 22 40 18 46" fill="none" stroke="#6d8a4a" stroke-width="2.2" stroke-linecap="round"/><path d="M21.5 37C16 37 13 33 12.5 30C17 30 21 32 21.5 37Z" fill="#7d9b57"/><g fill="#d8748b" stroke="#b9566f" stroke-width=".8"><ellipse cx="24" cy="9.5" rx="5.2" ry="7.5"/><ellipse cx="24" cy="9.5" rx="5.2" ry="7.5" transform="rotate(72 24 19)"/><ellipse cx="24" cy="9.5" rx="5.2" ry="7.5" transform="rotate(144 24 19)"/><ellipse cx="24" cy="9.5" rx="5.2" ry="7.5" transform="rotate(216 24 19)"/><ellipse cx="24" cy="9.5" rx="5.2" ry="7.5" transform="rotate(288 24 19)"/></g><circle cx="24" cy="19" r="4.6" fill="#f2c351" stroke="#c9972f" stroke-width=".8"/></svg>',
+  c: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 23C25 31 28 38 33 44" fill="none" stroke="#4f7d45" stroke-width="2.2" stroke-linecap="round"/><g fill="#5f9a54" stroke="#44783d" stroke-width=".8" stroke-linejoin="round"><path d="M24 22C16 18 12 11 16 7C19 4.5 23 6.5 24 10C25 6.5 29 4.5 32 7C36 11 32 18 24 22Z"/><path d="M24 22C16 18 12 11 16 7C19 4.5 23 6.5 24 10C25 6.5 29 4.5 32 7C36 11 32 18 24 22Z" transform="rotate(90 24 22)"/><path d="M24 22C16 18 12 11 16 7C19 4.5 23 6.5 24 10C25 6.5 29 4.5 32 7C36 11 32 18 24 22Z" transform="rotate(180 24 22)"/><path d="M24 22C16 18 12 11 16 7C19 4.5 23 6.5 24 10C25 6.5 29 4.5 32 7C36 11 32 18 24 22Z" transform="rotate(270 24 22)"/></g></svg>',
+  q: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M9 42C10 28 20 12 39 5C38 22 29 36 13 40Z" fill="#9db4c4" stroke="#6f889a" stroke-width=".9" stroke-linejoin="round"/><path d="M6 45L38 6" fill="none" stroke="#5d7486" stroke-width="1.6" stroke-linecap="round"/><path d="M16 33L24 31M20 28L29 25M24 22.5L33 18.5M17 31L16 24M22 25L21 17M27 19L27 11" fill="none" stroke="#6f889a" stroke-width=".9" stroke-linecap="round"/></svg>',
+  k: '<svg viewBox="0 0 48 48" aria-hidden="true"><g fill="none" stroke="#b98a35" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><circle cx="15" cy="15" r="8"/><path d="M21 21L41 41M34 34L39 29M38.5 38.5L43 34"/></g><circle cx="15" cy="15" r="8" fill="none" stroke="#e8c67a" stroke-width="1.2"/></svg>',
+  h: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 41C12 32 6 24 6 16.5C6 10.5 10.5 7 15.5 7C19.5 7 22.5 9.5 24 12.5C25.5 9.5 28.5 7 32.5 7C37.5 7 42 10.5 42 16.5C42 24 36 32 24 41Z" fill="#a7635d" stroke="#7f4541" stroke-width="1"/><ellipse cx="16" cy="15" rx="5" ry="3" transform="rotate(-35 16 15)" fill="#fff" opacity=".28"/><path d="M28 30C32 27 35 23 36.5 19" fill="none" stroke="#7f4541" stroke-width="1" opacity=".5" stroke-linecap="round"/></svg>',
+  t: '<svg viewBox="0 0 48 48" aria-hidden="true"><g transform="rotate(-10 24 24)"><path d="M5 14H43V20.5A3.5 3.5 0 0 0 43 27.5V34H5V27.5A3.5 3.5 0 0 0 5 20.5Z" fill="#ecc66c" stroke="#b98a35" stroke-width="1" stroke-linejoin="round"/><path d="M31 16V32" stroke="#b98a35" stroke-width="1" stroke-dasharray="2 2"/><path d="M18 18.5L19.8 22.2L23.8 22.7L20.9 25.5L21.6 29.5L18 27.6L14.4 29.5L15.1 25.5L12.2 22.7L16.2 22.2Z" fill="#b98a35"/><path d="M35 21H39M35 24H39M35 27H39" stroke="#b98a35" stroke-width="1" stroke-linecap="round"/></g></svg>',
+};
+const isTuck = (t) => typeof t === 'string' && !!TUCK_ART[t] && !!TUCKS[t];
 
 /** Put a sky over the shore: 'dusk', 'night' or 'dawn'. */
 function sky(mood) { if (scene) scene.mood = MOOD[mood] || 0; document.documentElement.dataset.mood = MOOD[mood] ? mood : 'dusk'; }
@@ -2831,6 +2874,14 @@ function showLetter(instant, note) {
     s.style.animationDelay = instant ? '0s' : (1.3 + i * per).toFixed(2) + 's';
     words.appendChild(s);
   });
+  // something small that came in the bottle with the note
+  const tuck = $('tuck'), tucked = isTuck(b.tuck);
+  tuck.className = tucked ? 'on' : '';
+  if (tucked) {
+    $('tuckArt').innerHTML = TUCK_ART[b.tuck];
+    $('tuckNote').textContent = `${isMine(b) ? 'You' : b.name || (theirsUnsigned(b) ? withWho() : '') || 'Someone'} tucked in ${TUCKS[b.tuck]}.`;
+    tuck.style.animationDelay = instant ? '0s' : (1.5 + parts.length * per).toFixed(2) + 's';
+  }
   const sign = $('sign');
   sign.textContent = b.name ? '~ ' + b.name : theirsUnsigned(b) ? `Not signed. From your bottles with ${withWho()}.` : '';
   sign.classList.toggle('unsigned', !b.name);
@@ -2841,8 +2892,10 @@ function showLetter(instant, note) {
   sign.style.animationDelay = instant ? '0s' : (1.6 + parts.length * per).toFixed(2) + 's';
   // Sending one back is the obvious next thing, and it is already addressed.
   address(b);
-  $('fresh').onclick = () => desk({});
-  $('fresh').textContent = threads().length ? 'Back to your shore' : 'Write a bottle for someone else';      // a phone with people has a shore to go back to
+  // A bottle picked up again from its beach goes back there. Otherwise: the list of beaches, for a phone that has any.
+  const backThere = rereading && !beach && !!bottle.key && threads().some((t) => t.k === bottle.key);
+  $('fresh').onclick = () => (backThere ? visit(bottle.key) : desk({}));
+  $('fresh').textContent = backThere ? `Back to ${placeName(bottle.key)}` : threads().length ? 'Back to your beaches' : 'Write a bottle for someone else';
   letter.classList.add('show');
   $('hint').classList.remove('show'); $('skip').classList.remove('show'); $('finger').style.opacity = 0;
   $('after').classList.remove('show');
@@ -2858,10 +2911,18 @@ function address(b) {
   const mine = isMine(b) || (!b.name && !!known && b.to === known);       // an unsigned note addressed to them is this phone's own
   const other = (mine ? b.to : b.name) || (theirsUnsigned(b) ? known : '');
   const key = seat === 'taken' ? '' : (bottle.key || b.key || '');       // a taken seat: the reply starts a conversation of its own
-  $('reply').textContent = (mine ? 'Send another' : 'Send one back') + (other ? ' to ' + other : '');
-  $('reply').onclick = () => desk({ to: other || '', key, fresh: true });
+  $('reply').textContent = (mine ? 'Send another' : 'Write back') + (other ? ' to ' + other : '');
+  $('reply').classList.toggle('call', !mine);
+  // back: this is an answer to their note. me: the name their note was addressed to, to sign with if this phone has none yet.
+  $('reply').onclick = () => desk({ to: other || '', key, fresh: true, back: !mine, me: mine ? '' : (b.to || '') });
+  // The question everyone has at this point is "how do I answer, do I copy something?". Answer it before it is asked.
+  $('replyHow').textContent = mine ? (other && key ? `When ${other} writes back, it shows up here.` : '')
+    : key && reachOf(key).l ? `It goes straight to ${whose(other)} phone. Nothing to copy, nothing to text.`
+    : 'Write your note, then one tap sends it back. Nothing to copy or paste.';
   if (asked && key) remember(key, other, b.at || 0);
 }
+/** The line over the earlier notes: it is a conversation, so say so. */
+const between = (n) => { const w = withWho(), c = n === 1 ? '1 bottle' : n + ' bottles'; return w ? `You and ${w}: ${c} so far` : `Your conversation: ${c} so far`; };
 
 // The earlier notes of this conversation. Nothing here is needed to read the note or to reply.
 async function shelf() {
@@ -2877,12 +2938,15 @@ async function shelf() {
   asked = true;
   count('seal', seat || 'the server did not answer');
   if (seat === 'taken') {
-    $('sealNote').textContent = 'This bottle was opened on another phone first, so the notes before it stay there. You can still send one back.';
+    $('sealNote').textContent = 'This bottle was opened on another phone first, so the notes before it stay there. You can still write back.';
     if (shown === bottle) address(bottle);
     keepSay();
     return;
   }
   if (shown === bottle) address(bottle);
+  keepSay();                                          // the phone now knows whose conversation this is: the line can name them, and offer the beach
+  // Does their phone have notifications on? Then the line under the button can say the reply goes straight there.
+  learnReach(bottle.key).then((changed) => { if (changed && shown && !beach) address(shown); });
   const all = await notesFor(bottle.key);
   shoreKeeps(all.length + (among(all, bottle) ? 0 : 1));
   if (!all.length) return;
@@ -2897,14 +2961,14 @@ async function shelf() {
     go.id = 'newest';
     const from = newer[newer.length - 1].name || (theirsUnsigned(newer[newer.length - 1]) ? withWho() : '');
     go.textContent = from ? `Read the new bottle from ${from}` : 'Read the newest bottle';
-    go.onclick = () => { showLetter(false, newer[newer.length - 1]); go.remove(); $('reply').classList.remove('ghost'); head.textContent = 'Bottles between you (' + all.length + ')'; for (const c of row.children) c.classList.toggle('on', c === row.firstChild); };
+    go.onclick = () => { showLetter(false, newer[newer.length - 1]); go.remove(); $('reply').classList.remove('ghost'); head.textContent = between(all.length); for (const c of row.children) c.classList.toggle('on', c === row.firstChild); };
     // A new bottle is the first thing to do, so it goes above everything else.
     $('after').insertBefore(go, $('reply'));
     $('reply').classList.add('ghost');
   }
   const head = document.createElement('div');
   head.className = 'shelfHead';
-  head.textContent = newer.length ? (newer.length === 1 ? 'A newer bottle has washed up since this one' : `${newer.length} newer bottles have washed up since this one`) : `Bottles between you (${all.length})`;
+  head.textContent = newer.length ? (newer.length === 1 ? 'A newer bottle has washed up since this one' : `${newer.length} newer bottles have washed up since this one`) : between(all.length);
   el.appendChild(head);
   const row = document.createElement('div');
   row.className = 'shelfRow';
@@ -3041,7 +3105,8 @@ function stillOut(t) {
 /** The button under a note from a beach: the next bottle, or, after the last, a bottle of their own. */
 function beachButtons() {
   const btn = $('reply'), left = unread().length;
-  btn.classList.remove('ghost');
+  btn.classList.remove('ghost', 'call');
+  $('replyHow').textContent = '';
   if (!beachNotes) { btn.textContent = 'Try again'; btn.onclick = () => location.reload(); return; }
   if (left) { btn.textContent = left === 1 ? 'Bring in the last bottle' : `Bring in the next bottle (${left} left)`; btn.onclick = nextBottle; }
   else { btn.textContent = 'Write a bottle of your own'; btn.onclick = () => desk({ fresh: true }); }
@@ -3109,7 +3174,7 @@ function passOn(shareId, copyId, link, words, copyLabel) {
 function showGather(g, how) {
   const el = $('made'), links = beachLinks(g), who = g.to || 'them', compose = $('compose');
   el.className = how === 'joined' ? 'gather joined' : 'gather';
-  madeLink = '';
+  madeLink = ''; madeSt = null; $('madeNext').textContent = '';
   $('madeTitle').textContent = how === 'joined' ? 'Your bottle is in the water' : how === 'started' ? 'The beach is started' : `The beach for ${who}`;
   $('madeLede').textContent = how === 'joined' ? `${g.to || 'They'} will find it washed up with all the others. Know someone else who should add one? Pass the invitation on.`
     : `Send the invitation to everyone who should add a bottle. When it is time, send ${who} the beach, and every bottle will be waiting there.`;
@@ -3121,7 +3186,7 @@ function showGather(g, how) {
   $('beachLabel').textContent = `2. When it is time, send ${who} the beach`;
   $('beachShare').textContent = `Share ${whose(g.to)} beach`;
   passOn('beachShare', 'beachCopy', links.beach, `${g.to ? g.to + ', a' : 'A'} whole beach of bottles washed up for you.`, `Copy the link to ${whose(g.to)} beach`);
-  $('again').textContent = threads().length || gathers().length ? 'Back to your shore' : 'Write a bottle of your own';
+  $('again').textContent = threads().length || gathers().length ? 'Back to your beaches' : 'Write a bottle of your own';
   compose.classList.remove('home');
   compose.classList.add('show', 'done');
   compose.scrollTop = 0;
@@ -3135,14 +3200,14 @@ function drawGathers() {
     const row = document.createElement('button');
     row.type = 'button'; row.className = 'row';
     const who = document.createElement('span'); who.className = 'rowWho'; who.textContent = `A beach for ${g.to || 'someone'}`;
-    const sub = document.createElement('span'); sub.className = 'rowSub'; sub.textContent = (g.o ? g.o + ' · ' : '') + 'tap for its links';
+    const sub = document.createElement('span'); sub.className = 'rowSub'; sub.textContent = 'From everyone' + (g.o ? ' · ' + g.o : '') + ' · tap for its links';
     row.append(who, sub);
     row.onclick = () => showGather({ ...g, name: myName() }, 'mine');
     el.appendChild(row);
   }
 }
 /** The desk was used to start a beach, or to add a bottle to one from an invitation. The bottle is only good once the server has it. */
-async function joinOrStart(message, name, pic) {
+async function joinOrStart(message, name, pic, tuck) {
   const starting = !!deskCtx.gather;
   const to = starting ? $('forWho').value.trim() : invite.to;
   if (starting && !to) { $('gatherSay').textContent = 'Say who the beach is for.'; $('forWho').focus(); return; }
@@ -3152,7 +3217,7 @@ async function joinOrStart(message, name, pic) {
   const label = $('make').textContent;
   $('make').disabled = true; $('make').textContent = starting ? 'Starting it' : 'Adding it';
   $('gatherSay').textContent = '';
-  const ok = await addOpen(key, { m: message, n: name, mood: deskMood, to, id: Math.random().toString(36).slice(2, 12), t: Date.now(), ...(pic ? { p: pic } : {}) });
+  const ok = await addOpen(key, { m: message, n: name, mood: deskMood, to, id: Math.random().toString(36).slice(2, 12), t: Date.now(), ...(pic ? { p: pic } : {}), ...(tuck ? { x: tuck } : {}) });
   $('make').disabled = false; $('make').textContent = label;
   if (!ok) { $('gatherSay').textContent = 'It could not be added just now. Check your connection and try again.'; count('f_save', 'a bottle for a beach was not taken', true); return; }
   count('gather', starting ? 'started a beach' : 'added a bottle', true);
@@ -3247,11 +3312,11 @@ function sandCard(how) {
     : `${name || 'Someone'} wrote that in the sand for you. Now it is gone, as sand is.`;
   const back = $('sandBack');
   back.textContent = how === 'lost' ? 'Try again' : name ? `Write back to ${name} in the sand` : 'Write back in the sand';
-  const reply = () => ({ to: name, key: sandSeat === 'taken' ? '' : sandMsg.key || '', fresh: true });
+  const reply = () => ({ to: name, key: sandSeat === 'taken' ? '' : sandMsg.key || '', fresh: true, back: true, me: sandMsg.to || '' });
   back.onclick = how === 'lost' ? () => location.reload() : () => { el.className = ''; desk(reply()); sandPad(); };
   $('sandBottle').style.display = how === 'lost' ? 'none' : '';
   $('sandBottle').onclick = () => { el.className = ''; desk(reply()); };
-  $('sandHome').textContent = threads().length || gathers().length ? 'Back to your shore' : 'Write something of your own';
+  $('sandHome').textContent = threads().length || gathers().length ? 'Back to your beaches' : 'Write something of your own';
   $('sandHome').onclick = () => { el.className = ''; desk({}); };
 }
 let sandSeat = '';
@@ -3295,6 +3360,9 @@ async function sandShow() {
 // ---------------------------------------------------------------- your shore (the people) and the writing desk
 
 let deskReady = false, deskCtx = {}, madeLink = '', madeTo = '', deskMood = 'dusk';
+let mobileOpen = false;      // the field for their number is behind one small link, so the desk asks for a name and a note and little else
+/** Show the way to give a number, or the field itself once it has been asked for. want: would a number help here at all? */
+const mobileShow = (want) => { $('mobileAsk').style.display = want && !mobileOpen ? 'block' : 'none'; $('mobileRow').style.display = want && mobileOpen ? 'flex' : 'none'; };
 // The picture being tucked into the bottle on the desk, if any: { secret, state: 'working' | 'ready' | 'failed', done: a promise of true or false, url }
 let deskPic = null;
 function dropPic() {
@@ -3332,6 +3400,23 @@ function tuckPic(file) {
     return mine.state === 'ready';
   })();
 }
+// What is tucked into the bottle on the desk, if anything: one of the letters of TUCKS.
+let deskTuck = '';
+function tuckDraw(picking) {
+  const row = $('tuckRow');
+  row.className = deskTuck ? 'has' : picking ? 'pick' : '';
+  if (deskTuck) { $('tuckIcon').innerHTML = TUCK_ART[deskTuck]; $('tuckSay').textContent = TUCKS[deskTuck].replace(/^a /, 'A ') + ' is tucked in. It stays on the beach you share.'; }
+  const pick = $('tuckPick');
+  if (picking && !pick.firstChild) {
+    for (const t of Object.keys(TUCK_ART)) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.dataset.tuck = t; b.innerHTML = TUCK_ART[t];
+      b.setAttribute('aria-label', 'Tuck in ' + TUCKS[t]); b.title = TUCKS[t];
+      b.onclick = () => { deskTuck = t; tuckDraw(); count('tuck', TUCKS[t], true); };
+      pick.appendChild(b);
+    }
+  }
+}
 let reachAsked = true;       // false once the server has shown it cannot say who is reachable: then stop asking
 const when = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
 const whose = (to) => (to ? to + '’s' : 'their');
@@ -3341,7 +3426,7 @@ const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 /** The address of a bottle on this site. A visit that was opened as a test stays a test. */
 const addressOf = (b) => { const l = linkFor(location.origin + location.pathname, b); return qs.has('dev') ? l.replace('#', '?dev#') : l; };
 /** The words that travel with a link when it is texted or shared. */
-const sayWith = (to) => (madeSand ? (to ? `${to}, something is written in the sand for you. See it before the tide does.` : 'Something is written in the sand for you. See it before the tide does.') : to ? `${to}, a bottle washed up for you.` : 'Something washed ashore for you.');
+const sayWith = (to) => (madeSand ? (to ? `${to}, something is written in the sand for you. See it before the tide does.` : 'Something is written in the sand for you. See it before the tide does.') : to ? `${to}, a bottle washed up for you. Open it, then write back:` : 'A bottle washed up for you. Open it, then write back:');
 let madeSand = false;        // the thing just made was written in the sand, not put in a bottle
 /** An address that opens this phone's own Messages, already addressed and already written. The phone sends the text, nothing else does. */
 const textTo = (number, words) => `sms:${number}${ios ? '&' : '?'}body=${encodeURIComponent(words)}`;
@@ -3372,6 +3457,22 @@ function person(th, every) {
     isNew: fresh.length > 0, open: fresh.length ? fresh[fresh.length - 1] : last, at: last ? last.at : (th.t || 0), count: all.length,
     who: th.w || (theirs.length ? theirs[theirs.length - 1].name : '') || (all[0] && all[0].to) || '' };
 }
+/** Light a lantern for someone: one tap, no words. It is kept with the conversation and their phone is told, if it can be. Resolves 'told', 'waiting' or 'failed'. */
+async function lightLamp(f) {
+  lampAt.set(f.th.k, Date.now());
+  const id = Math.random().toString(36).slice(2, 12), mine = myName();
+  wrote(id);
+  if (f.lamp) { remember(f.th.k, '', f.lamp.at); f.lamp = null; }       // theirs has been seen, and answered
+  const r = await add(await token(), f.th.k, { m: '', n: mine, mood: 'night', to: f.who, id, t: Date.now(), k: 'l' }, null);
+  const told = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
+  if (r.ok) keep(f.th.k, [{ message: '', name: mine, mood: 'night', to: f.who, id, at: Date.now(), kind: 'l' }]);
+  if (told) setReach(f.th.k, { j: 1, l: 1 });
+  count('lamp', !r.ok ? 'could not be lit' : told ? 'lit, and their phone was told' : 'lit, waiting on their shore', true);
+  if (!r.ok) lampAt.delete(f.th.k);
+  return !r.ok ? 'failed' : told ? 'told' : 'waiting';
+}
+const lampSaid = (how, who) => (how === 'failed' ? 'It could not be lit just now. Try again in a minute.' : how === 'told' ? `Lantern lit. ${Whose(who)} phone has been told.` : `Lantern lit. ${who || 'They'} will see it on opening Bottle.`);
+
 let picking = null;          // while several people are being chosen for one bottle: the keys ticked so far
 let editing = false;         // while people are being renamed or removed
 const listed = (names) => (names.length < 2 ? names.join('') : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1]);
@@ -3381,14 +3482,14 @@ function pickWords(count) {
   $('editPeople').style.display = count && !on ? 'block' : 'none';
   $('editPeople').textContent = editing ? 'Done' : 'Rename or remove someone';
   $('newOne').style.display = editing ? 'none' : '';
-  if (editing) { $('several').style.display = 'none'; $('homeLede').textContent = 'Change a name, or take someone off this phone.'; return; }
+  if (editing) { $('several').style.display = 'none'; $('homeLede').textContent = 'Change a name, or take a beach off this phone.'; return; }
   $('several').style.display = count > 1 ? 'block' : 'none';
   $('several').textContent = on ? 'Never mind' : 'One bottle for several people';
   $('newOne').textContent = on ? (n < 2 ? 'Choose two or more' : `Write to these ${n}`) : 'A bottle for someone new';
   $('newOne').disabled = on && n < 2;
   if (on) $('homeLede').textContent = 'Tap everyone this bottle is for. Each of them gets their own.';
 }
-const openNote = (f) => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k, pic: f.open.pic, g: f.open.kind === 's' ? 's' : '' }); };
+const openNote = (f) => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k, pic: f.open.pic, g: f.open.kind === 's' ? 's' : '', tuck: f.open.tuck }); };
 
 // Your shore: everyone this phone sends bottles to, news first. A name sends them a bottle; a waiting bottle opens.
 // Drawn at once from what the phone remembers, then again when the server has answered.
@@ -3427,13 +3528,13 @@ async function people() {
       const sub = document.createElement('span'); sub.className = 'rowSub';
       sub.textContent = f.isNew ? (f.open.kind === 's' ? 'Wrote in the sand for you. See it before the tide does' : 'A new bottle washed up. Tap to open it')
         : f.lamp && !picking ? `Lit a lantern for you \u00b7 ${when(f.lamp.at)}`
-        : [f.count ? (f.count === 1 ? '1 bottle' : f.count + ' bottles') : 'No bottles yet', f.count ? when(f.at) : '', reachOf(f.th.k).l ? 'notifications on' : ''].filter(Boolean).join(' · ');
+        : [placeName(f.th.k), f.count ? (f.count === 1 ? '1 bottle' : f.count + ' bottles') : 'No bottles yet', f.count ? when(f.at) : '', reachOf(f.th.k).l ? 'notifications on' : ''].filter(Boolean).join(' · ');
       row.append(who, sub);
       if (picking) {
         row.classList.toggle('picked', picking.has(f.th.k));
         row.setAttribute('aria-pressed', picking.has(f.th.k) ? 'true' : 'false');
         row.onclick = () => { if (picking.has(f.th.k)) picking.delete(f.th.k); else if (picking.size < 8) picking.add(f.th.k); draw(found); };
-      } else row.onclick = () => (f.isNew ? openNote(f) : desk({ to: f.who, key: f.th.k }));
+      } else row.onclick = () => (f.isNew ? openNote(f) : visit(f.th.k));       // a waiting bottle is opened; otherwise the name leads to the beach the two share
       line.appendChild(row);
       if (!picking && f.canLamp) {
         // One tap, no words: "thinking of you". It is kept with the conversation and their phone is told, if it can be.
@@ -3442,39 +3543,23 @@ async function people() {
         lamp.setAttribute('aria-label', `Light a lantern for ${f.who || 'them'}`);
         lamp.onclick = async () => {
           if ((lampAt.get(f.th.k) || 0) > Date.now() - 30000) return;
-          lampAt.set(f.th.k, Date.now());
           lamp.disabled = true; lamp.textContent = 'Lighting';
-          const id = Math.random().toString(36).slice(2, 12), mine = myName();
-          wrote(id);
-          if (f.lamp) { remember(f.th.k, '', f.lamp.at); f.lamp = null; }       // theirs has been seen, and answered
-          const r = await add(await token(), f.th.k, { m: '', n: mine, mood: 'night', to: f.who, id, t: Date.now(), k: 'l' }, null);
-          const told = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
-          if (r.ok) keep(f.th.k, [{ message: '', name: mine, mood: 'night', to: f.who, id, at: Date.now(), kind: 'l' }]);
-          if (told) setReach(f.th.k, { j: 1, l: 1 });
-          count('lamp', !r.ok ? 'could not be lit' : told ? 'lit, and their phone was told' : 'lit, waiting on their shore', true);
+          const how = await lightLamp(f);
           row.classList.remove('new');
-          sub.textContent = !r.ok ? 'It could not be lit just now. Try again in a minute.'
-            : told ? `Lantern lit. ${Whose(f.who)} phone has been told.` : `Lantern lit. ${f.who || 'They'} will see it on opening Bottle.`;
-          lamp.textContent = r.ok ? 'Lit' : 'Lantern';
-          if (!r.ok) { lamp.disabled = false; lampAt.delete(f.th.k); }
+          sub.textContent = lampSaid(how, f.who);
+          lamp.textContent = how === 'failed' ? 'Lantern' : 'Lit';
+          if (how === 'failed') lamp.disabled = false;
           lampHere = found.some((x) => x.lamp);
           lantern();
         };
         line.appendChild(lamp);
-      }
-      if (!picking && !f.isNew && !f.lamp && f.open) {
-        const peek = document.createElement('button');
-        peek.type = 'button'; peek.className = 'peek'; peek.textContent = 'Read last';
-        peek.setAttribute('aria-label', `Read the last bottle with ${f.who || 'them'}`);
-        peek.onclick = () => openNote(f);
-        line.appendChild(peek);
       }
       el.appendChild(line);
     }
     const lit = found.filter((f) => f.lamp);
     lampHere = lit.length > 0;
     if (scene) scene.lamp = standing() === 'lit' || lampHere ? 1 : 0;
-    $('homeLede').textContent = found.some((f) => f.isNew) ? 'A bottle is waiting for you.' : lit.length ? `${lit[0].who || 'Someone'} lit a lantern for you.` : 'Tap a name to send a bottle.';
+    $('homeLede').textContent = found.some((f) => f.isNew) ? 'A bottle is waiting for you.' : lit.length ? `${lit[0].who || 'Someone'} lit a lantern for you.` : 'One beach for each person you trade bottles with. Tap a name to visit it.';
     people.found = found;
     pickWords(found.length);
     drawGathers();
@@ -3488,6 +3573,105 @@ async function people() {
   if (turn === people.turn && changed.some(Boolean)) draw(fresh);
 }
 
+// ---------------------------------------------------------------- a beach, visited
+//
+// A beach is the place two people share. Tapping a name on the list brings it up: its name over the sky, a shell on the
+// sand for every bottle between the two (and what was tucked into each standing by its shell), a star lit for each.
+// A tap on a shell picks that bottle up again. This is where "what is my beach, and whose is it" is answered by looking.
+let visiting = null;         // the beach on screen: { key, who, notes, marks: [{ el, s }], f }
+/** The address that picks a bottle up again from its beach: straight to the note. */
+const hrefAgain = (n, key) => addressOf({ message: n.message, name: n.name, mood: n.mood, to: n.to, key, pic: n.pic, tuck: n.tuck }).replace(/(\?[^#]*)?#/, (m, q) => (q ? q + '&re' : '?re') + '#');
+/** Go to a beach. From a page that is showing a bottle, the page is loaded again as the list, and the beach opens there. */
+function visit(key) {
+  if (linked) {
+    try { sessionStorage.setItem('bottle-visit', key); } catch {}
+    const q = new URLSearchParams(location.search); q.delete('re'); q.delete('see');
+    const rest = q.toString().replace(/=(?=&|$)/g, '');
+    location.href = location.pathname + (rest ? '?' + rest : '');
+    return;
+  }
+  showBeach(key);
+}
+function leaveBeach() {
+  $('visit').classList.remove('show');
+  visiting = null;
+  keeps = null;
+  if (scene) scene.keeps = null;
+}
+function showBeach(key) {
+  const th = threads().find((t) => t.k === key);
+  if (!th) { desk({}); return; }
+  $('compose').classList.remove('show');
+  $('visit').className = scene ? 'show' : 'show plain';
+  visiting = { key, who: th.w || '', notes: [], marks: [], f: null };
+  $('visitName').textContent = placeName(key);
+  $('visitLamp').disabled = false;
+  const pick = (note) => { count('visit', 'picked a bottle up again', true); location.href = hrefAgain(note, key); };
+  const draw = (every) => {
+    if (!visiting || visiting.key !== key) return;
+    const f = person(th, every), notes = every.filter((n) => !isLamp(n) && !isSand(n)), who = f.who, n = notes.length;
+    Object.assign(visiting, { who, notes, f });
+    $('visitWho').textContent = who ? `The beach you share with ${who}` : 'A beach the two of you share';
+    $('visitSay').textContent = visiting.said || (f.lamp ? `${who || 'They'} lit a lantern for you.`
+      : !n ? 'No bottles here yet. The first one leaves a shell on the sand.'
+      : `${n === 1 ? '1 bottle' : n + ' bottles'} between you so far. Each one left a shell and lit a star.` + (scene ? ' Tap a shell to read it again.' : ''));
+    // the shells and the stars: laid out from the conversation's key, so both phones see the same beach. They come in one after another.
+    const next = keepsakes(key, n);
+    if (keeps && keeps.of === key) { next.join = keeps.join; next.shells.forEach((sh, i) => { if (keeps.shells[i]) sh.a = keeps.shells[i].a; }); next.stars.forEach((st, i) => { if (keeps.stars[i]) st.a = keeps.stars[i].a; }); }
+    next.of = key;
+    keeps = next;
+    if (scene) scene.keeps = keeps;
+    if (n) sky(notes[n - 1].mood);                    // the sky is the one the last bottle came under
+    // a ring on each shell to tap, with what was tucked into that bottle standing by it
+    const box = $('visitShells');
+    box.textContent = '';
+    visiting.marks = [];
+    keeps.shells.forEach((sh, i) => {
+      const note = notes[i];
+      if (!note) return;
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'mark';
+      if (isTuck(note.tuck)) b.innerHTML = TUCK_ART[note.tuck];
+      b.setAttribute('aria-label', `Bottle ${i + 1}, from ${isMine(note) ? 'you' : note.name || who || 'them'}, ${when(note.at)}${isTuck(note.tuck) ? ', with ' + TUCKS[note.tuck] : ''}. Read it again`);
+      b.onclick = () => pick(note);
+      box.appendChild(b);
+      visiting.marks.push({ el: b, s: sh });
+    });
+    // every bottle by name and date as well, when the shells cannot say it all: more bottles than shells, or no picture to tap on
+    const row = $('visitRow');
+    row.textContent = '';
+    if (!scene || n > keeps.shells.length) {
+      for (const note of [...notes].reverse()) {
+        const chip = document.createElement('button');
+        chip.type = 'button'; chip.className = 'chip';
+        chip.textContent = `${isMine(note) ? 'You' : note.name || who || 'A note'} · ${when(note.at)}`;
+        chip.onclick = () => pick(note);
+        row.appendChild(chip);
+      }
+    }
+    $('visitWrite').textContent = who ? `Write to ${who}` : 'Write a bottle';
+    $('visitWrite').onclick = () => { leaveBeach(); desk({ to: who, key }); };
+    const lamp = $('visitLamp');
+    lamp.style.display = f.canLamp ? '' : 'none';
+    if (!lamp.disabled) lamp.textContent = f.lamp ? 'Light one back' : 'Light a lantern';
+    lamp.onclick = async () => {
+      if ((lampAt.get(key) || 0) > Date.now() - 30000) return;
+      lamp.disabled = true; lamp.textContent = 'Lighting';
+      const how = await lightLamp(f);
+      if (!visiting || visiting.key !== key) return;
+      visiting.said = lampSaid(how, who);
+      $('visitSay').textContent = visiting.said;
+      lamp.textContent = how === 'failed' ? 'Light a lantern' : 'Lit';
+      if (how === 'failed') lamp.disabled = false;
+    };
+  };
+  draw(kept(key));
+  notesFor(key, true).then(draw);
+  learnReach(key);
+  count('visit', 'a beach of ' + Math.min(kept(key).filter((n) => !isLamp(n) && !isSand(n)).length, 99), true);
+}
+$('visitBack').addEventListener('click', () => { leaveBeach(); desk({}); });
+
 /** A notification was tapped. Bring in the newest bottle of the conversation it named. */
 async function follow(id) {
   const home = () => { try { history.replaceState(null, '', location.pathname + location.search); } catch {} };
@@ -3500,12 +3684,14 @@ async function follow(id) {
   if (!pick) return home();
   count('followed', isLamp(pick) ? 'a lantern was tapped' : 'a notification was tapped');
   if (isLamp(pick)) { home(); homecoming(); return; }         // not a bottle to open: it is on the shore, by their name
-  location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k, pic: pick.pic, g: pick.kind === 's' ? 's' : '' }));
+  location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k, pic: pick.pic, g: pick.kind === 's' ? 's' : '', tuck: pick.tuck }));
 }
 
 /** The words on the desk: who it is for, and whether it will go straight there or by a link. */
 function deskWords() {
   $('desk').classList.toggle('gather', !!deskCtx.gather);
+  // the three steps are for someone starting from nothing; anyone else is told how this one bottle gets there
+  $('desk').classList.toggle('first', !deskCtx.to && !deskCtx.key && !deskCtx.many && !deskCtx.join && !deskCtx.gather);
   $('gatherSay').textContent = deskCtx.join ? gatherSaid : '';
   if (deskCtx.join || deskCtx.gather) {
     const who = (invite && deskCtx.join && invite.to) || 'someone';
@@ -3514,7 +3700,7 @@ function deskWords() {
       ? `${invite.name || 'Someone'} is filling a beach with bottles for ${who}${invite.message ? ': ' + invite.message : ''}. Add yours. ${invite.to || 'They'} will find them all washed up together.`
       : 'For a birthday, a farewell, a big day. You get one link for everyone to add a bottle, and one link for the person, who finds them all washed up together.';
     $('make').textContent = deskCtx.join ? 'Add my bottle' : 'Start the beach';
-    $('mobileRow').style.display = 'none';
+    mobileShow(false);
     return;
   }
   if (deskCtx.many) {
@@ -3523,17 +3709,17 @@ function deskWords() {
     $('deskLede').textContent = 'Write one note. Each of them gets their own bottle. '
       + (lit === all.length ? 'All of them have notifications on, so there are no links to text.' : lit ? `${lit} of them ${lit === 1 ? 'has' : 'have'} notifications on and will be told. You get a link to text to the ${all.length - lit === 1 ? 'other' : 'others'}.` : 'You get a link to text to each.');
     $('make').textContent = `Send to ${all.length} people`;
-    $('mobileRow').style.display = 'none';
+    mobileShow(false);
     return;
   }
-  const to = deskCtx.to || '', direct = !!(deskCtx.key && reachOf(deskCtx.key).l);
-  $('deskTitle').textContent = to ? `A bottle for ${to}` : (deskCtx.key ? 'Another bottle' : 'Message in a bottle');
-  $('deskLede').textContent = direct ? `Write your note. ${to || 'They'} ${to ? 'has' : 'have'} notifications on, so your bottle goes straight to ${whose(to)} phone. No link to text.`
-    : to ? `Write your note. You get a link to text to ${to}, and your bottle washes up on their shore.`
-    : 'Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.';
-  $('make').textContent = direct ? (to ? `Send to ${to}` : 'Send it') : 'Create bottle';
+  const to = deskCtx.to || '', direct = !!(deskCtx.key && reachOf(deskCtx.key).l), back = !!deskCtx.back;
+  $('deskTitle').textContent = to ? (back ? `Write back to ${to}` : `A bottle for ${to}`) : (deskCtx.key ? (back ? 'Write back' : 'Another bottle') : 'Message in a bottle');
+  $('deskLede').textContent = direct ? `Write your note and tap send. ${to || 'They'} ${to ? 'has' : 'have'} notifications on, so it goes straight to ${whose(to)} phone. Nothing to copy or text.`
+    : to || deskCtx.key ? `Write your note. Then one tap sends it to ${to || 'them'}, already written out. Nothing to copy or paste.`
+    : 'Back and forth, as often as you both like. No app to download, no account.';
+  $('make').textContent = direct ? (to ? `Send to ${to}` : 'Send it') : 'Seal it and send';
   // A number is only asked for when it would help: someone with no lantern lit and no number yet.
-  $('mobileRow').style.display = direct || (deskCtx.key && numberOf(deskCtx.key)) ? 'none' : '';
+  mobileShow(!(direct || (deskCtx.key && numberOf(deskCtx.key))));
 }
 
 /**
@@ -3561,6 +3747,7 @@ function desk(ctx) {
   if (deskCtx.join) { gatherSaid = ''; list(null, invite.key).then((all) => { gatherSaid = sofar(all); if (deskCtx.join && !compose.classList.contains('done')) $('gatherSay').textContent = gatherSaid; }); }
   $('forWho').value = '';
   $('mobile').value = '';
+  mobileOpen = false;
   $('pick').style.display = navigator.contacts && navigator.contacts.select ? '' : 'none';
   deskWords();
   if (deskCtx.many) { const who = deskCtx.many; Promise.all(who.map((p) => learnReach(p.key))).then((c) => { if (c.some(Boolean) && deskCtx.many === who && !compose.classList.contains('done')) deskWords(); }); }
@@ -3569,8 +3756,9 @@ function desk(ctx) {
   msg.value = '';
   dropPic();
   dropSand();
+  deskTuck = ''; tuckDraw();
   $('sandRow').style.display = deskCtx.many || deskCtx.join || deskCtx.gather ? 'none' : '';
-  try { who.value = myName(); } catch {}
+  try { who.value = myName() || deskCtx.me || ''; } catch {}      // answering a note addressed "For Ana" on a phone with no name yet: sign it Ana
   for (const c of $('moods').children) c.classList.toggle('on', c.dataset.mood === ((shown && shown.mood) || 'dusk'));
   deskMood = (shown && shown.mood) || 'dusk';
   sky(deskMood);
@@ -3579,44 +3767,82 @@ function desk(ctx) {
   if (deskCtx.to || deskCtx.many) setTimeout(() => msg.focus(), 350);
 }
 
-/** The "bottle is ready" screen. how: 'link' it goes by a link, 'sending' it is on its way to a lit lantern. */
+/**
+ * The screen after "Seal it and send". how: 'link' it goes by a link, 'sending' it is on its way to a lit lantern.
+ * By link there is exactly one thing left to do, and the screen says so: one button that sends it. The raw link is
+ * kept out of sight wherever the phone has a share sheet, because a bare link is what makes people think they must
+ * copy and paste. Once it has been handed over, the screen turns to what happens next.
+ */
+let madeSt = null;           // what the screen is showing: { mode: 'link' | 'direct' | 'told' | 'fallback', to, number, extra, sand, passed, saved, showLink, texting }
+const copyLabel = () => (madeSt && !madeSt.passed && (navigator.share || madeSt.number) ? 'Copy the link instead' : 'Copy the link');
 function made(how, to, number, extra) {
   const el = $('made');
-  el.classList.remove('many', 'gather', 'joined');
+  el.classList.remove('many', 'gather', 'joined', 'passed');
   el.classList.toggle('direct', how === 'sending');
   el.classList.toggle('busy', how === 'sending');
-  $('madeTitle').textContent = how === 'sending' ? (to ? `Sending to ${to}` : 'Sending it') : madeSand ? 'It is written in the sand' : 'Your bottle is ready';
-  $('madeLede').textContent = how === 'sending' ? 'Carrying it down to the water.'
-    : madeSand ? (to ? `Text this link to ${to}. ` : 'Send this link to one person. ') + 'What you wrote is waiting on the sand, and a wave takes it once it has been seen.'
-    : (to ? `Text this link to ${to}. The note travels inside the link itself.` : 'Send this link to one person. The note travels inside the link itself.') + extra;
+  madeSt = { mode: how === 'sending' ? 'direct' : 'link', to, number, extra, sand: madeSand, passed: false, saved: false, showLink: false, texting: false };
+  $('madeNext').textContent = '';
+  if (how === 'sending') { $('madeTitle').textContent = to ? `Sending to ${to}` : 'Sending it'; $('madeLede').textContent = 'Carrying it down to the water.'; }
   $('link').value = madeLink;
   $('try').href = madeLink.replace('#', (qs.has('dev') ? '?dev&see' : '?see') + '#');
   // With their number, the phone's own Messages opens already addressed and written. Otherwise, the share sheet.
   $('text').style.display = number ? 'block' : 'none';
-  $('text').textContent = to ? `Text it to ${to}` : 'Text it';
   $('text').href = number ? textTo(number, sayWith(to) + ' ' + madeLink) : '#';
   $('share').style.display = navigator.share ? '' : 'none';
-  $('share').className = number ? 'btn ghost' : 'btn';
-  $('share').textContent = number ? 'Share another way' : 'Share the link';
-  $('again').textContent = threads().length ? 'Back to your shore' : 'Write another';
+  $('again').textContent = threads().length ? 'Back to your beaches' : 'Write another';
+  madeWords();
   $('compose').classList.add('done');
   $('compose').scrollTop = 0;
   lantern();
 }
+/** The buttons of that screen, and, while it is going by link, its words. Drawn again whenever something is learned. */
+function madeWords() {
+  const st = madeSt, el = $('made');
+  if (!st) return;
+  const to = st.to, sheet = !!navigator.share, easy = sheet || !!st.number;
+  el.classList.toggle('sheet', easy && !st.showLink);      // one tap can send it: the bare link stays out of sight
+  $('text').textContent = to ? `Text it to ${to}` : 'Text it';
+  $('text').className = st.passed ? 'btn ghost' : 'btn';
+  $('share').className = st.number || st.passed ? 'btn ghost' : 'btn';
+  $('share').textContent = st.passed ? 'Send it again' : st.number ? 'Send it another way' : to ? `Send it to ${to}` : 'Send it';
+  $('copy').textContent = copyLabel();
+  if (st.mode !== 'link') return;
+  el.classList.toggle('passed', st.passed);
+  const they = to || 'they', s3 = (one, many) => (to ? one : many);
+  $('madeTitle').textContent = st.passed ? 'Off it goes' : st.sand ? 'It is written in the sand' : easy ? `Last step: send it${to ? ' to ' + to : ''}` : 'Your bottle is ready';
+  const paste = `Copy the link and paste it into a message${to ? ' to ' + to : ''}.`;
+  $('madeLede').textContent = st.passed
+      ? (st.sand ? `When ${they} ${s3('taps', 'tap')} it, what you wrote is waiting on the sand, and a wave takes it once it has been seen.`
+        : `When ${they} ${s3('taps', 'tap')} it, your bottle washes up on ${st.place || 'a beach'}, ${st.first ? 'a beach the two of you now share' : 'the beach you share'}.` + st.extra)
+    : st.sand ? 'What you wrote is waiting on the sand, and a wave takes it once it has been seen. ' + (easy ? 'One tap sends it. Nothing to copy or paste.' : paste)
+    : easy ? 'Your note is inside the link, so one tap sends the whole bottle. Nothing to copy or paste.' + st.extra
+    : paste + ' Your note travels inside the link itself.' + st.extra;
+  // Only said once the server really has the note: that is what lets the answer find its way back here.
+  $('madeNext').textContent = st.saved ? `When ${they} ${s3('writes', 'write')} back, it shows up here.` : '';
+}
+/** The link has been handed to Messages or the share sheet: turn the screen to what happens next. */
+function handedOver() {
+  if (!madeSt || madeSt.mode === 'direct' || madeSt.mode === 'told' || !$('compose').classList.contains('done')) return;
+  madeSt.mode = 'link'; madeSt.passed = true; madeSt.texting = false;
+  madeWords();
+}
+// Messages was opened with the text already written. When the page comes back to the front, take it that it went.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && madeSt && madeSt.texting) handedOver(); });
 
 /**
  * One note, a bottle each. Every person gets their own bottle in their own conversation, with its own seat.
  * It goes straight to anyone whose lantern is lit. Each of the others gets a button that texts or shares their link.
  */
-function sendMany(message, name, pic) {
+function sendMany(message, name, pic, tuck) {
   const who = deskCtx.many, el = $('made'), list = $('sentList');
   const run = sendMany.run = (sendMany.run || 0) + 1;
   madeLink = ''; madeTo = '';
-  el.classList.remove('direct', 'busy', 'gather', 'joined');
+  el.classList.remove('direct', 'busy', 'gather', 'joined', 'passed', 'sheet');
   el.classList.add('many');
+  madeSt = null; $('madeNext').textContent = '';
   $('madeTitle').textContent = `Sending to ${who.length} people`;
   $('madeLede').textContent = 'Carrying them down to the water.';
-  $('again').textContent = 'Back to your shore';
+  $('again').textContent = 'Back to your beaches';
   list.textContent = '';
   $('compose').classList.add('done');
   $('compose').scrollTop = 0;
@@ -3631,7 +3857,7 @@ function sendMany(message, name, pic) {
   who.forEach((p, i) => {
     let claim = '';
     try { claim = newClaim(); } catch {}
-    const b = { message, name, mood: deskMood, to: p.to, key: p.key, claim, pic };
+    const b = { message, name, mood: deskMood, to: p.to, key: p.key, claim, pic, tuck };
     const link = linkFor(location.origin + location.pathname, b), number = numberOf(p.key);
     const row = document.createElement('div'); row.className = 'sentRow';
     const head = document.createElement('span'); head.className = 'rowWho'; head.textContent = p.to || 'Someone';
@@ -3641,9 +3867,9 @@ function sendMany(message, name, pic) {
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(p.key, p.to, 0);
-    keep(p.key, [{ message, name, mood: deskMood, to: p.to, id, at: Date.now() + i, ...(pic ? { pic } : {}) }]);
+    keep(p.key, [{ message, name, mood: deskMood, to: p.to, id, at: Date.now() + i, ...(pic ? { pic } : {}), ...(tuck ? { tuck } : {}) }]);
     // one after another, a moment apart, so the server is never asked for too much at once
-    wait(i * 350).then(() => token()).then((auth) => add(auth, p.key, { m: message, n: name, mood: deskMood, to: p.to, id, t: Date.now(), ...(pic ? { p: pic } : {}) }, claim)).then(async (r) => {
+    wait(i * 350).then(() => token()).then((auth) => add(auth, p.key, { m: message, n: name, mood: deskMood, to: p.to, id, t: Date.now(), ...(pic ? { p: pic } : {}), ...(tuck ? { x: tuck } : {}) }, claim)).then(async (r) => {
       if (!r.ok) count('f_save', 'the server did not take the note', true);
       const reached = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
       if (reached) setReach(p.key, { j: 1, l: 1 }); else if (r.ok && reachOf(p.key).l) setReach(p.key, { l: 0 });
@@ -3683,7 +3909,7 @@ function wire() {
   msg.addEventListener('input', () => { $('left').textContent = String(MAX_MESSAGE - msg.value.length); });
 
   const share = async () => {
-    try { await navigator.share({ title: 'A message in a bottle', text: sayWith(madeTo), url: madeLink }); count('share', 'sent', true); return true; }
+    try { await navigator.share({ title: 'A message in a bottle', text: sayWith(madeTo), url: madeLink }); count('share', 'sent', true); handedOver(); return true; }
     catch (e) { count('share', (e && e.name) === 'AbortError' ? 'closed without sending' : 'failed: ' + ((e && e.name) || ''), true); return false; }
   };
   $('desk').addEventListener('submit', async (e) => {
@@ -3709,28 +3935,30 @@ function wire() {
     }
     if (deskPic && deskPic.state !== 'ready') { $('picShow').scrollIntoView({ block: 'center' }); return; }
     const pic = sandSecret || (deskPic ? deskPic.secret : ''), kind = sandSecret ? 's' : '', words = sandSecret ? '' : msg.value.trim();
+    const tuck = sandSecret ? '' : deskTuck;            // what is written in the sand carries nothing with it
     const name = who.value.trim();
     setName(name);
-    if (deskCtx.join || deskCtx.gather) { joinOrStart(msg.value.trim(), name, pic); return; }
-    if (deskCtx.many) { sendMany(msg.value.trim(), name, pic); return; }
+    if (deskCtx.join || deskCtx.gather) { joinOrStart(msg.value.trim(), name, pic, tuck); return; }
+    if (deskCtx.many) { sendMany(msg.value.trim(), name, pic, tuck); return; }
     let key = deskCtx.key || '', claim = '';
     try { if (!key) key = newKey(); claim = newClaim(); } catch {}
     const to = deskCtx.to || $('forWho').value.trim();
     const number = mobile($('mobile').value) || numberOf(key);
     // The link carries the note, the conversation's key, and one seat: whoever opens it first is the one it was for.
-    const b = { message: words, name, mood: deskMood, to, key, claim, pic, g: kind };
+    const b = { message: words, name, mood: deskMood, to, key, claim, pic, g: kind, tuck };
     madeTo = to;
     const link = madeLink = linkFor(location.origin + location.pathname, b);
     // A reply adds to a shore the two of you already share. Say what it will leave there.
     const before = deskCtx.key && !deskSand ? kept(key).filter((n) => !isLamp(n) && !isSand(n)).length : 0;
-    const leaves = before ? ` It is bottle ${before + 1} between you` + (before < MAX_SHELLS ? `, and it leaves ${(before + 1) % 5 ? 'a new shell' : 'a starfish'} on the shore you share.` : '.') : '';
+    const leaves = before ? ` It is bottle ${before + 1} between you` + (before < MAX_SHELLS ? `, and it leaves ${(before + 1) % 5 ? 'a new shell' : 'a starfish'} on ${placeName(key)}, the beach you share.` : '.') : '';
     // If their lantern is lit the bottle goes straight to their shore and their phone is told. No link to text.
     const direct = !!(deskCtx.key && reachOf(key).l);
     made(direct ? 'sending' : 'link', to, number, leaves);
+    if (madeSt) { madeSt.place = key ? placeName(key) : ''; madeSt.first = !deskCtx.key; madeWords(); }
     count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters${pic ? ', with a picture' : ''}`, true);
     // Going by link: Messages or the share sheet opens straight away, while this is still the same tap.
     if (!direct) {
-      if (number) { count('share', 'opened Messages, already addressed', true); try { location.href = $('text').href; } catch {} }
+      if (number) { count('share', 'opened Messages, already addressed', true); madeSt.texting = true; try { location.href = $('text').href; } catch {} }
       else if (navigator.share) share();
       else count('share', 'no share sheet on this browser', true);
     }
@@ -3738,8 +3966,8 @@ function wire() {
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(key, to, 0, number);
-    keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now(), ...(pic ? { pic } : {}), ...(kind ? { kind } : {}) }]);
-    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now(), ...(pic ? { p: pic } : {}), ...(kind ? { k: kind } : {}) }, claim)).then(async (r) => {
+    keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now(), ...(pic ? { pic } : {}), ...(kind ? { kind } : {}), ...(tuck ? { tuck } : {}) }]);
+    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now(), ...(pic ? { p: pic } : {}), ...(kind ? { k: kind } : {}), ...(tuck ? { x: tuck } : {}) }, claim)).then(async (r) => {
       if (!r.ok) count('f_save', 'the server did not take the note', true);
       // Was the other phone told? The sender is given a few seconds to answer.
       const told = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
@@ -3750,21 +3978,25 @@ function wire() {
       el.classList.remove('busy');
       if (told) {
         // Only said once the other phone's push service has really taken it.
+        if (madeSt) madeSt.mode = 'told';
+        el.classList.remove('passed'); $('madeNext').textContent = '';
         el.classList.add('direct');
         $('madeTitle').textContent = to ? `Sent to ${to}` : 'Sent';
         lede.textContent = (direct ? `${Whose(to)} phone has been told. No link needed.` : `${to || 'They'} ${to ? 'has' : 'have'} notifications on, so ${whose(to)} phone has already been told. No need to text this one.`) + leaves;
       } else if (direct) {
+        if (madeSt) madeSt.mode = 'fallback';
         el.classList.remove('direct');
         $('madeTitle').textContent = 'Your bottle is ready';
         lede.textContent = r.ok
           ? `It is saved for ${to || 'them'}, but ${whose(to)} phone could not be told this time. It will be waiting when ${to || 'they'} next ${to ? 'opens' : 'open'} Bottle. To be sure, text the link.`
           : `The server could not be reached, so text ${to || 'them'} the link. The note travels inside it.`;
-      } else if (r.ok) {
-        lede.textContent += ` When ${to ? to + ' sends' : 'they send'} one back, it will also be waiting for you on this page.`;
-      }
+      } else if (madeSt) { madeSt.saved = !!r.ok; madeWords(); }
     });
   });
   for (const c of $('moods').children) c.addEventListener('click', () => { deskMood = c.dataset.mood; sky(deskMood); for (const o of $('moods').children) o.classList.toggle('on', o === c); });
+  $('mobileAsk').addEventListener('click', () => { mobileOpen = true; mobileShow(true); $('mobile').focus(); });
+  $('tuckAdd').addEventListener('click', () => tuckDraw(true));
+  $('tuckDrop').addEventListener('click', () => { deskTuck = ''; tuckDraw(); });
   $('sandAdd').addEventListener('click', () => sandPad());
   $('sandShow').addEventListener('click', (e) => { if (e.target.id !== 'sandDrop') sandPad(); });       // a tap on what was written opens it to change
   $('sandDrop').addEventListener('click', () => { dropSand(); count('sand', 'removed', true); });
@@ -3778,11 +4010,12 @@ function wire() {
       try { $('link').select(); ok = document.execCommand('copy'); } catch {}
     }
     count('copy', ok ? 'copied' : 'could not copy', true);
+    if (!ok && madeSt) { madeSt.showLink = true; madeWords(); }      // it could not be copied for them: show the link to press and hold
     $('copy').textContent = ok ? 'Copied. Now paste it in a text.' : 'Press and hold the link above to copy it';
-    setTimeout(() => { $('copy').textContent = 'Copy the link'; }, 3500);
+    setTimeout(() => { $('copy').textContent = copyLabel(); }, 3500);
   });
   $('share').addEventListener('click', share);
-  $('text').addEventListener('click', () => count('share', 'opened Messages, already addressed', true));
+  $('text').addEventListener('click', () => { count('share', 'opened Messages, already addressed', true); if (madeSt) madeSt.texting = true; });
   $('showLink').addEventListener('click', () => $('made').classList.remove('direct'));
   $('again').addEventListener('click', () => desk({}));
   $('gatherA').addEventListener('click', () => desk({ gather: true }));
@@ -3810,16 +4043,28 @@ function wire() {
       count('pick', tel ? 'chose a contact' : 'that contact had no number', true);
     } catch (e) { count('pick', 'failed: ' + ((e && e.name) || ''), true); }
   });
-  // Android: the browser offers to put the page on the home screen as an app. Keep the offer for a button on the shore.
-  let offer = null;
-  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); offer = e; $('install').style.display = 'block'; });
-  addEventListener('appinstalled', () => { $('install').style.display = 'none'; count('install', 'installed', true); });
-  $('install').addEventListener('click', async () => {
-    if (!offer) return;
-    try { offer.prompt(); const c = await offer.userChoice; count('install', (c && c.outcome) || '', true); } catch {}
-    offer = null; $('install').style.display = 'none';
-  });
 }
+
+// ---------------------------------------------------------------- keeping it, and how it works
+//
+// Android: the browser offers to put the page on the home screen as an app. The offer is kept for a plain button
+// under a note, on the "last step" screen and on the shore, so the first bottle someone reads can become a place
+// they come back to. (An iPhone has no such offer: its way is the Home Screen card, opened from "Turn on notifications".)
+let installOffer = null;
+const keepShow = () => { for (const b of document.querySelectorAll('.keep')) b.style.display = installOffer ? 'block' : 'none'; };
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installOffer = e; keepShow(); count('install', 'offered by the browser'); });
+addEventListener('appinstalled', () => { installOffer = null; keepShow(); count('install', 'installed', true); });
+for (const b of document.querySelectorAll('.keep')) b.addEventListener('click', async () => {
+  if (!installOffer) return;
+  const offer = installOffer;
+  installOffer = null;
+  try { offer.prompt(); const c = await offer.userChoice; count('install', ((c && c.outcome) || '') + ' (' + b.id + ')', true); } catch {}
+  keepShow();
+});
+// "How Bottle works": five lines, a tap away wherever someone might be wondering.
+for (const b of document.querySelectorAll('.how')) b.addEventListener('click', () => { $('howcard').classList.add('show'); count('how', 'opened', true); });
+$('howClose').addEventListener('click', () => $('howcard').classList.remove('show'));
+$('howcard').addEventListener('click', (e) => { if (e.target.id === 'howcard') $('howcard').classList.remove('show'); });
 
 /** The page has learned something new about this phone's people (the server answered, or the page came back to the front). */
 function homecoming() {
@@ -3932,7 +4177,10 @@ if (!scene) {
 // How the shore is being drawn. If 3D was refused, enough to tell why: was the page on screen, how big, does the browser know 3D at all.
 if (scene) setTimeout(() => count('view', scene.info() + (scene.flat ? ` | 3D refused: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight} | browser knows 3D: ${typeof WebGLRenderingContext !== 'undefined'}` : ''), true), 0);
 else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight}`);
-count(bottle ? (seeing ? 'see' : 's_open') : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
+count(bottle ? (seeing ? 'see' : rereading ? 'reread' : 's_open') : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
+// A beach was asked for from a page that was showing a bottle: the page was loaded again as the list, and the beach opens over it.
+let visitNext = '';
+try { visitNext = (!linked && !hop && sessionStorage.getItem('bottle-visit')) || ''; sessionStorage.removeItem('bottle-visit'); } catch {}
 if (bottle) sky(bottle.mood);
 if (beach) { shoreKeeps(readOnes().length); beachLoad(); }
 else if (bottle) { const known = bottle.key ? kept(bottle.key).filter((n) => !isLamp(n) && !isSand(n)) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
@@ -3946,7 +4194,7 @@ if (!scene) {
   // Nothing to draw on at all. The words still get through.
   ready();
   $('veil').classList.add('up');
-  if (bottle) showLetter(true); else if (sandMsg) sandShow(); else desk(invite ? { join: true } : {});
+  if (bottle) showLetter(true); else if (sandMsg) sandShow(); else { desk(invite ? { join: true } : {}); if (visitNext) showBeach(visitNext); }
 } else {
   run();
 }
@@ -3955,8 +4203,10 @@ function run() {
   story = new Story(scene);
   const audio = new Shore();
   const reading = !!bottle;
-  if (sandMsg) sandShow(); else if (!reading) desk(invite ? { join: true } : {});
+  if (sandMsg) sandShow(); else if (!reading) { desk(invite ? { join: true } : {}); if (visitNext) showBeach(visitNext); }
   let W = 0, H = 0, quality = 1;
+  // A beach being visited is seen from a step further back, so the stars sit under its name and the shells above the buttons.
+  let baseFov = 62 * Math.PI / 180, wide = 1, dimNow = reading ? 0 : 0.35;
 
   function screenAngle() {
     const a = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : (typeof window.orientation === 'number' ? window.orientation : 0);
@@ -3974,7 +4224,8 @@ function run() {
     if (!force && w === W && h === H) return;
     W = w; H = h;
     // Wide screens see more beach, not a stretched one.
-    scene.cam.fov = (w > h ? 46 : 62) * Math.PI / 180;
+    baseFov = (w > h ? 46 : 62) * Math.PI / 180;
+    scene.cam.fov = baseFov * wide;
     // a phone gets at most about 1.2 million pixels to fill each frame; that is plenty at arm's length
     scene.resize(W, H, Math.max(0.5, Math.min(devicePixelRatio || 1, 2, Math.sqrt((phone ? 1.2e6 : 2.2e6) / (W * H))) * quality));
   }
@@ -4048,6 +4299,7 @@ function run() {
     cv.addEventListener('pointercancel', up);
     $('skip').addEventListener('click', () => { count('skip', 'stuck at: ' + story.state); audio.unlock(); audio.play('reveal'); story.state = 'reading'; story.seen = true; story.lift = 1; showLetter(false); });
   }
+  if (reading && rereading) { story.state = 'reading'; story.seen = true; story.lift = 1; showLetter(false); }
   addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('visibilitychange', () => { if (audio.ctx && document.visibilityState === 'visible') audio.ctx.resume(); });
 
@@ -4099,7 +4351,7 @@ function run() {
       was = story.state;
       if (was === 'held' && !seeing) count('s_held', speed());
       if (was === 'open' && !seeing) count('s_cork', story.motion ? 'tilt on' : 'touch only');
-      if (was === 'reading' && !seeing) count('s_read', speed());
+      if (was === 'reading' && !seeing && !rereading) count('s_read', speed());
     }
     if (story.motion && !tilted) { tilted = true; count('motion_live'); }
     const t = story.t;
@@ -4126,7 +4378,7 @@ function run() {
     const held = story.state !== 'arrive' && story.state !== 'adrift';
     const zs = swash(story.bx, t);
     // The camera. It starts on the horizon, comes down to the sand when the bottle shows, and follows the phone a little.
-    const goalY = !reading ? 0.1 : story.state === 'arrive' ? 0.44 : story.state === 'adrift' ? (story.seen ? 0.0 : 0.3) : 0.16;
+    const goalY = visiting ? 0.05 : !reading ? 0.1 : story.state === 'arrive' ? 0.44 : story.state === 'adrift' ? (story.seen ? 0.0 : 0.3) : 0.16;
     camY += (goalY - camY) * Math.min(1, dt * 1.1);
     let lx = 0.035 * Math.sin(t * 0.21), ly = 0.02 * Math.sin(t * 0.17 + 1);
     if (story.motion) {
@@ -4136,9 +4388,15 @@ function run() {
     look[0] += (lx - look[0]) * Math.min(1, dt * 5); look[1] += (ly - look[1]) * Math.min(1, dt * 5);
     const amount = held ? 0.3 : story.grab ? 0.15 : 1;      // steady while something is in your hand
     scene.cam.target = [look[0] * 1.5 * amount, camY - look[1] * 1.1 * amount, -1.5];
+    const wider = visiting ? 1.26 : 1;
+    if (Math.abs(wide - wider) > 0.001) { wide += (wider - wide) * Math.min(1, dt * 2.4); scene.cam.fov = baseFov * wide; }
+    const dimTo = visiting || (sandMsg && $('sand').classList.contains('wait')) ? 0 : 0.35;
+    dimNow += (dimTo - dimNow) * Math.min(1, dt * 3);
+    // the ring over each shell follows the picture
+    if (visiting) for (const m of visiting.marks) { const p = scene.project([m.s.x, 0, m.s.z]); m.el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)`; m.el.style.opacity = m.s.a > 0.5 ? '1' : '0'; }
     scene.draw({
       time: t,
-      dim: reading ? (held ? 0.55 * Math.min(1, story.lift) + (story.state === 'reading' ? 0.25 : 0) : 0) : (sandMsg && $('sand').classList.contains('wait') ? 0 : 0.35),
+      dim: reading ? (held ? 0.55 * Math.min(1, story.lift) + (story.state === 'reading' ? 0.25 : 0) : 0) : dimNow,
       ripples: story.ripples,
       shadow: reading && story.visible && !held ? [story.bx, story.bz + 0.03, 0.27, 1] : [0, 0, 1, 0],
       bottle: reading && story.visible ? story.bottleMatrix() : null,

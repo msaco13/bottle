@@ -1,6 +1,6 @@
 // Keepsakes: the shells and stars a conversation leaves on its shore.
 // They must be the same on both phones, must only ever be added to, and must stay where a phone can see them.
-import { keepsakes, grow, keepLine, starAt, MAX_SHELLS, STARS } from '../js/keeps.js';
+import { keepsakes, grow, keepLine, starAt, placeName, MAX_SHELLS, STARS } from '../js/keeps.js';
 import { Flat } from '../js/flat.js';
 import assert from 'node:assert';
 
@@ -65,9 +65,18 @@ grow(null, 0.1);
 // the line under the note
 assert.equal(keepLine(null), '');
 assert.equal(keepLine(keepsakes(KEY, 0)), '');
-assert.match(keepLine(keepsakes(KEY, 1)), /left a shell/);
-assert.match(keepLine(keepsakes(KEY, 4)), /^4 shells .* 6 more bottles and your stars join up\.$/);
+// every beach has a name of its own: the same on both phones, the same however many bottles there are, and not the same for every beach
+assert.match(placeName(KEY), /^[A-Z][a-z]+ (Cove|Bay|Sands|Point|Landing|Shoal)$/);
+assert.equal(placeName(KEY), placeName(KEY));
+assert.equal(keepsakes(KEY, 3).place, placeName(KEY));
+assert.equal(keepsakes(KEY, 12).place, placeName(KEY));
+{ const names = new Set(); for (let i = 0; i < 300; i++) names.add(placeName('key-number-' + i)); assert.ok(names.size > 80, 'beach names are spread across the list: ' + names.size); }
+// the line under a note says which beach, whose it is, and what it keeps
+const PLACE = placeName(KEY);
+assert.equal(keepLine(keepsakes(KEY, 1), 'Mike'), `This is ${PLACE}, the beach you share with Mike. Every bottle between you leaves a shell here and lights a star.`);
+assert.equal(keepLine(keepsakes(KEY, 1)), `This is ${PLACE}, the beach the two of you share. Every bottle between you leaves a shell here and lights a star.`);
+assert.equal(keepLine(keepsakes(KEY, 4), 'Mike'), `${PLACE}, the beach you share with Mike: 4 shells, one for every bottle between you. 6 more bottles and your stars join up.`);
 assert.match(keepLine(keepsakes(KEY, 9)), /One more bottle and your stars join up\.$/);
-assert.equal(keepLine(keepsakes(KEY, 12)), `12 bottles between you. Your stars have joined up: ${full.name}.`);
+assert.equal(keepLine(keepsakes(KEY, 12), 'Mike'), `${PLACE}, the beach you share with Mike: 12 bottles between you. Your stars have joined up: ${full.name}.`);
 
 console.log(`keeps ok: 300 shores, tightest gap between two shells ${closest.toFixed(3)}. This one is "${full.name}"`);

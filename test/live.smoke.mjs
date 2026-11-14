@@ -26,5 +26,7 @@ console.log('new phone sees the desk:', await p.vis('desk'), '| offers a picture
 p = await open(SITE + '?dev', { 'bottle-threads': [{ k: K, w: 'Jorge', s: now, t: now }], 'bottle-mine': ['m1'], 'bottle-notes': { [K]: [{ message: 'Hi', name: 'Mike', mood: 'dusk', to: 'Jorge', id: 'm1', at: now }] } });
 console.log('phone with people sees its shore:', await p.vis('home'), '|', await p.page.evaluate(() => document.getElementById('people').textContent), '| errors:', p.errs.length);
 await p.page.click('#people .row'); await p.page.waitForTimeout(400);
-console.log('tap a name:', await p.page.evaluate(() => [document.getElementById('deskTitle').textContent, document.getElementById('make').textContent])); await p.ctx.close();
+console.log('tap a name: the beach the two share:', await p.vis('visit'), '|', await p.page.evaluate(() => [document.getElementById('visitName').textContent, document.getElementById('visitWho').textContent]));
+await p.page.click('#visitWrite'); await p.page.waitForTimeout(400);
+console.log('then write:', await p.page.evaluate(() => [document.getElementById('deskTitle').textContent, document.getElementById('make').textContent])); await p.ctx.close();
 await browser.close();

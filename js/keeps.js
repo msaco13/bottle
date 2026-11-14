@@ -1,4 +1,7 @@
-// Keepsakes: what a conversation leaves on its shore.
+// Keepsakes: what a conversation leaves on its beach.
+//
+// One word, one meaning: a BEACH is the place two people share. Each pair has their own, with a name of its own
+// ("Heron Cove"), worked out from the conversation's key so both phones call it the same thing.
 //
 // Every bottle sent back and forth leaves a shell on the dry sand, and lights one star.
 // Every fifth bottle leaves a starfish instead. Ten bottles join the stars into a figure
@@ -32,6 +35,15 @@ function stream(text) {
 
 /** How far left or right of the middle a phone held upright can see the dry sand, this far up the beach. Less a margin. */
 const reach = (z) => 0.277 * (0.337 + (2.75 - z) * 0.961) - 0.08;
+
+// The name of a beach: one of 16 x 6 = 96. Two of someone's beaches may share a name now and then; nothing depends on it.
+const PLACE_A = ['Heron', 'Amber', 'Driftwood', 'Lantern', 'Sandpiper', 'Otter', 'Pelican', 'Coral', 'Moonrise', 'Saltgrass', 'Seaglass', 'Juniper', 'Indigo', 'Marlin', 'Tern', 'Osprey'];
+const PLACE_B = ['Cove', 'Bay', 'Sands', 'Point', 'Landing', 'Shoal'];
+/** The name of the beach a conversation shares. The same on both phones, and it never changes. */
+export function placeName(seed) {
+  const r = stream('place:' + seed);
+  return PLACE_A[Math.floor(r() * PLACE_A.length)] + ' ' + PLACE_B[Math.floor(r() * PLACE_B.length)];
+}
 
 const FIRST = ['Quiet', 'Patient', 'Wandering', 'Faithful', 'Little', 'Sleeping', 'Bright', 'Listening', 'Returning', 'Barefoot', 'Salt', 'Lantern'];
 const SECOND = ['Oar', 'Heron', 'Anchor', 'Gull', 'Sail', 'Shell', 'Tide', 'Dolphin', 'Lighthouse', 'Kite', 'Compass', 'Otter'];
@@ -72,7 +84,7 @@ export function keepsakes(seed, count) {
   }
   const rn = stream('name:' + seed);
   const name = 'The ' + FIRST[Math.floor(rn() * FIRST.length)] + ' ' + SECOND[Math.floor(rn() * SECOND.length)];
-  return { count: n, shells: shells.slice(0, Math.min(n, MAX_SHELLS)), stars: stars.slice(0, Math.min(n, STARS)), whole: n >= STARS, join: 0, name };
+  return { count: n, shells: shells.slice(0, Math.min(n, MAX_SHELLS)), stars: stars.slice(0, Math.min(n, STARS)), whole: n >= STARS, join: 0, name, place: placeName(seed) };
 }
 
 /** Where a star hangs: the x and y of its direction from the viewer. wide: the picture is wider than it is tall, and shows less sky. */
@@ -94,11 +106,14 @@ export function grow(k, dt) {
   k.join = Math.max(0, Math.min(1, k.join + (done ? dt : -dt) * 0.8));
 }
 
-/** The one line under a note that says what the shore is keeping. '' when there is nothing to say. */
-export function keepLine(k) {
+/**
+ * The one line under a note that says where it washed up and what that beach is keeping. '' when there is nothing to say.
+ * who: the other person, when this phone knows their name.
+ */
+export function keepLine(k, who = '') {
   if (!k || k.count < 1) return '';
-  const n = k.count;
-  if (n === 1) return 'This bottle left a shell on the sand. Every bottle between you leaves one, and lights a star.';
-  if (n < STARS) return `${n} shells on this shore, one for every bottle between you. ${STARS - n === 1 ? 'One more bottle' : (STARS - n) + ' more bottles'} and your stars join up.`;
-  return `${n} bottles between you. Your stars have joined up: ${k.name}.`;
+  const n = k.count, yours = who ? `the beach you share with ${who}` : 'the beach the two of you share';
+  if (n === 1) return `This is ${k.place}, ${yours}. Every bottle between you leaves a shell here and lights a star.`;
+  if (n < STARS) return `${k.place}, ${yours}: ${n} shells, one for every bottle between you. ${STARS - n === 1 ? 'One more bottle' : (STARS - n) + ' more bottles'} and your stars join up.`;
+  return `${k.place}, ${yours}: ${n} bottles between you. Your stars have joined up: ${k.name}.`;
 }
