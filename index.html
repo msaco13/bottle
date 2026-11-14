@@ -23,7 +23,7 @@
 <meta property="og:url" content="https://msaco13.github.io/bottle/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.500' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=3d90960257">
+<link rel="stylesheet" href="css/style.css?v=3d30c336a0">
 </head>
 <body>
 <div id="stage">
@@ -40,6 +40,7 @@
       <div id="dear"></div>
       <div id="picWrap"><img id="pic" alt="The picture that came in the bottle"><div id="picHint">Tap the picture to see it larger</div><div id="picNote"></div></div>
       <div id="words"></div>
+      <div id="tuck"><span id="tuckArt"></span><span id="tuckNote"></span></div>
       <div id="sign"></div>
       <div id="seal"></div>
     </div>
@@ -49,6 +50,7 @@
       <button id="fresh" class="link show">Write a bottle for someone else</button>
       <p id="sealNote"></p>
       <p id="keepNote"></p>
+      <button class="link" type="button" id="toBeach">Visit the beach</button>
       <div id="shelf"></div>
       <div class="lantern" id="lanternA"></div>
       <button class="link keep" type="button" id="keepA">Keep Bottle on your home screen</button>
@@ -58,10 +60,10 @@
 
   <!-- the writing desk: shown when the link carries no message -->
   <section id="compose">
-    <!-- your shore: the people this phone sends bottles to. The first thing a phone with conversations sees. -->
+    <!-- your beaches: one for each person this phone trades bottles with. The first thing a phone with conversations sees. -->
     <div id="home">
-      <h1>Your shore</h1>
-      <p class="lede" id="homeLede">Tap a name to send a bottle.</p>
+      <h1>Your beaches</h1>
+      <p class="lede" id="homeLede">One beach for each person you trade bottles with. Tap a name to visit it.</p>
       <div id="people"></div>
       <div id="gathers"></div>
       <button class="btn" type="button" id="newOne">A bottle for someone new</button>
@@ -119,6 +121,11 @@
         <div id="sandShow"><canvas id="sandThumb" width="112" height="112"></canvas><span id="sandNote" aria-live="polite">Written in the sand. A wave takes it once they have seen it.</span><button type="button" class="link" id="sandDrop">Remove</button></div>
       </div>
       </div>
+      <div id="tuckRow">
+        <button type="button" class="mood" id="tuckAdd">Tuck something in</button>
+        <div id="tuckPick" role="group" aria-label="Something small to tuck in with the note"></div>
+        <div id="tuckShow"><span id="tuckIcon"></span><span id="tuckSay" aria-live="polite"></span><button type="button" class="link" id="tuckDrop">Remove</button></div>
+      </div>
       <label id="moodsLabel">The sky they will open it under</label>
       <div id="moods" role="group" aria-labelledby="moodsLabel">
         <button type="button" class="mood on" data-mood="dusk">Dusk</button>
@@ -128,7 +135,7 @@
       <button class="btn" type="submit" id="make">Seal it and send</button>
       <div class="lantern" id="lanternC"></div>
       <button class="link" type="button" id="gatherB">Or fill a beach with bottles from everyone</button>
-      <button class="link" type="button" id="toHome">Back to your shore</button>
+      <button class="link" type="button" id="toHome">Back to your beaches</button>
     </form>
     <div id="made">
       <h1 id="madeTitle">Last step: send it</h1>
@@ -176,15 +183,34 @@
     </div>
   </div>
 
-  <!-- how it works, in five lines. Opened from the desk, the shore, and under a note. -->
+  <!-- a beach, visited: the place two people share. Its shells are laid out by the picture underneath; here are its name, a way to tap each shell, and what to do next. -->
+  <section id="visit">
+    <div id="visitHead">
+      <h1 id="visitName"></h1>
+      <p id="visitWho"></p>
+      <p id="visitSay" aria-live="polite"></p>
+    </div>
+    <div id="visitShells"></div>
+    <div id="visitFoot">
+      <div id="visitRow" class="shelfRow"></div>
+      <button class="btn" type="button" id="visitWrite">Write a bottle</button>
+      <div id="visitLinks">
+        <button class="link" type="button" id="visitBack">Your beaches</button>
+        <button class="link" type="button" id="visitLamp">Light a lantern</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- how it works, in six lines. Opened from the desk, the list of beaches, and under a note. -->
   <div id="howcard" role="dialog" aria-modal="true" aria-labelledby="howTitle">
     <div class="card">
       <h1 id="howTitle">How Bottle works</h1>
       <ol>
-        <li><b>Write a note.</b> Up to 600 characters. Add a picture or a GIF if you like.</li>
+        <li><b>Write a note.</b> Up to 600 characters. Add a picture or a GIF, or tuck in something small.</li>
         <li><b>Send it in one tap.</b> Your messages open with the bottle already in place. Nothing to copy or paste.</li>
         <li><b>They open it.</b> A bottle washes up on a beach with your note inside.</li>
         <li><b>They write back.</b> One button under your note, and their bottle comes back to you.</li>
+        <li><b>The beach is yours.</b> You and each person share one beach, with a name of its own. Every bottle between you leaves a shell there and lights a star. Tap a shell to read it again.</li>
         <li><b>Skip the texting.</b> Once you both turn on notifications, bottles go straight from phone to phone.</li>
       </ol>
       <p class="lede">No app to download and no account. A bottle opens for whoever holds its link, so send it to the person it is for.</p>
@@ -205,7 +231,7 @@
       <p class="lede" id="sandLede"></p>
       <button type="button" class="btn" id="sandBack">Write back in the sand</button>
       <button type="button" class="btn ghost" id="sandBottle">Send a bottle</button>
-      <button type="button" class="link" id="sandHome">Back to your shore</button>
+      <button type="button" class="link" id="sandHome">Back to your beaches</button>
     </div>
   </section>
 
@@ -220,7 +246,7 @@
   <div id="plainPaper"><div id="plainWords"></div><div id="plainSign"></div></div>
   <p id="plainWhy">The beach could not load on this connection, so here is your note on its own. Reload the page to try again.</p>
 </div>
-<noscript><p style="color:#fff;padding:30px;font-family:sans-serif">This page needs JavaScript to show the shore.</p></noscript>
+<noscript><p style="color:#fff;padding:30px;font-family:sans-serif">This page needs JavaScript to show the beach.</p></noscript>
 <script>
 // Runs on its own, before and apart from everything else. Plain old JavaScript on purpose.
 (function () {
@@ -266,6 +292,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain("a file failed to load"); }, true);   // or a file failed outright
 })();
 </script>
-<script defer src="app.js?v=3d90960257"></script>
+<script defer src="app.js?v=3d30c336a0"></script>
 </body>
 </html>

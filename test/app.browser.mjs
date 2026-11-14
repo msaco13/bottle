@@ -67,6 +67,8 @@ async function phone({ reach, sent = 0, addOk = true, seed, ios = false, picOk =
 }
 
 const KEY = 'abcdefghijklmnopqrstuv', now = Date.now();
+/** Tap the first name on the list, then "Write to ..." on the beach it leads to. */
+const writeTo = async (p) => { await p.page.click('#people .row'); await p.page.waitForTimeout(250); await p.page.click('#visitWrite'); };
 const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', s: now - 5000, t: now - 4000 }, { k: 'bbbbbbbbbbbbbbbbbbbbbb', w: 'Dad', s: now - 80000000, t: now - 90000000 }],
   'bottle-mine': ['m1', 'm2'],
   'bottle-notes': { [KEY]: [{ message: 'Game on Sunday?', name: 'Mike', mood: 'dusk', to: 'Jorge', id: 'm1', at: now - 9000 }, { message: 'I am in.', name: 'Jorge', mood: 'night', to: 'Mike', id: 'j1', at: now - 5000 }],
@@ -108,8 +110,12 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('everyone is listed, newest first, and a lit lantern is shown', rows.length === 2 && rows[0].startsWith('Jorge') && rows[0].includes('2 bottles') && rows[0].includes('notifications on'), rows.join(' / '));
   await p.shot('2-home');
   await p.page.click('#people .row');
+  await p.page.waitForTimeout(400);
+  check('tapping a name leads to the beach the two share', await p.shown('visit') && !(await p.shown('home')) && (await p.text('visitWho')) === 'The beach you share with Jorge' && (await p.text('visitWrite')) === 'Write to Jorge', await p.text('visitWho'));
+  await p.shot('2-beach');
+  await p.page.click('#visitWrite');
   await p.page.waitForTimeout(500);
-  check('tapping a name opens a bottle for them', (await p.text('deskTitle')) === 'A bottle for Jorge' && (await p.text('make')) === 'Send to Jorge', await p.text('deskLede'));
+  check('and from there, one tap opens a bottle for them', (await p.text('deskTitle')) === 'A bottle for Jorge' && (await p.text('make')) === 'Send to Jorge', await p.text('deskLede'));
   check('no number is asked for when the lantern is lit', !(await p.shown('mobileRow')) && !(await p.shown('mobileAsk')) && !(await p.shown('forRow')));
   await p.page.fill('#msg', 'See you at nine.');
   await p.shot('2-desk-direct');
@@ -129,7 +135,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
 {
   const p = await phone({ seed: jorge, reach: { others: 1, lit: 1 }, sent: 0 });
   await p.page.waitForTimeout(700);
-  await p.page.click('#people .row'); await p.page.waitForTimeout(400);
+  await writeTo(p); await p.page.waitForTimeout(400);
   await p.page.fill('#msg', 'Are you there?'); await p.page.click('#make'); await p.page.waitForTimeout(1200);
   check('lantern silent: the page says so and offers the link', (await p.text('madeTitle')) === 'Your bottle is ready' && (await p.text('madeLede')).includes('phone could not be told this time') && await p.shown('link'), await p.text('madeLede'));
   await p.shot('3-made-silent');
@@ -139,7 +145,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
 {
   const p = await phone({ seed: jorge, reach: { others: 1, lit: 1 }, addOk: false });
   await p.page.waitForTimeout(700);
-  await p.page.click('#people .row'); await p.page.waitForTimeout(400);
+  await writeTo(p); await p.page.waitForTimeout(400);
   await p.page.fill('#msg', 'Still here.'); await p.page.click('#make'); await p.page.waitForTimeout(1200);
   check('server down: text the link', (await p.text('madeLede')).startsWith('The server could not be reached, so text Jorge the link') && await p.shown('link'));
   await p.ctx.close();
@@ -151,12 +157,12 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   const rows = await p.page.evaluate(() => [...document.querySelectorAll('#people .row')].map((r) => r.textContent));
   check('untaught server: the shore still lists everyone', rows.length === 2 && !rows[0].includes('notifications on'), rows.join(' / '));
   check('untaught server: asked once, then left alone', p.calls.filter((c) => c === 'bottle_reach').length === 1, String(p.calls.filter((c) => c === 'bottle_reach').length));
-  await p.page.click('#people .row'); await p.page.waitForTimeout(400);
+  await writeTo(p); await p.page.waitForTimeout(400);
   check('untaught server: a link is made as before', (await p.text('make')) === 'Seal it and send');
   await p.page.fill('#msg', 'Old way.'); await p.page.click('#make'); await p.page.waitForTimeout(1200);
   check('and when the lantern answers, it says no text is needed', (await p.text('madeTitle')) === 'Sent to Jorge' && (await p.text('madeLede')).includes('has already been told. No need to text this one.'), await p.text('madeLede'));
   await p.page.click('#again'); await p.page.waitForTimeout(400);
-  await p.page.click('#people .row'); await p.page.waitForTimeout(300);
+  await writeTo(p); await p.page.waitForTimeout(300);
   check('next time it goes straight there', (await p.text('make')) === 'Send to Jorge');
   await p.ctx.close();
 }
@@ -295,7 +301,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   };
   let got = await read({ message: 'ha', name: '', mood: 'night', to: 'Mike', key: KEY });
   check('an unsigned note says whose conversation it came from', got[0] === 'Not signed. From your bottles with Jorge.' && got[1] === 'Write back to Jorge', got.join(' | '));
-  check('and a phone with people is offered the way back to its shore', got[2] === 'Back to your shore');
+  check('and a phone with people is offered the way back to its shore', got[2] === 'Back to your beaches');
   got = await read({ message: 'my own, unsigned', name: '', mood: 'dusk', to: 'Jorge', key: KEY });
   check('this phone\u2019s own unsigned note is not put down to the other person', got[0] === '' && got[1] === 'Send another to Jorge', got.join(' | '));
   got = await read({ message: 'signed', name: 'Jorge', mood: 'dusk', to: 'Mike', key: KEY });
@@ -481,7 +487,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   shelf.clear();
   const p = await phone({ seed: jorge, sent: 1 });
   await p.page.waitForTimeout(700);
-  await p.page.click('#people .row'); await p.page.waitForTimeout(300);
+  await writeTo(p); await p.page.waitForTimeout(300);
   check('the desk offers the sand', await p.shown('sandAdd') && (await p.text('sandAdd')) === 'Write in the sand');
   await p.page.click('#sandAdd'); await p.page.waitForTimeout(300);
   check('the wet sand opens to write on', await p.page.evaluate(() => document.getElementById('sand').className === 'show pad') && await p.shown('sandDone') && (await p.text('sandSay')).startsWith('Write or draw with a finger.'));
@@ -534,7 +540,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   // nothing written
   const e = await phone({ seed: jorge });
   await e.page.waitForTimeout(600);
-  await e.page.click('#people .row'); await e.page.waitForTimeout(300);
+  await writeTo(e); await e.page.waitForTimeout(300);
   await e.page.click('#sandAdd'); await e.page.waitForTimeout(200);
   await e.page.click('#sandDone'); await e.page.waitForTimeout(200);
   check('nothing written leaves the desk as it was', !(await e.page.evaluate(() => document.getElementById('desk').classList.contains('sand'))) && await e.shown('msg'));
@@ -558,7 +564,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   const d = await phone({});
   check('someone new is shown the three steps: write, text it, they write back', await d.shown('steps') && (await d.text('steps')).replace(/\s+/g, ' ').trim() === '1Write a note 2Text it in one tap 3They write back', (await d.text('steps')).replace(/\s+/g, ' '));
   await d.page.click('#howDesk'); await d.page.waitForTimeout(200);
-  check('"How Bottle works" opens five plain lines', await d.shown('howcard') && (await d.page.evaluate(() => document.querySelectorAll('#howcard li').length)) === 5 && (await d.text('howcard')).includes('Nothing to copy or paste.'));
+  check('"How Bottle works" opens six plain lines', await d.shown('howcard') && (await d.page.evaluate(() => document.querySelectorAll('#howcard li').length)) === 6 && (await d.text('howcard')).includes('Nothing to copy or paste.'));
   await d.shot('14-how');
   await d.page.click('#howClose'); await d.page.waitForTimeout(200);
   check('and is put away with one tap', !(await d.shown('howcard')));
@@ -579,7 +585,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   await a.page.click('#make'); await a.page.waitForTimeout(1200);
   const shared = await a.page.evaluate(() => window.__shared);
   check('one tap opens the share sheet with the words and the link', shared.length === 1 && shared[0].text === 'Mike, a bottle washed up for you. Open it, then write back:' && /#1\./.test(shared[0].url), JSON.stringify(shared).slice(0, 120));
-  check('once it is handed over the screen turns to what happens next', (await a.text('madeTitle')) === 'Off it goes' && (await a.text('madeLede')).startsWith('When Mike taps it, your bottle washes up on their beach.') && (await a.text('madeNext')) === 'When Mike writes back, it shows up here.', (await a.text('madeTitle')) + ' | ' + (await a.text('madeLede')));
+  check('once it is handed over the screen turns to what happens next', (await a.text('madeTitle')) === 'Off it goes' && (await a.text('madeLede')).match(/^When Mike taps it, your bottle washes up on [A-Z][a-z]+ [A-Z][a-z]+, the beach you share\./) && (await a.text('madeNext')) === 'When Mike writes back, it shows up here.', (await a.text('madeTitle')) + ' | ' + (await a.text('madeLede')));
   check('no bare link is shown, and it can be sent again', !(await a.shown('link')) && (await a.text('share')) === 'Send it again' && (await a.text('copy')) === 'Copy the link');
   await a.shot('14-made-passed');
   check('no errors', !a.errs.length, a.errs.join(' ; '));
@@ -620,6 +626,86 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('one tap takes the offer, and it is not made twice', (await m.page.evaluate(() => window.__prompted)) === 1 && !(await m.shown('keepA')));
   check('no errors', !m.errs.length, m.errs.join(' ; '));
   await m.ctx.close();
+}
+// 15. the beach two people share: its name, whose it is, a shell to tap for every bottle, and something small tucked in
+{
+  const { decode } = await import('../js/code.js');
+  const { placeName } = await import('../js/keeps.js');
+  const PLACE = placeName(KEY);
+  const run = (p, secs) => p.page.evaluate((n) => { window.dev.hold = false; window.dev.run(n); window.dev.hold = true; }, secs);
+  const p = await phone({ seed: jorge, sent: 1, reach: { others: 1, lit: 1 } });
+  await p.page.waitForTimeout(800);
+  check('the list is "Your beaches", and each row names the beach', (await p.page.evaluate(() => document.querySelector('#home h1').textContent)) === 'Your beaches' && (await p.page.evaluate(() => document.querySelector('#people .row').textContent)).includes(PLACE + ' \u00b7 2 bottles'), await p.page.evaluate(() => document.querySelector('#people .row').textContent));
+  check('the word "shore" is gone from the list', !(await p.text('home')).toLowerCase().includes('shore'));
+  check('"Read last" is gone from the list: bottles are read again on the beach', !(await p.page.evaluate(() => [...document.querySelectorAll('#people .peek')].some((b) => b.textContent === 'Read last'))));
+  await p.page.click('#people .row');
+  await run(p, 5); await p.page.waitForTimeout(400);
+  check('a beach has a name of its own, and says whose it is and what it keeps', (await p.text('visitName')) === PLACE && (await p.text('visitWho')) === 'The beach you share with Jorge' && (await p.text('visitSay')) === '2 bottles between you so far. Each one left a shell and lit a star. Tap a shell to read it again.', (await p.text('visitName')) + ' | ' + (await p.text('visitSay')));
+  const marks = await p.page.evaluate(() => [...document.querySelectorAll('.mark')].map((m) => { const r = m.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, seen: m.style.opacity, label: m.getAttribute('aria-label') }; }));
+  check('every bottle is a shell with a ring to tap, on the sand, above the buttons', marks.length === 2 && marks.every((m) => m.seen === '1' && m.x > 20 && m.x < 370 && m.y > 844 * 0.55 && m.y < 844 * 0.84) && marks[0].label.startsWith('Bottle 1, from you') && marks[1].label.startsWith('Bottle 2, from Jorge'), JSON.stringify(marks));
+  check('with its shells and its stars, seen from a step further back', await p.page.evaluate(() => { const s = window.dev.scene; return s.keeps.shells.length === 2 && s.keeps.stars.length === 2 && s.keeps.shells.every((x) => x.a === 1) && s.cam.fov > 1.3; }));
+  await p.shot('15-beach');
+  await p.page.click('#visitLamp'); await p.page.waitForTimeout(900);
+  check('a lantern can be lit from the beach', (await p.text('visitSay')) === 'Lantern lit. Jorge\u2019s phone has been told.' && p.calls.includes('notify:bottle:l') && (await p.text('visitLamp')) === 'Lit', await p.text('visitSay'));
+  await p.page.click('.mark:nth-child(2)');
+  await p.page.waitForFunction(() => window.dev && window.__bottleReady && /[?&]re\b/.test(location.search), null, { timeout: 30000 });
+  await p.page.evaluate(() => { window.dev.hold = true; }); await p.page.waitForTimeout(1500);
+  check('a tap on a shell picks that bottle up again, straight to its note', (await p.text('words')) === 'I am in.' && (await p.page.evaluate(() => window.dev.story.state === 'reading' && document.getElementById('letter').classList.contains('show'))));
+  check('and the way back names the beach', (await p.text('fresh')) === 'Back to ' + PLACE, await p.text('fresh'));
+  await p.page.touchscreen.tap(20, 20); await p.page.waitForTimeout(1200);
+  check('the line under the note says which beach it is on, and whose', (await p.text('keepNote')).startsWith(PLACE + ', the beach you share with Jorge: 2 shells'), await p.text('keepNote'));
+  await p.page.waitForFunction(() => getComputedStyle(document.getElementById('after')).opacity === '1', null, { timeout: 30000 });
+  await p.page.click('#fresh');
+  await p.page.waitForFunction(() => window.dev && window.__bottleReady && document.getElementById('visit').classList.contains('show') && !location.hash, null, { timeout: 30000 });
+  await p.page.evaluate(() => { window.dev.hold = true; }); await p.page.waitForTimeout(300);
+  check('the way back leads to the same beach', (await p.text('visitName')) === PLACE && !(await p.page.evaluate(() => /[?&]re\b/.test(location.search))) && !(await p.shown('home')));
+  await p.page.click('#visitBack'); await p.page.waitForTimeout(300);
+  check('and from the beach, back to the list', await p.shown('home') && !(await p.shown('visit')) && (await p.page.evaluate(() => window.dev.scene.keeps === null)));
+  check('no errors', !p.errs.length, p.errs.join(' ; '));
+  await p.ctx.close();
+  // something tucked in
+  const t = await phone({});
+  check('the desk offers to tuck something in', await t.shown('tuckAdd') && (await t.text('tuckAdd')) === 'Tuck something in' && !(await t.shown('tuckPick')));
+  await t.page.click('#tuckAdd'); await t.page.waitForTimeout(150);
+  check('six small things to choose from', (await t.page.evaluate(() => document.querySelectorAll('#tuckPick button svg').length)) === 6 && await t.shown('tuckPick'));
+  await t.page.click('#tuckPick [data-tuck=f]'); await t.page.waitForTimeout(150);
+  check('the one chosen is shown, and what becomes of it is said', (await t.text('tuckSay')) === 'A pressed flower is tucked in. It stays on the beach you share.' && await t.shown('tuckIcon') && !(await t.shown('tuckPick')) && !(await t.shown('tuckAdd')));
+  await t.page.click('#tuckDrop'); await t.page.waitForTimeout(100);
+  check('it can be taken out again', await t.shown('tuckAdd') && !(await t.shown('tuckIcon')));
+  await t.page.click('#tuckAdd'); await t.page.click('#tuckPick [data-tuck=f]');
+  await t.page.fill('#forWho', 'Ana'); await t.page.fill('#who', 'Mike'); await t.page.fill('#msg', 'Found this on the walk home.');
+  await t.shot('15-desk-tuck');
+  await t.page.click('#make'); await t.page.waitForTimeout(900);
+  const link = await t.page.evaluate(() => document.getElementById('link').value), b = decode(link.slice(link.indexOf('#')));
+  check('the link carries what was tucked in', b && b.tuck === 'f' && b.message === 'Found this on the walk home.');
+  check('and the phone keeps it with the note', (await t.page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('bottle-notes')))[0][0].tuck)) === 'f');
+  await t.page.click('#again'); await t.page.waitForTimeout(400);
+  await t.page.click('#people .row'); await run(t, 4); await t.page.waitForTimeout(300);
+  check('on the beach, what was tucked in stands by its shell', (await t.page.evaluate(() => document.querySelectorAll('.mark svg').length)) === 1 && (await t.page.evaluate(() => document.querySelector('.mark').getAttribute('aria-label'))).includes('with a pressed flower'), await t.page.evaluate(() => document.querySelector('.mark').getAttribute('aria-label')));
+  check('a beach with one bottle says so', (await t.text('visitSay')).startsWith('1 bottle between you so far.') && (await t.text('visitWho')) === 'The beach you share with Ana');
+  await t.ctx.close();
+  // the other phone
+  const o = await phone({ at: link.replace('http://localhost:8899/', '').replace('#', '?dev#') });
+  await o.page.touchscreen.tap(20, 20);
+  await o.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(1); window.dev.hold = true; });
+  await o.page.waitForFunction(() => getComputedStyle(document.getElementById('after')).opacity === '1', null, { timeout: 30000 });
+  await o.page.waitForTimeout(600);
+  check('at the other end it lies on the paper, and the page says who tucked it in', await o.shown('tuckArt') && (await o.page.evaluate(() => !!document.querySelector('#tuckArt svg'))) && (await o.text('tuckNote')) === 'Mike tucked in a pressed flower.', await o.text('tuckNote'));
+  const place = placeName(b.key);
+  check('a first bottle says which beach it washed up on, and whose', (await o.text('keepNote')) === `This is ${place}, the beach you share with Mike. Every bottle between you leaves a shell here and lights a star.`, await o.text('keepNote'));
+  check('and offers a walk on it', await o.shown('toBeach') && (await o.text('toBeach')) === 'Visit ' + place);
+  await o.shot('15-letter-tuck');
+  await o.page.click('#toBeach');
+  await o.page.waitForFunction(() => window.dev && window.__bottleReady && document.getElementById('visit').classList.contains('show'), null, { timeout: 30000 });
+  check('the walk leads to that beach', (await o.text('visitName')) === place && (await o.text('visitWho')) === 'The beach you share with Mike');
+  check('no errors', !o.errs.length && !t.errs.length, [...o.errs, ...t.errs].join(' ; '));
+  await o.ctx.close();
+  // a bottle without one is as it always was
+  const n = await phone({ seed: jorge, at: (await import('../js/code.js')).linkFor('http://localhost:8899/', { message: 'I am in.', name: 'Jorge', mood: 'night', to: 'Mike', key: KEY }).replace('http://localhost:8899/', '').replace('#', '?dev#') });
+  await n.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(1); window.dev.hold = true; });
+  await n.page.waitForTimeout(800);
+  check('a bottle with nothing tucked in shows nothing extra', !(await n.shown('tuck')));
+  await n.ctx.close();
 }
 await browser.close();
 const bad = results.filter((r) => !r[0]);

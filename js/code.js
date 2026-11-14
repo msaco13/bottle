@@ -17,6 +17,8 @@
 //              "i": the invitation, where a bottle is added.   "o": the beach itself, for the person it is for.
 //              message is what it is for ("Happy 40th"; may be empty), name is who started it, to is who it is for.
 //              "s": not a bottle at all, but something written in the sand (see sand.js). pic is the secret of what was written.
+//   [message, name, mood, to, key, claim, pic, g, tuck]  added later still, optional:
+//        tuck  one letter: something small tucked in with the note (a pressed flower, a feather...). See TUCKS.
 // Plain base64 on purpose (no compression): it opens on every phone, old or new.
 //
 // PROMISE: every link ever made must keep opening. New things may only be added
@@ -27,9 +29,12 @@ export const MAX_MESSAGE = 600;
 export const MAX_NAME = 40;
 export const MOODS = { dusk: '', night: 'n', dawn: 'a' };
 const MOOD_OF = { n: 'night', a: 'dawn' };
+/** What can be tucked into a bottle with the note: one letter in the link, and the words for it. The drawings are in main.js. */
+export const TUCKS = { f: 'a pressed flower', c: 'a four-leaf clover', q: 'a feather', k: 'a small key', h: 'a heart-shaped stone', t: 'a ticket' };
+const isTuck = (x) => typeof x === 'string' && Object.prototype.hasOwnProperty.call(TUCKS, x);
 
 /** bottle: { message, name, mood, to, key, claim, pic } */
-export function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '', g = '') {
+export function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '', g = '', tuck = '') {
   const list = [
     String(message).slice(0, MAX_MESSAGE),
     String(name || '').trim().slice(0, MAX_NAME),
@@ -39,6 +44,7 @@ export function encode(message, name = '', mood = 'dusk', to = '', key = '', cla
     /^[A-Za-z0-9_-]{8,32}$/.test(claim || '') ? claim : '',
     /^[A-Za-z0-9_-]{22}$/.test(pic || '') ? pic : '',
     g === 'i' || g === 'o' || g === 's' ? g : '',
+    isTuck(tuck) && !g ? tuck : '',                    // only a bottle carries one: not an invitation, a beach from everyone, or the sand
   ];
   while (list.length > 1 && list[list.length - 1] === '') list.pop();   // old-style links stay exactly as they were
   const bytes = new TextEncoder().encode(JSON.stringify(list));
@@ -73,6 +79,7 @@ export function decode(hash) {
       claim: /^[A-Za-z0-9_-]{8,32}$/.test(str(v[5])) ? v[5] : '',
       ...(pic ? { pic } : {}),          // only there when the bottle carries one: every older link reads exactly as it always did
       ...(g ? { g } : {}),
+      ...(!g && isTuck(v[8]) ? { tuck: v[8] } : {}),
     };
   } catch {
     return null;
@@ -80,5 +87,5 @@ export function decode(hash) {
 }
 
 export function linkFor(base, b) {
-  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic, b.g);
+  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic, b.g, b.tuck);
 }
