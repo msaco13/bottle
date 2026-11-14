@@ -17,13 +17,13 @@
 <title>A message in a bottle</title>
 <meta name="description" content="Something washed ashore for you.">
 <meta property="og:title" content="A message in a bottle">
-<meta property="og:description" content="Something washed ashore for you. Tap to find it.">
+<meta property="og:description" content="Something washed ashore for you. Tap to open it, then write back.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://msaco13.github.io/bottle/og.jpg">
 <meta property="og:url" content="https://msaco13.github.io/bottle/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.500' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=a9a041a17a">
+<link rel="stylesheet" href="css/style.css?v=3d90960257">
 </head>
 <body>
 <div id="stage">
@@ -44,12 +44,15 @@
       <div id="seal"></div>
     </div>
     <div id="after">
-      <button id="reply" class="btn">Send one back</button>
+      <button id="reply" class="btn">Write back</button>
+      <p id="replyHow"></p>
       <button id="fresh" class="link show">Write a bottle for someone else</button>
       <p id="sealNote"></p>
       <p id="keepNote"></p>
       <div id="shelf"></div>
       <div class="lantern" id="lanternA"></div>
+      <button class="link keep" type="button" id="keepA">Keep Bottle on your home screen</button>
+      <button class="link how" type="button">How Bottle works</button>
     </div>
   </section>
 
@@ -66,13 +69,19 @@
       <button class="link" type="button" id="gatherA">A beach full of bottles for someone, from everyone</button>
       <button class="link" type="button" id="editPeople">Rename or remove someone</button>
       <div class="lantern" id="lanternD"></div>
-      <button class="link" type="button" id="install">Put Bottle on your home screen</button>
+      <button class="link keep" type="button" id="install">Keep Bottle on your home screen</button>
+      <button class="link how" type="button">How Bottle works</button>
       <button class="link" type="button" id="homeBack">Back to the note</button>
     </div>
     <form id="desk" autocomplete="off">
-      <h1 id="deskTitle">Message in a bottle</h1>
+      <div id="deskHead"><h1 id="deskTitle">Message in a bottle</h1><button class="how" type="button" id="howDesk" aria-label="How Bottle works">?</button></div>
       <div id="toChip"></div>
-      <p class="lede" id="deskLede">Write a note. You get one link. Text it to someone, and when they tap it a bottle washes up on a beach with your words inside.</p>
+      <ol id="steps" aria-label="How it works">
+        <li><b>1</b><span>Write a note</span></li>
+        <li><b>2</b><span>Text it in one tap</span></li>
+        <li><b>3</b><span>They write back</span></li>
+      </ol>
+      <p class="lede" id="deskLede">Back and forth, as often as you both like. No app to download, no account.</p>
       <p class="lede" id="gatherSay" aria-live="polite"></p>
       <div id="names">
         <div id="forRow">
@@ -88,8 +97,9 @@
         <label for="occasion">What it is for <span>(optional)</span></label>
         <input id="occasion" type="text" maxlength="80" placeholder="Happy 40th">
       </div>
+      <button class="link" type="button" id="mobileAsk">Add their mobile number (optional)</button>
       <div id="mobileRow">
-        <label for="mobile">Their mobile <span>(optional: then one tap texts it)</span></label>
+        <label for="mobile">Their mobile <span>(then the text is already addressed)</span></label>
         <div id="mobileLine">
           <input id="mobile" type="tel" inputmode="tel" maxlength="24" placeholder="Their number" autocomplete="off">
           <button type="button" class="mood" id="pick">Contacts</button>
@@ -98,14 +108,16 @@
       <label for="msg">Your message</label>
       <textarea id="msg" rows="5" maxlength="600" placeholder="Write it here"></textarea>
       <div class="count"><span id="left">600</span> characters left</div>
+      <div id="extras">
       <div id="picRow">
         <input type="file" id="picFile" accept="image/*" hidden>
-        <button type="button" class="mood" id="picAdd">Add a picture or GIF</button>
+        <button type="button" class="mood" id="picAdd">Picture or GIF</button>
         <div id="picShow"><img id="picThumb" alt=""><span id="picSay" aria-live="polite"></span><button type="button" class="link" id="picDrop">Remove</button></div>
       </div>
       <div id="sandRow">
-        <button type="button" class="mood" id="sandAdd">Or write it in the sand</button>
+        <button type="button" class="mood" id="sandAdd">Write in the sand</button>
         <div id="sandShow"><canvas id="sandThumb" width="112" height="112"></canvas><span id="sandNote" aria-live="polite">Written in the sand. A wave takes it once they have seen it.</span><button type="button" class="link" id="sandDrop">Remove</button></div>
+      </div>
       </div>
       <label id="moodsLabel">The sky they will open it under</label>
       <div id="moods" role="group" aria-labelledby="moodsLabel">
@@ -113,20 +125,21 @@
         <button type="button" class="mood" data-mood="night">Night</button>
         <button type="button" class="mood" data-mood="dawn">Dawn</button>
       </div>
-      <button class="btn" type="submit" id="make">Create bottle</button>
+      <button class="btn" type="submit" id="make">Seal it and send</button>
       <div class="lantern" id="lanternC"></div>
       <button class="link" type="button" id="gatherB">Or fill a beach with bottles from everyone</button>
       <button class="link" type="button" id="toHome">Back to your shore</button>
     </form>
     <div id="made">
-      <h1 id="madeTitle">Your bottle is ready</h1>
-      <p class="lede" id="madeLede" aria-live="polite">Send this link to one person. The note travels inside the link itself.</p>
+      <h1 id="madeTitle">Last step: send it</h1>
+      <p class="lede" id="madeLede" aria-live="polite">Your note is inside the link, so one tap sends the whole bottle.</p>
       <div id="byLink">
-        <input id="link" type="text" readonly aria-label="The link to send">
         <a class="btn" id="text" href="#">Text it</a>
-        <button class="btn" id="share">Share the link</button>
+        <button class="btn" id="share">Send it</button>
+        <input id="link" type="text" readonly aria-label="The link to send">
         <button class="btn ghost" id="copy">Copy the link</button>
       </div>
+      <p class="lede" id="madeNext" aria-live="polite"></p>
       <button class="link" type="button" id="showLink">Text the link as well</button>
       <div id="sentList"></div>
       <div id="gatherBox">
@@ -142,6 +155,7 @@
       </div>
       <a class="btn ghost" id="try" href="#">See what they will see</a>
       <div class="lantern" id="lanternB"></div>
+      <button class="link keep" type="button" id="keepB">Keep Bottle on your home screen</button>
       <button class="link" id="again">Write another</button>
       <button class="link" id="backToNote">Back to the note</button>
     </div>
@@ -150,8 +164,8 @@
   <!-- iPhone: how to put the page on the Home Screen, so a bottle can announce itself -->
   <div id="homecard" role="dialog" aria-modal="true" aria-labelledby="homeTitle">
     <div class="card">
-      <h1 id="homeTitle">Notifications on your iPhone</h1>
-      <p class="lede">An iPhone only lets a web page notify you once it is on your Home Screen. Three taps:</p>
+      <h1 id="homeTitle">Keep Bottle on your iPhone</h1>
+      <p class="lede">Put it on your Home Screen. Your bottles come with you, and it can tell you when a new one arrives (an iPhone only allows that from the Home Screen). Three taps:</p>
       <ol>
         <li>Tap the <b>Share</b> button <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3m0 0L8 7m4-4 4 4"/><path d="M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1"/></svg> in the bar at the bottom of the screen.</li>
         <li>Scroll down, tap <b>Add to Home Screen</b>, then <b>Add</b>.</li>
@@ -159,6 +173,22 @@
       </ol>
       <p class="lede" id="homeState"></p>
       <button class="btn ghost" id="homeClose" type="button">Close</button>
+    </div>
+  </div>
+
+  <!-- how it works, in five lines. Opened from the desk, the shore, and under a note. -->
+  <div id="howcard" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+    <div class="card">
+      <h1 id="howTitle">How Bottle works</h1>
+      <ol>
+        <li><b>Write a note.</b> Up to 600 characters. Add a picture or a GIF if you like.</li>
+        <li><b>Send it in one tap.</b> Your messages open with the bottle already in place. Nothing to copy or paste.</li>
+        <li><b>They open it.</b> A bottle washes up on a beach with your note inside.</li>
+        <li><b>They write back.</b> One button under your note, and their bottle comes back to you.</li>
+        <li><b>Skip the texting.</b> Once you both turn on notifications, bottles go straight from phone to phone.</li>
+      </ol>
+      <p class="lede">No app to download and no account. A bottle opens for whoever holds its link, so send it to the person it is for.</p>
+      <button class="btn" id="howClose" type="button">Got it</button>
     </div>
   </div>
 
@@ -236,6 +266,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain("a file failed to load"); }, true);   // or a file failed outright
 })();
 </script>
-<script defer src="app.js?v=a9a041a17a"></script>
+<script defer src="app.js?v=3d90960257"></script>
 </body>
 </html>

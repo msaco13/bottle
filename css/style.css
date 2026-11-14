@@ -110,6 +110,15 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 /* a message written in the sand has no typed words and no picture */
 #desk.sand #msg, #desk.sand .count, #desk.sand #picRow, #desk.sand label[for=msg] { display: none; }
 /* on the desk: choosing one, and the small copy that shows it is tucked in */
+/* a picture and the sand sit side by side until one of them is used, then it takes the whole line */
+#extras { display: flex; flex-wrap: wrap; gap: 8px; }
+#extras > div { flex: 1 1 0; min-width: 0; }
+#extras > div.has { flex-basis: 100%; }
+#extras .mood { width: 100%; font-size: 14px; }
+#deskHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+/* "how does this work?": a small round question mark beside the title */
+#howDesk { flex: none; appearance: none; width: 30px; height: 30px; margin-top: 1px; border-radius: 50%; border: 1px solid rgba(255, 201, 138, 0.55); background: rgba(255, 201, 138, 0.12); color: var(--gold); font: inherit; font-size: 16px; font-weight: 700; line-height: 1; cursor: pointer; }
+#mobileAsk { align-self: flex-start; padding: 2px 0 4px; font-size: 14px; text-shadow: none; display: none; }
 #picRow { display: flex; flex-direction: column; gap: 8px; }
 #picAdd { flex: none; padding: 11px 14px; }
 #picShow { display: none; align-items: center; gap: 10px; }
@@ -147,20 +156,28 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 .chip.new { box-shadow: 0 0 0 2px rgba(255, 201, 138, 0.55); }
 #after.show { opacity: 1; }
 #newest { margin-bottom: 8px; }
-#sealNote, #keepNote, .lanternSay { margin: 8px 0 0; max-width: 30em; font-size: 14px; line-height: 1.4; color: var(--dim); text-align: center; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7); }
-#sealNote:empty, #keepNote:empty { display: none; }
+#sealNote, #keepNote, #replyHow, .lanternSay { margin: 8px 0 0; max-width: 30em; font-size: 14px; line-height: 1.4; color: var(--dim); text-align: center; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7); }
+#sealNote:empty, #keepNote:empty, #replyHow:empty, #madeNext:empty { display: none; }
+/* how the reply gets there: said right under the button, a little brighter than the lines further down */
+#replyHow { margin: 6px 0 4px; font-size: 15px; color: var(--ink); }
+/* the button that answers a note draws the eye once the words are down */
+#after.show .btn.call { animation: call 2.6s ease-in-out 1.2s 3; }
+@keyframes call { 50% { box-shadow: 0 10px 26px rgba(255, 170, 90, 0.28), 0 0 0 9px rgba(255, 201, 138, 0.22); transform: scale(1.025); } }
+@media (prefers-reduced-motion: reduce) { #after.show .btn.call { animation: none; } }
 /* The lantern: one line and one button, wherever it is offered */
 .lantern { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .lantern:empty { display: none; }
 #desk .lantern, #made .lantern { margin-top: 2px; }
 #desk .lanternSay, #made .lanternSay { text-shadow: none; }
 /* iPhone: the Home Screen steps */
-#homecard { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; padding: 20px 5%; background: rgba(10, 8, 20, 0.74); }
-#homecard.show { display: flex; }
-#homecard .card { width: min(100%, 420px); max-height: 100%; overflow-y: auto; padding: 24px 22px 20px; border-radius: 24px; background: #241c33; border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; gap: 10px; }
-#homecard ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; font-size: 16px; line-height: 1.4; }
+#homecard, #howcard { position: absolute; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center; padding: 20px 5%; background: rgba(10, 8, 20, 0.74); }
+#homecard.show, #howcard.show { display: flex; }
+#homecard .card, #howcard .card { width: min(100%, 420px); max-height: 100%; overflow-y: auto; padding: 24px 22px 20px; border-radius: 24px; background: #241c33; border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; gap: 10px; }
+#homecard ol, #howcard ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; font-size: 16px; line-height: 1.4; }
 #homecard svg { width: 20px; height: 20px; vertical-align: -4px; color: var(--gold); }
 #homeState { color: var(--gold); min-height: 1.4em; }
+#howcard ol b { color: var(--gold); font-weight: 600; }
+#howcard .lede { margin-top: 4px; }
 
 /* The safety net: the note on its own, when the beach cannot load */
 #plain { position: fixed; inset: 0; z-index: 9; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 24px 6%; background: linear-gradient(180deg, #1b1740, #5b3052 60%, #2b2330); }
@@ -188,7 +205,17 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 .person .row { flex: 1; min-width: 0; }
 .peek { flex: none; appearance: none; font: inherit; font-size: 13.5px; color: var(--dim); background: rgba(255, 240, 220, 0.05); border: 1px solid var(--line); border-radius: 14px; padding: 0 12px; cursor: pointer; }
 .rowWho { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-#install, #homeBack, #toHome, #text, #several, #editPeople, #gatherB { display: none; }
+#install, #homeBack, #toHome, #text, #several, #editPeople, #gatherB, .keep { display: none; }
+/* the three steps, for someone who has never sent one: write, text it, they write back */
+#steps { display: none; list-style: none; margin: 2px 0 2px; padding: 0; gap: 6px; }
+#desk.first #steps { display: flex; }
+#steps li { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 4px 9px; border-radius: 14px; background: rgba(255, 240, 220, 0.07); border: 1px solid var(--line); text-align: center; font-size: 13.5px; line-height: 1.25; color: var(--ink); position: relative; }
+#steps b { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #2b1a0c; background: linear-gradient(180deg, #ffe0b4, #ffc07a); }
+#steps li + li::before { content: ""; position: absolute; left: -7px; top: 21px; width: 8px; height: 1px; background: rgba(255, 201, 138, 0.6); }
+/* the last step: where the phone can send it in one tap, the bare link stays out of sight */
+#made.sheet #link { display: none; }
+#madeNext { color: var(--gold); margin: 2px 0 0; }
+#made.gather #madeNext, #made.many #madeNext { display: none; }
 /* a beach many people fill: what it is for, on the desk; its two links, once it is started; the ones this phone started, on the shore */
 #occasionRow { display: none; flex-direction: column; gap: 8px; }
 #desk.gather #occasionRow { display: flex; }
@@ -222,8 +249,9 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 #mobileLine { display: flex; gap: 8px; }
 #mobileLine input { flex: 1; min-width: 0; }
 #mobileLine .mood { flex: none; padding: 0 14px; }
-#mobileRow { display: flex; flex-direction: column; gap: 8px; }
+#mobileRow { display: none; flex-direction: column; gap: 8px; }
 h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+@media (max-width: 380px) { h1 { font-size: 24px; } }
 .lede { margin: 0 0 6px; font-size: 15.5px; line-height: 1.45; color: var(--dim); }
 label { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); margin-top: 6px; }
 label span { text-transform: none; letter-spacing: 0; color: var(--dim); }
@@ -242,7 +270,7 @@ textarea:focus, input[type=text]:focus, input[type=tel]:focus { border-color: va
 .btn:active { transform: scale(0.985); }
 /* The button that makes the bottle never leaves the screen, however short the phone or however long the page */
 #make { position: sticky; bottom: 10px; z-index: 2; box-shadow: 0 10px 26px rgba(255, 170, 90, 0.28), 0 0 0 7px rgba(34, 24, 42, 0.6); }
-@media (max-height: 700px) { #deskLede { display: none; } #desk { padding-top: 18px; gap: 8px; } }
+@media (max-height: 700px) { #desk.first #deskLede, #desk.gather #deskLede { display: none; } #desk { padding-top: 18px; gap: 8px; } }
 @media (max-height: 600px) { textarea { min-height: 96px; } }
 #names { display: flex; gap: 10px; }
 #names > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
