@@ -19,3 +19,13 @@ begin
   d := replace(d, '''pic'', ''pick'', ''install'') group by', '''pic'', ''pick'', ''install'', ''lamp'', ''gather'', ''sand'') group by');
   execute d;
 end $$;
+
+-- 2026-11-14: "How Bottle works", a beach visited, something tucked in, a bottle sealed until a time, and one cast out to sea are listed too.
+do $$
+declare d text;
+begin
+  select pg_get_functiondef(p.oid) into d from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = 'event_stats';
+  if d is null or position('''lamp'', ''gather'', ''sand'') group by' in d) = 0 then raise exception 'event_stats is not as expected'; end if;
+  d := replace(d, '''lamp'', ''gather'', ''sand'') group by', '''lamp'', ''gather'', ''sand'', ''how'', ''visit'', ''tuck'', ''later'', ''cast'') group by');
+  execute d;
+end $$;
