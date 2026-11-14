@@ -39,6 +39,8 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 [data-mood=dawn] #skip { color: #35233c; }
 #hint.big { font-size: clamp(24px, 7vmin, 34px); font-weight: 300; background: none; border-color: transparent; box-shadow: none; bottom: 46%; text-shadow: 0 2px 24px rgba(0, 0, 0, 0.75); animation: breathe 3.2s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: 0.62; } }
+/* said while a bottle is cast out: lower down, so it does not sit on the bottle going */
+#hint.big.low { bottom: 20%; }
 
 /* A ghost finger that shows the move when someone hesitates */
 #finger {
@@ -165,6 +167,42 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 #tuckArt { flex: none; width: 60px; height: 60px; transform: rotate(-7deg); filter: drop-shadow(0 2px 3px rgba(60, 40, 20, 0.35)); }
 #tuckArt svg, #tuckIcon svg, #tuckPick svg, .mark svg { display: block; width: 100%; height: 100%; }
 #tuckNote { font-family: var(--font); font-size: 13.5px; line-height: 1.35; color: rgba(58, 38, 22, 0.72); }
+/* tucking something in and sealing it until later sit side by side until one of them is opened, then it takes the whole line */
+#extras2 { display: flex; flex-wrap: wrap; gap: 8px; }
+#extras2 > div { flex: 1 1 0; min-width: 0; }
+#extras2 > div.has, #extras2 > div.pick { flex-basis: 100%; }
+/* sealed until a time: a few quick choices, or a day and time */
+#whenRow { display: flex; flex-direction: column; gap: 8px; }
+#whenAdd { flex: none; width: 100%; padding: 11px 14px; font-size: 14px; }
+#whenPick { display: none; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 240, 220, 0.06); }
+#whenRow.pick #whenPick { display: flex; }
+#whenRow.pick #whenAdd, #whenRow.has #whenAdd { display: none; }
+#whenQuick { display: flex; gap: 6px; }
+#whenQuick .mood { font-size: 13.5px; padding: 10px 4px; }
+#whenPick label { margin-top: 2px; }
+#whenWarn { font-size: 14px; color: var(--gold); }
+#whenWarn:empty { display: none; }
+#whenNo { align-self: flex-start; padding: 2px 0; font-size: 14px; text-shadow: none; }
+#whenShow { display: none; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; border: 1px solid rgba(255, 201, 138, 0.45); background: rgba(255, 201, 138, 0.10); }
+#whenRow.has #whenShow { display: flex; }
+#whenSay { flex: 1; min-width: 0; font-size: 14px; line-height: 1.35; color: var(--ink); }
+#whenDrop { padding: 6px 4px; text-shadow: none; }
+#desk.sand #whenRow, #desk.sand #extras2 { display: none; }
+/* a bottle for no one: only the words and a sky */
+#desk.cast #names, #desk.cast #extras, #desk.cast #extras2, #desk.cast #steps { display: none; }
+#made.cast #byLink, #made.cast #try, #made.cast #backToNote { display: none; }
+/* a sealed bottle opened before its time: it rides out at sea, and the page says when it washes up */
+#wait { position: absolute; inset: 0; z-index: 3; display: none; }
+#wait.show { display: block; }
+#waitHead { position: absolute; left: 0; right: 0; top: 0; padding: calc(var(--top) + 26px) 7% 0; text-align: center; text-shadow: 0 2px 16px rgba(0, 0, 0, 0.85), 0 0 2px rgba(0, 0, 0, 0.5); }
+#waitTitle { font-size: clamp(28px, 8vmin, 36px); font-weight: 300; }
+#waitWho { margin: 8px 0 0; font-size: 16px; color: var(--ink); }
+#waitWhen { margin: 6px 0 0; font-size: 18px; line-height: 1.35; color: var(--gold); }
+#waitLeft { margin: 6px 0 0; font-size: 14.5px; color: var(--ink); opacity: 0.85; }
+[data-mood=dawn] #waitHead { color: #35233c; text-shadow: 0 1px 14px rgba(255, 250, 240, 0.9); }
+[data-mood=dawn] #waitWho, [data-mood=dawn] #waitLeft { color: #35233c; }
+[data-mood=dawn] #waitWhen { color: #6b3a1c; }
+#waitFoot { position: absolute; left: 6%; right: 6%; bottom: var(--bottom); display: flex; flex-direction: column; align-items: center; gap: 4px; }
 /* on the desk: choosing what to tuck in */
 #tuckRow { display: flex; flex-direction: column; gap: 8px; }
 #tuckAdd { flex: none; width: 100%; padding: 11px 14px; font-size: 14px; }
@@ -248,7 +286,7 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 .person .row { flex: 1; min-width: 0; }
 .peek { flex: none; appearance: none; font: inherit; font-size: 13.5px; color: var(--dim); background: rgba(255, 240, 220, 0.05); border: 1px solid var(--line); border-radius: 14px; padding: 0 12px; cursor: pointer; }
 .rowWho { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-#install, #homeBack, #toHome, #text, #several, #editPeople, #gatherB, .keep { display: none; }
+#install, #homeBack, #toHome, #text, #several, #editPeople, #gatherB, #castB, .keep { display: none; }
 /* the three steps, for someone who has never sent one: write, text it, they write back */
 #steps { display: none; list-style: none; margin: 2px 0 2px; padding: 0; gap: 6px; }
 #desk.first #steps { display: flex; }
@@ -298,12 +336,12 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
 .lede { margin: 0 0 6px; font-size: 15.5px; line-height: 1.45; color: var(--dim); }
 label { font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); margin-top: 6px; }
 label span { text-transform: none; letter-spacing: 0; color: var(--dim); }
-textarea, input[type=text], input[type=tel] {
+textarea, input[type=text], input[type=tel], input[type=datetime-local] {
   width: 100%; border-radius: 14px; border: 1px solid var(--line); background: rgba(255, 245, 230, 0.94); color: #2e1f12;
   padding: 13px 14px; font: inherit; font-size: 17px; line-height: 1.4; -webkit-user-select: text; user-select: text; outline: none;
 }
 textarea { font-family: var(--hand); font-size: 21px; resize: none; min-height: 132px; }
-textarea:focus, input[type=text]:focus, input[type=tel]:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255, 201, 138, 0.25); }
+textarea:focus, input[type=text]:focus, input[type=tel]:focus, input[type=datetime-local]:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255, 201, 138, 0.25); }
 #link { font-size: 16px; color: #4a3a2a; }   /* 16px or more: an iPhone zooms the whole page when a smaller field is tapped */
 .count { font-size: 12.5px; color: var(--dim); text-align: right; margin-top: -4px; }
 .btn {

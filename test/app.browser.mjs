@@ -646,7 +646,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('with its shells and its stars, seen from a step further back', await p.page.evaluate(() => { const s = window.dev.scene; return s.keeps.shells.length === 2 && s.keeps.stars.length === 2 && s.keeps.shells.every((x) => x.a === 1) && s.cam.fov > 1.3; }));
   await p.shot('15-beach');
   await p.page.click('#visitLamp'); await p.page.waitForTimeout(900);
-  check('a lantern can be lit from the beach', (await p.text('visitSay')) === 'Lantern lit. Jorge\u2019s phone has been told.' && p.calls.includes('notify:bottle:l') && (await p.text('visitLamp')) === 'Lit', await p.text('visitSay'));
+  check('a lantern can be lit from the beach', (await p.text('visitSay')) === 'Lantern lit. Jorge\u2019s phone has been told.' && p.calls.includes('notify:bottle:l') && (await p.text('visitLamp')) === 'Lantern lit', await p.text('visitSay'));
   await p.page.click('.mark:nth-child(2)');
   await p.page.waitForFunction(() => window.dev && window.__bottleReady && /[?&]re\b/.test(location.search), null, { timeout: 30000 });
   await p.page.evaluate(() => { window.dev.hold = true; }); await p.page.waitForTimeout(1500);
@@ -706,6 +706,114 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   await n.page.waitForTimeout(800);
   check('a bottle with nothing tucked in shows nothing extra', !(await n.shown('tuck')));
   await n.ctx.close();
+}
+// 16. a bottle sealed until a time: chosen on the desk, carried in the link, and shown out at sea until then
+{
+  const { decode, linkFor } = await import('../js/code.js');
+  const rel = (l, q = '?dev') => l.replace('http://localhost:8899/', '').replace('#', q + '#');
+  const run = (p, secs) => p.page.evaluate((n) => { window.dev.hold = false; window.dev.run(n); window.dev.hold = true; }, secs);
+  const p = await phone({ share: 'ok' });
+  check('the desk offers to seal it until later, beside tucking something in', await p.shown('whenAdd') && (await p.text('whenAdd')) === 'Seal it until later' && await p.page.evaluate(() => Math.abs(document.getElementById('tuckAdd').getBoundingClientRect().top - document.getElementById('whenAdd').getBoundingClientRect().top) < 2));
+  await p.page.click('#whenAdd'); await p.page.waitForTimeout(150);
+  const quick = await p.page.evaluate(() => [...document.querySelectorAll('#whenQuick button')].map((b) => b.textContent));
+  check('a few quick times, or a day and time of their own', quick[0] === 'In an hour' && quick[quick.length - 1] === 'Tomorrow at 8 am' && await p.shown('whenAt') && !(await p.shown('whenAdd')), quick.join(', '));
+  await p.page.evaluate(() => { const i = document.getElementById('whenAt'); i.value = '2020-01-01T08:00'; i.dispatchEvent(new Event('change', { bubbles: true })); });
+  check('a time already gone is refused', (await p.text('whenWarn')) === 'Choose a time that is still to come.' && await p.shown('whenAt'));
+  await p.page.click('#whenQuick button:last-child'); await p.page.waitForTimeout(150);
+  check('a quick time is taken, and the desk says what the other person will see', /^Sealed until .+\. Until then they see it out at sea\.$/.test(await p.text('whenSay')) && !(await p.shown('whenAt')), await p.text('whenSay'));
+  await p.page.click('#whenDrop'); await p.page.waitForTimeout(100);
+  check('and it can be unsealed again', await p.shown('whenAdd'));
+  const T = Math.round((Date.now() + 3 * 86400000) / 60000) * 60000;
+  await p.page.click('#whenAdd');
+  await p.page.evaluate((t) => { const d = new Date(t), pad = (n) => String(n).padStart(2, '0'), i = document.getElementById('whenAt'); i.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()); i.dispatchEvent(new Event('change', { bubbles: true })); }, T);
+  await p.page.fill('#forWho', 'Ana'); await p.page.fill('#who', 'Mike'); await p.page.fill('#msg', 'Happy birthday. Not a minute early.');
+  await p.shot('16-desk-sealed');
+  await p.page.click('#make'); await p.page.waitForTimeout(1200);
+  const link = await p.page.evaluate(() => document.getElementById('link').value), b = decode(link.slice(link.indexOf('#')));
+  check('the link carries the time, to the minute', b && b.when === T && b.message === 'Happy birthday. Not a minute early.', b && String(b.when - T));
+  check('the words that go with it say a bottle is on its way, not what it says', (await p.page.evaluate(() => window.__shared[0].text)) === 'Ana, a bottle is on its way to you. Tap to see when it washes up:');
+  check('the screen says how long it stays sealed', (await p.text('madeLede')).includes(' It stays sealed until '), await p.text('madeLede'));
+  check('and the phone keeps the time with the note', (await p.page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('bottle-notes')))[0][0].when)) === T);
+  const tryHref = await p.page.evaluate(() => document.getElementById('try').getAttribute('href'));
+  // the writer looks at what they will see: the bottle at sea, and a way to open their own
+  await p.page.goto(tryHref);
+  await p.page.waitForFunction(() => window.dev && window.__bottleReady && document.getElementById('wait').classList.contains('show'), null, { timeout: 30000 });
+  await p.page.evaluate(() => { window.dev.hold = true; });
+  check('"See what they will see" shows it out at sea, and lets the writer open their own', (await p.text('waitWho')) === 'This is what Ana will see until then.' && await p.shown('waitOpen'), await p.text('waitWho'));
+  await p.page.click('#waitOpen');
+  await p.page.waitForFunction(() => window.dev && window.__bottleReady && /[?&]re\b/.test(location.search), null, { timeout: 30000 });
+  await p.page.evaluate(() => { window.dev.hold = true; }); await p.page.waitForTimeout(1200);
+  check('the writer can read their own sealed bottle', (await p.text('words')) === 'Happy birthday. Not a minute early.' && !(await p.shown('wait')));
+  check('no errors', !p.errs.length, p.errs.join(' ; '));
+  await p.ctx.close();
+  // the other phone, before the time
+  const o = await phone({ at: rel(link) });
+  await run(o, 2); await o.page.waitForTimeout(300);
+  check('before its time the bottle is shown out at sea, and the note is not', await o.shown('wait') && !(await o.page.evaluate(() => document.getElementById('letter').classList.contains('show'))) && (await o.text('words')) === '' && (await o.text('waitTitle')) === 'Still at sea');
+  check('it says who sealed it, when it washes up, and how long that is', (await o.text('waitWho')) === 'Mike sealed this bottle for you, Ana.' && (await o.text('waitWhen')).startsWith('It washes up ') && /^(3 days|2 days and 23 hours) to go$/.test(await o.text('waitLeft')) && !(await o.shown('waitOpen')), (await o.text('waitWhen')) + ' | ' + (await o.text('waitLeft')));
+  await o.shot('16-at-sea');
+  await o.page.touchscreen.tap(195, 500); await o.page.mouse.click(195, 520); await run(o, 1); await o.page.waitForTimeout(500);
+  check('a touch does not start the story, and no way round is offered', (await o.page.evaluate(() => window.dev.story.state)) === 'arrive' && (await o.text('hint')) === '' && !(await o.page.evaluate(() => document.getElementById('skip').classList.contains('show'))));
+  check('the touch takes the seat, so the beach is theirs and the list knows a bottle is coming', o.calls.includes('bottle_open') && (await o.page.evaluate(() => (JSON.parse(localStorage.getItem('bottle-threads') || '[]')[0] || {}).w)) === 'Mike');
+  check('no errors', !o.errs.length, o.errs.join(' ; '));
+  await o.ctx.close();
+  // once its time has come it is a bottle like any other
+  const late = await phone({ at: rel(linkFor('http://localhost:8899/', { message: 'Now you may.', name: 'Mike', mood: 'dusk', to: 'Ana', key: 'kkkkkkkkkkkkkkkkkkkkkk', when: Date.now() - 120000 })) });
+  await run(late, 0.5);
+  check('once its time has come, it opens like any other', !(await late.shown('wait')) && (await late.text('hint')) === 'Touch the water');
+  await late.ctx.close();
+  // on the list and on the beach: on its way, and then news
+  const soon = Date.now() + 2 * 86400000;
+  const held = JSON.parse(JSON.stringify(jorge));
+  held['bottle-notes'][KEY].push({ message: 'Do not peek.', name: 'Jorge', mood: 'night', to: 'Mike', id: 'j2', at: now - 2000, when: soon });
+  const h = await phone({ seed: held });
+  await h.page.waitForTimeout(800);
+  const row = await h.page.evaluate(() => { const r = document.querySelector('#people .row'); return [r.textContent, r.classList.contains('new')]; });
+  check('on the list, a sealed bottle is on its way, not news', row[0].includes('A bottle is on its way. It washes up ') && !row[1] && (await h.text('homeLede')).startsWith('One beach for each person'), row[0]);
+  await h.page.click('#people .row'); await run(h, 4); await h.page.waitForTimeout(300);
+  check('the name leads to the beach, which says a bottle is coming', await h.shown('visit') && (await h.text('visitSay')).startsWith('A bottle from Jorge is on its way. It washes up '), await h.text('visitSay'));
+  check('its shell says it is still at sea', (await h.page.evaluate(() => document.querySelector('.mark:nth-child(3)').getAttribute('aria-label'))).endsWith('Still at sea'));
+  await h.page.click('.mark:nth-child(3)');
+  await h.page.waitForFunction(() => window.dev && window.__bottleReady && document.getElementById('wait').classList.contains('show'), null, { timeout: 30000 });
+  check('and picking it up early shows it out at sea, not its words', (await h.text('words')) === '' && (await h.text('waitWho')) === 'Jorge sealed this bottle for you, Mike.');
+  await h.ctx.close();
+  const come = JSON.parse(JSON.stringify(jorge));
+  come['bottle-notes'][KEY].push({ message: 'Now.', name: 'Jorge', mood: 'night', to: 'Mike', id: 'j3', at: now - 9000000, when: now - 1000 });      // written long before the last one seen here, due a moment ago
+  const d = await phone({ seed: come });
+  await d.page.waitForTimeout(800);
+  check('when its time comes it is news, however long ago it was written', (await d.page.evaluate(() => document.querySelector('#people .row').textContent)).includes('A new bottle washed up') && (await d.text('homeLede')) === 'A bottle is waiting for you.');
+  await d.ctx.close();
+}
+// 17. cast out to sea, for no one: written, cast out, watched going, and gone
+{
+  const c = await phone({});
+  check('someone with nobody to write to is offered the sea', await c.shown('castB') && (await c.text('castB')) === 'Or cast one out to sea, for no one');
+  await c.page.click('#castB'); await c.page.waitForTimeout(250);
+  check('the desk asks for the words and a sky, and nothing else', (await c.text('deskTitle')) === 'Cast it out to sea' && (await c.text('make')) === 'Cast it out' && await c.shown('msg') && await c.shown('moods') && !(await c.shown('forWho')) && !(await c.shown('who')) && !(await c.shown('picAdd')) && !(await c.shown('tuckAdd')) && !(await c.shown('whenAdd')) && !(await c.shown('mobileAsk')) && !(await c.shown('steps')), await c.text('deskLede'));
+  await c.shot('17-desk-cast');
+  await c.page.click('#make'); await c.page.waitForTimeout(200);
+  check('nothing is cast without words', await c.shown('desk'));
+  await c.page.fill('#msg', 'I should have called more often.');
+  await c.page.click('#make'); await c.page.waitForTimeout(300);
+  check('the desk steps aside so the bottle can be watched going', !(await c.shown('desk')) && (await c.text('hint')) === 'There it goes' && await c.page.evaluate(() => document.getElementById('hint').classList.contains('show')));
+  await c.page.evaluate(() => { window.dev.hold = false; window.dev.run(4); window.dev.hold = true; });
+  await c.shot('17-going');
+  await c.page.evaluate(() => { window.dev.hold = false; window.dev.run(6); window.dev.hold = true; }); await c.page.waitForTimeout(300);
+  check('then it is gone, and the page says so', await c.shown('made') && (await c.text('madeTitle')) === 'It is out to sea' && (await c.text('madeLede')).startsWith('Nobody will read it.') && !(await c.shown('link')) && !(await c.shown('share')) && !(await c.shown('copy')) && !(await c.shown('try')));
+  check('nothing was sent', !c.calls.includes('bottle_add') && !c.calls.includes('add_bottle') && !c.calls.some((x) => x.startsWith('notify')) && !c.calls.includes('picture:add'), c.calls.join(','));
+  check('and nothing was kept on the phone', await c.page.evaluate(() => !localStorage.getItem('bottle-notes') && !localStorage.getItem('bottle-threads') && document.getElementById('msg').value === '' && !JSON.stringify(Object.entries(localStorage)).includes('called more often')));
+  await c.shot('17-gone');
+  await c.page.click('#again'); await c.page.waitForTimeout(300);
+  check('afterwards the desk is the plain one again', await c.shown('desk') && (await c.text('deskTitle')) === 'Message in a bottle' && await c.shown('forWho'));
+  check('no errors', !c.errs.length, c.errs.join(' ; '));
+  await c.ctx.close();
+  // a phone with beaches is offered it on the list; a page showing a bottle is not
+  const m = await phone({ seed: jorge });
+  await m.page.waitForTimeout(600);
+  check('a phone with beaches is offered the sea on its list', await m.shown('castA'));
+  await m.page.click('#castA'); await m.page.waitForTimeout(250);
+  check('and gets the same desk, with the way back', (await m.text('deskTitle')) === 'Cast it out to sea' && await m.shown('toHome'));
+  await m.ctx.close();
 }
 await browser.close();
 const bad = results.filter((r) => !r[0]);

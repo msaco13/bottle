@@ -26,6 +26,9 @@ __m.code = (function () {
 //              "s": not a bottle at all, but something written in the sand (see sand.js). pic is the secret of what was written.
 //   [message, name, mood, to, key, claim, pic, g, tuck]  added later still, optional:
 //        tuck  one letter: something small tucked in with the note (a pressed flower, a feather...). See TUCKS.
+//   [message, name, mood, to, key, claim, pic, g, tuck, when]  added later still, optional:
+//        when  the bottle is sealed until this time: minutes since 1970, written in base 36. Before then the page shows it
+//              out at sea. A courtesy, not a lock: the note is in the link, as it always is.
 // Plain base64 on purpose (no compression): it opens on every phone, old or new.
 //
 // PROMISE: every link ever made must keep opening. New things may only be added
@@ -38,10 +41,13 @@ const MOODS = { dusk: '', night: 'n', dawn: 'a' };
 const MOOD_OF = { n: 'night', a: 'dawn' };
 /** What can be tucked into a bottle with the note: one letter in the link, and the words for it. The drawings are in main.js. */
 const TUCKS = { f: 'a pressed flower', c: 'a four-leaf clover', q: 'a feather', k: 'a small key', h: 'a heart-shaped stone', t: 'a ticket' };
+/** A time a bottle is sealed until, read from its link: milliseconds, or 0 if it is not one. */
+const whenOf = (x) => { const m = typeof x === 'string' && /^[0-9a-z]{5,7}$/.test(x) ? parseInt(x, 36) : 0; return m > 1e7 && m < 9e7 ? m * 60000 : 0; };       // 1989 to 2141: anything else is not a time
 const isTuck = (x) => typeof x === 'string' && Object.prototype.hasOwnProperty.call(TUCKS, x);
 
 /** bottle: { message, name, mood, to, key, claim, pic } */
-function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '', g = '', tuck = '') {
+function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '', g = '', tuck = '', when = 0) {
+  const at = !g && Number(when) > 0 ? Math.round(Number(when) / 60000).toString(36) : '';
   const list = [
     String(message).slice(0, MAX_MESSAGE),
     String(name || '').trim().slice(0, MAX_NAME),
@@ -52,6 +58,7 @@ function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = ''
     /^[A-Za-z0-9_-]{22}$/.test(pic || '') ? pic : '',
     g === 'i' || g === 'o' || g === 's' ? g : '',
     isTuck(tuck) && !g ? tuck : '',                    // only a bottle carries one: not an invitation, a beach from everyone, or the sand
+    whenOf(at) ? at : '',                              // and only a bottle can be sealed until a time
   ];
   while (list.length > 1 && list[list.length - 1] === '') list.pop();   // old-style links stay exactly as they were
   const bytes = new TextEncoder().encode(JSON.stringify(list));
@@ -87,6 +94,7 @@ function decode(hash) {
       ...(pic ? { pic } : {}),          // only there when the bottle carries one: every older link reads exactly as it always did
       ...(g ? { g } : {}),
       ...(!g && isTuck(v[8]) ? { tuck: v[8] } : {}),
+      ...(!g && whenOf(v[9]) ? { when: whenOf(v[9]) } : {}),
     };
   } catch {
     return null;
@@ -94,7 +102,7 @@ function decode(hash) {
 }
 
 function linkFor(base, b) {
-  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic, b.g, b.tuck);
+  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic, b.g, b.tuck, b.when);
 }
 
 return { MAX_MESSAGE, MAX_NAME, MOODS, TUCKS, encode, decode, linkFor };
@@ -1350,6 +1358,17 @@ function floating(i, t) {
   return M.mul(M.translate(x, 0.16 * LIE + 0.004 + 0.014 * Math.sin(t * 2.1 + i * 2.3), z), M.mul(rot, M.scale(LIE)));
 }
 
+/**
+ * A bottle cast out to sea, for no one: it rides out from the surf to the horizon and is gone. k runs from 0 to 1.
+ * The same kind of thing as floating(), so it is drawn the same way.
+ */
+function drifting(k, t) {
+  const e = k * k * (3 - 2 * k);
+  const z = -0.75 - e * 8.6, x = 0.22 * Math.sin(k * 2.6) + 0.05 * Math.sin(t * 0.31);
+  const rot = M.mul(M.rotY(0.4 + 0.9 * k + 0.25 * Math.sin(t * 0.4)), M.mul(M.rotZ(-Math.PI / 2), M.rotY(t * 0.15)));
+  return M.mul(M.translate(x, 0.16 * LIE + 0.004 + 0.014 * Math.sin(t * 2.1), z), M.mul(rot, M.scale(LIE)));
+}
+
 class Story {
   /** view: { W, H, project(world), ground(sx, sy, y), basis() } */
   constructor(view) {
@@ -1633,7 +1652,7 @@ function blendRot(a, b, e) {
   return [x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, z[0], z[1], z[2], 0, 0, 0, 0, 1];
 }
 
-return { floating, Story };
+return { floating, drifting, Story };
 })();
 
 // ---------------------------------------------------------------- audio.js
@@ -1945,6 +1964,7 @@ async function list(auth, key) {
       const note = { message: v.m, name: v.n || '', mood: v.mood || 'dusk', to: v.to || '', id: v.id, at: Date.parse(row.created_at) || v.t || 0 };
       if (typeof v.p === 'string' && /^[A-Za-z0-9_-]{22}$/.test(v.p)) note.pic = v.p;
       if (typeof v.x === 'string' && /^[a-z]$/.test(v.x)) note.tuck = v.x;      // something small tucked in with the note (see TUCKS in code.js)
+      if (typeof v.w === 'number' && v.w > 0) note.when = v.w;                  // sealed until this time (see "when" in code.js)
       if (v.k === 'l' || v.k === 's') note.kind = v.k;        // not a bottle: 'l' a lantern lit for the other person, 's' something written in the sand
       out.push(note);
     }
@@ -2709,7 +2729,7 @@ const { decode, linkFor, MAX_MESSAGE, TUCKS } = __m.code;
 const { keepsakes, grow, keepLine, placeName, MAX_SHELLS } = __m.keeps;
 const { Scene, swash, DRY_LINE, MOOD } = __m.scene;
 const { Flat } = __m.flat;
-const { Story, floating } = __m.story;
+const { Story, floating, drifting } = __m.story;
 const { Shore } = __m.audio;
 const { newKey, newClaim, add, addOpen, list, open, reach } = __m.thread;
 const { myName, setName, threads, isMine, wrote, remember, kept, keep, token, pull, carry, arrive, threadByNumber, mobile, reachOf, setReach, rename, forget, gathers, gatherAdd } = __m.shore;
@@ -2750,6 +2770,46 @@ let shown = bottle;          // the note on the paper right now (the one from th
 let seat = '';               // where this phone stands in the link's conversation, once the server has said (see thread.js)
 let asked = false;
 const same = (a, b) => a && b && a.message === b.message && (a.name || '') === (b.name || '') && (a.pic || '') === (b.pic || '');
+
+// A bottle sealed until a time (see "when" in code.js). Until then the page shows it out at sea and says when it washes up.
+// It is a courtesy and not a lock: the note is in the link, as it always is. The writer opens their own freely, except
+// when looking at what the other person will see.
+const sealedUntil = bottle && !beach && bottle.when > Date.now() ? bottle.when : 0;
+const ownBottle = !!bottle && (isMine(bottle) || (!!bottle.key && kept(bottle.key).some((n) => same(n, bottle) && isMine(n))));
+const locked = !!sealedUntil && (seeing || !ownBottle);
+/** Someone else's bottle whose time has not come. */
+const heldBack = (n) => !!n && n.when > Date.now() && !isMine(n);
+const sayTime = (ms, how) => { try { const d = new Date(ms); return d.toLocaleString(undefined, { weekday: how, month: how, day: 'numeric', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}), hour: 'numeric', minute: '2-digit' }); } catch { return 'later'; } };
+const whenLong = (ms) => sayTime(ms, 'long'), whenShort = (ms) => sayTime(ms, 'short');
+/** "2 days and 3 hours", "12 minutes". */
+function timeLeft(ms) {
+  const m = Math.max(0, Math.round(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+  const say = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+  return d ? say(d, 'day') + (h ? ' and ' + say(h, 'hour') : '') : h ? say(h, 'hour') + (mm ? ' and ' + say(mm, 'minute') : '') : m ? say(m, 'minute') : 'less than a minute';
+}
+/** The link's bottle is still sealed: say who sealed it, when it washes up, and how long that is. The page opens it by itself when the time comes. */
+function waitShow() {
+  $('letter').classList.remove('show');
+  $('wait').classList.add('show');
+  $('waitWho').textContent = seeing ? `This is what ${bottle.to || 'they'} will see until then.` : `${bottle.name || 'Someone'} sealed this bottle for you${bottle.to ? ', ' + bottle.to : ''}.`;
+  $('waitWhen').textContent = `It washes up ${whenLong(sealedUntil)}.`;
+  $('waitOpen').style.display = ownBottle ? '' : 'none';
+  $('waitOpen').onclick = () => { location.href = location.href.replace(/([?&])see\b/, '$1re'); };
+  $('waitHome').textContent = threads().length ? 'Your beaches' : 'Write a bottle of your own';
+  $('waitHome').onclick = () => desk({});
+  if (waitShow.on) return;
+  waitShow.on = true;
+  const tick = () => {
+    const left = sealedUntil - Date.now();
+    if (left <= 0) { location.reload(); return; }
+    $('waitLeft').textContent = timeLeft(left) + ' to go';
+    setTimeout(tick, left < 90000 ? 1000 : 15000);
+  };
+  tick();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && sealedUntil <= Date.now()) location.reload(); });
+  // Like opening a bottle, a touch takes this link's seat in the conversation: the beach is theirs from now, and the list says a bottle is on its way.
+  if (!seeing && bottle.key) touched(() => token().then((auth) => open(auth, bottle.key, bottle.claim)).then((got) => { if (got && got !== 'taken') remember(bottle.key, bottle.name, 0); }));
+}
 
 /** The notes of a conversation: what the server says now, joined with what this phone has already seen. */
 /** A lantern lit for someone: kept with the conversation like a note, but not a bottle. It leaves no shell and is never counted as one. */
@@ -2919,7 +2979,7 @@ function address(b) {
   $('replyHow').textContent = mine ? (other && key ? `When ${other} writes back, it shows up here.` : '')
     : key && reachOf(key).l ? `It goes straight to ${whose(other)} phone. Nothing to copy, nothing to text.`
     : 'Write your note, then one tap sends it back. Nothing to copy or paste.';
-  if (asked && key) remember(key, other, b.at || 0);
+  if (asked && key) remember(key, other, Math.max(b.at || 0, !mine && b.when && b.when <= Date.now() ? b.when : 0));
 }
 /** The line over the earlier notes: it is a conversation, so say so. */
 const between = (n) => { const w = withWho(), c = n === 1 ? '1 bottle' : n + ' bottles'; return w ? `You and ${w}: ${c} so far` : `Your conversation: ${c} so far`; };
@@ -2947,7 +3007,8 @@ async function shelf() {
   keepSay();                                          // the phone now knows whose conversation this is: the line can name them, and offer the beach
   // Does their phone have notifications on? Then the line under the button can say the reply goes straight there.
   learnReach(bottle.key).then((changed) => { if (changed && shown && !beach) address(shown); });
-  const all = await notesFor(bottle.key);
+  if (!rereading) $('fresh').textContent = threads().length ? 'Back to your beaches' : 'Write a bottle for someone else';
+  const all = (await notesFor(bottle.key)).filter((n) => !heldBack(n));        // a bottle still sealed is not to be read from here
   shoreKeeps(all.length + (among(all, bottle) ? 0 : 1));
   if (!all.length) return;
   const here = all.find((n) => same(n, bottle));
@@ -3417,6 +3478,32 @@ function tuckDraw(picking) {
     }
   }
 }
+// The time the bottle on the desk is sealed until, if any (milliseconds).
+let deskUntil = 0;
+function untilDraw(picking) {
+  $('whenRow').className = deskUntil ? 'has' : picking ? 'pick' : '';
+  if (deskUntil) $('whenSay').textContent = `Sealed until ${whenShort(deskUntil)}. Until then they see it out at sea.`;
+  if (!picking) return;
+  const quick = $('whenQuick'), now = new Date();
+  const at = (days, hour) => { const x = new Date(now); x.setDate(x.getDate() + days); x.setHours(hour, 0, 0, 0); return x.getTime(); };
+  quick.textContent = '';
+  for (const [label, ms] of [['In an hour', Date.now() + 3600000], ...(now.getHours() < 19 ? [['Tonight at 8', at(0, 20)]] : []), ['Tomorrow at 8 am', at(1, 8)]]) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'mood'; b.textContent = label;
+    b.onclick = () => untilSet(ms);
+    quick.appendChild(b);
+  }
+  const pad = (n) => String(n).padStart(2, '0'), soon = new Date(Date.now() + 120000);
+  $('whenAt').min = `${soon.getFullYear()}-${pad(soon.getMonth() + 1)}-${pad(soon.getDate())}T${pad(soon.getHours())}:${pad(soon.getMinutes())}`;
+  $('whenAt').value = '';
+  $('whenWarn').textContent = '';
+}
+function untilSet(ms) {
+  if (!(ms > Date.now() + 60000) || ms > Date.now() + 5 * 366 * 86400000) { $('whenWarn').textContent = 'Choose a time that is still to come.'; return; }
+  deskUntil = Math.round(ms / 60000) * 60000;
+  untilDraw();
+  count('later', 'sealed until a time', true);
+}
 let reachAsked = true;       // false once the server has shown it cannot say who is reachable: then stop asking
 const when = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
 const whose = (to) => (to ? to + '’s' : 'their');
@@ -3426,8 +3513,9 @@ const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 /** The address of a bottle on this site. A visit that was opened as a test stays a test. */
 const addressOf = (b) => { const l = linkFor(location.origin + location.pathname, b); return qs.has('dev') ? l.replace('#', '?dev#') : l; };
 /** The words that travel with a link when it is texted or shared. */
-const sayWith = (to) => (madeSand ? (to ? `${to}, something is written in the sand for you. See it before the tide does.` : 'Something is written in the sand for you. See it before the tide does.') : to ? `${to}, a bottle washed up for you. Open it, then write back:` : 'A bottle washed up for you. Open it, then write back:');
+const sayWith = (to) => (madeUntil ? (to ? `${to}, a bottle is on its way to you. Tap to see when it washes up:` : 'A bottle is on its way to you. Tap to see when it washes up:') : madeSand ? (to ? `${to}, something is written in the sand for you. See it before the tide does.` : 'Something is written in the sand for you. See it before the tide does.') : to ? `${to}, a bottle washed up for you. Open it, then write back:` : 'A bottle washed up for you. Open it, then write back:');
 let madeSand = false;        // the thing just made was written in the sand, not put in a bottle
+let madeUntil = 0;           // the bottle just made is sealed until this time
 /** An address that opens this phone's own Messages, already addressed and already written. The phone sends the text, nothing else does. */
 const textTo = (number, words) => `sms:${number}${ios ? '&' : '?'}body=${encodeURIComponent(words)}`;
 const numberOf = (key) => { const th = threads().find((t) => t.k === key); return (th && th.p) || ''; };
@@ -3451,9 +3539,11 @@ function person(th, every) {
   const all = every.filter((n) => !isLamp(n) && (n.kind !== 's' || (!isMine(n) && n.at > (th.s || 0)))), lamps = every.filter((n) => isLamp(n) && !isMine(n));      // what was written in the sand counts only while it is news
   const lamp = lamps.filter((n) => n.at > (th.s || 0)).pop() || null;      // theirs, not yet seen
   const theirs = all.filter((n) => !isMine(n));
-  const fresh = theirs.filter((n) => n.at > (th.s || 0));
+  // A sealed bottle arrives when its time comes. Until then it is not news: it is on its way.
+  const fresh = theirs.filter((n) => !heldBack(n) && Math.max(n.at, n.when || 0) > (th.s || 0));
+  const coming = theirs.filter(heldBack).sort((a, b) => a.when - b.when)[0] || null;
   const last = all[all.length - 1];
-  return { th, lamp, canLamp: theirs.length > 0 || lamps.length > 0 || !!reachOf(th.k).j,      // only someone who has joined can be lit a lantern
+  return { th, lamp, coming, canLamp: theirs.length > 0 || lamps.length > 0 || !!reachOf(th.k).j,      // only someone who has joined can be lit a lantern
     isNew: fresh.length > 0, open: fresh.length ? fresh[fresh.length - 1] : last, at: last ? last.at : (th.t || 0), count: all.length,
     who: th.w || (theirs.length ? theirs[theirs.length - 1].name : '') || (all[0] && all[0].to) || '' };
 }
@@ -3489,7 +3579,7 @@ function pickWords(count) {
   $('newOne').disabled = on && n < 2;
   if (on) $('homeLede').textContent = 'Tap everyone this bottle is for. Each of them gets their own.';
 }
-const openNote = (f) => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k, pic: f.open.pic, g: f.open.kind === 's' ? 's' : '', tuck: f.open.tuck }); };
+const openNote = (f) => { location.href = addressOf({ message: f.open.message, name: f.open.name, mood: f.open.mood, to: f.open.to, key: f.th.k, pic: f.open.pic, g: f.open.kind === 's' ? 's' : '', tuck: f.open.tuck, when: f.open.when }); };
 
 // Your shore: everyone this phone sends bottles to, news first. A name sends them a bottle; a waiting bottle opens.
 // Drawn at once from what the phone remembers, then again when the server has answered.
@@ -3528,6 +3618,7 @@ async function people() {
       const sub = document.createElement('span'); sub.className = 'rowSub';
       sub.textContent = f.isNew ? (f.open.kind === 's' ? 'Wrote in the sand for you. See it before the tide does' : 'A new bottle washed up. Tap to open it')
         : f.lamp && !picking ? `Lit a lantern for you \u00b7 ${when(f.lamp.at)}`
+        : f.coming ? `A bottle is on its way. It washes up ${whenShort(f.coming.when)}`
         : [placeName(f.th.k), f.count ? (f.count === 1 ? '1 bottle' : f.count + ' bottles') : 'No bottles yet', f.count ? when(f.at) : '', reachOf(f.th.k).l ? 'notifications on' : ''].filter(Boolean).join(' · ');
       row.append(who, sub);
       if (picking) {
@@ -3580,7 +3671,7 @@ async function people() {
 // A tap on a shell picks that bottle up again. This is where "what is my beach, and whose is it" is answered by looking.
 let visiting = null;         // the beach on screen: { key, who, notes, marks: [{ el, s }], f }
 /** The address that picks a bottle up again from its beach: straight to the note. */
-const hrefAgain = (n, key) => addressOf({ message: n.message, name: n.name, mood: n.mood, to: n.to, key, pic: n.pic, tuck: n.tuck }).replace(/(\?[^#]*)?#/, (m, q) => (q ? q + '&re' : '?re') + '#');
+const hrefAgain = (n, key) => addressOf({ message: n.message, name: n.name, mood: n.mood, to: n.to, key, pic: n.pic, tuck: n.tuck, when: n.when }).replace(/(\?[^#]*)?#/, (m, q) => (q ? q + '&re' : '?re') + '#');
 /** Go to a beach. From a page that is showing a bottle, the page is loaded again as the list, and the beach opens there. */
 function visit(key) {
   if (linked) {
@@ -3591,6 +3682,11 @@ function visit(key) {
     return;
   }
   showBeach(key);
+}
+/** Put the ring over each shell where the picture has drawn it. Done every frame, and at once when the rings are made. */
+function placeMarks() {
+  if (!visiting || !scene) return;
+  for (const m of visiting.marks) { const p = scene.project([m.s.x, 0, m.s.z]); m.el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)`; m.el.style.opacity = m.s.a > 0.5 ? '1' : '0'; }
 }
 function leaveBeach() {
   $('visit').classList.remove('show');
@@ -3614,7 +3710,8 @@ function showBeach(key) {
     $('visitWho').textContent = who ? `The beach you share with ${who}` : 'A beach the two of you share';
     $('visitSay').textContent = visiting.said || (f.lamp ? `${who || 'They'} lit a lantern for you.`
       : !n ? 'No bottles here yet. The first one leaves a shell on the sand.'
-      : `${n === 1 ? '1 bottle' : n + ' bottles'} between you so far. Each one left a shell and lit a star.` + (scene ? ' Tap a shell to read it again.' : ''));
+      : f.coming ? `A bottle from ${who || 'them'} is on its way. It washes up ${whenShort(f.coming.when)}.`
+      : `${n === 1 ? '1 bottle' : n + ' bottles'} between you so far. Each one left a shell and lit a star.` + (n >= 10 ? ` Your stars have joined up: ${keepsakes(key, n).name}.` : scene ? ' Tap a shell to read it again.' : ''));
     // the shells and the stars: laid out from the conversation's key, so both phones see the same beach. They come in one after another.
     const next = keepsakes(key, n);
     if (keeps && keeps.of === key) { next.join = keeps.join; next.shells.forEach((sh, i) => { if (keeps.shells[i]) sh.a = keeps.shells[i].a; }); next.stars.forEach((st, i) => { if (keeps.stars[i]) st.a = keeps.stars[i].a; }); }
@@ -3632,11 +3729,12 @@ function showBeach(key) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'mark';
       if (isTuck(note.tuck)) b.innerHTML = TUCK_ART[note.tuck];
-      b.setAttribute('aria-label', `Bottle ${i + 1}, from ${isMine(note) ? 'you' : note.name || who || 'them'}, ${when(note.at)}${isTuck(note.tuck) ? ', with ' + TUCKS[note.tuck] : ''}. Read it again`);
+      b.setAttribute('aria-label', `Bottle ${i + 1}, from ${isMine(note) ? 'you' : note.name || who || 'them'}, ${when(note.at)}${isTuck(note.tuck) ? ', with ' + TUCKS[note.tuck] : ''}. ${heldBack(note) ? 'Still at sea' : 'Read it again'}`);
       b.onclick = () => pick(note);
       box.appendChild(b);
       visiting.marks.push({ el: b, s: sh });
     });
+    placeMarks();
     // every bottle by name and date as well, when the shells cannot say it all: more bottles than shells, or no picture to tap on
     const row = $('visitRow');
     row.textContent = '';
@@ -3653,7 +3751,7 @@ function showBeach(key) {
     $('visitWrite').onclick = () => { leaveBeach(); desk({ to: who, key }); };
     const lamp = $('visitLamp');
     lamp.style.display = f.canLamp ? '' : 'none';
-    if (!lamp.disabled) lamp.textContent = f.lamp ? 'Light one back' : 'Light a lantern';
+    if (!lamp.disabled) lamp.textContent = f.lamp ? 'Light one back' : who ? `Light a lantern for ${who}` : 'Light a lantern';
     lamp.onclick = async () => {
       if ((lampAt.get(key) || 0) > Date.now() - 30000) return;
       lamp.disabled = true; lamp.textContent = 'Lighting';
@@ -3661,7 +3759,7 @@ function showBeach(key) {
       if (!visiting || visiting.key !== key) return;
       visiting.said = lampSaid(how, who);
       $('visitSay').textContent = visiting.said;
-      lamp.textContent = how === 'failed' ? 'Light a lantern' : 'Lit';
+      lamp.textContent = how === 'failed' ? 'Light a lantern' : 'Lantern lit';
       if (how === 'failed') lamp.disabled = false;
     };
   };
@@ -3684,12 +3782,55 @@ async function follow(id) {
   if (!pick) return home();
   count('followed', isLamp(pick) ? 'a lantern was tapped' : 'a notification was tapped');
   if (isLamp(pick)) { home(); homecoming(); return; }         // not a bottle to open: it is on the shore, by their name
-  location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k, pic: pick.pic, g: pick.kind === 's' ? 's' : '', tuck: pick.tuck }));
+  location.replace(addressOf({ message: pick.message, name: pick.name, mood: pick.mood, to: pick.to, key: th.k, pic: pick.pic, g: pick.kind === 's' ? 's' : '', tuck: pick.tuck, when: pick.when }));
+}
+
+// ---------------------------------------------------------------- cast out to sea, for no one
+//
+// The one thing here that needs nobody at the other end. Write what cannot be sent, cast it out, and watch it go.
+// Nothing is sent, nothing is kept, not on the server and not on this phone: the words are gone when the bottle is.
+let casting = null;          // the bottle on its way out: { t: seconds so far }
+const CAST_SECS = 9;
+function castOut(words) {
+  count('cast', `${deskMood}, ${words.length} letters`, true);
+  $('msg').value = '';
+  $('left').textContent = String(MAX_MESSAGE);
+  if (!scene) { castDone(); return; }                 // nothing to draw on: say it is gone, and that is all
+  $('compose').classList.remove('show');
+  casting = { t: 0 };
+  const hint = $('hint');
+  hint.textContent = 'There it goes';
+  hint.classList.add('show', 'big', 'low');
+}
+function castDone() {
+  casting = null;
+  const hint = $('hint'), el = $('made'), compose = $('compose');
+  hint.classList.remove('show', 'big', 'low');
+  el.className = 'cast';
+  madeLink = ''; madeSt = null;
+  $('madeNext').textContent = '';
+  $('madeTitle').textContent = 'It is out to sea';
+  $('madeLede').textContent = 'Nobody will read it. It was not sent anywhere and nothing was kept, not even on this phone. Sometimes a thing only needs saying.';
+  $('again').textContent = threads().length || gathers().length ? 'Back to your beaches' : 'Write a bottle for someone';
+  compose.classList.remove('home');
+  compose.classList.add('show', 'done');
+  compose.scrollTop = 0;
+  lantern();
 }
 
 /** The words on the desk: who it is for, and whether it will go straight there or by a link. */
 function deskWords() {
   $('desk').classList.toggle('gather', !!deskCtx.gather);
+  $('desk').classList.toggle('cast', !!deskCtx.cast);
+  if (deskCtx.cast) {
+    $('desk').classList.remove('first');
+    $('gatherSay').textContent = '';
+    $('deskTitle').textContent = 'Cast it out to sea';
+    $('deskLede').textContent = 'For what you need to say and cannot send. Write it, cast it out, and watch it go. Nobody reads it. Nothing is sent, and nothing is kept.';
+    $('make').textContent = 'Cast it out';
+    mobileShow(false);
+    return;
+  }
   // the three steps are for someone starting from nothing; anyone else is told how this one bottle gets there
   $('desk').classList.toggle('first', !deskCtx.to && !deskCtx.key && !deskCtx.many && !deskCtx.join && !deskCtx.gather);
   $('gatherSay').textContent = deskCtx.join ? gatherSaid : '';
@@ -3735,15 +3876,19 @@ function desk(ctx) {
   compose.scrollTop = 0;
   wire();
   const known = threads().length > 0 || gathers().length > 0;
-  const home = known && !deskCtx.key && !deskCtx.to && !deskCtx.fresh && !deskCtx.many && !deskCtx.join && !deskCtx.gather;
+  const home = known && !deskCtx.key && !deskCtx.to && !deskCtx.fresh && !deskCtx.many && !deskCtx.join && !deskCtx.gather && !deskCtx.cast;
+  $('wait').classList.remove('show');
+  $('castA').style.display = linked ? 'none' : '';      // cast from a plain page, where the sea is free to show it going
   if (!home) { picking = null; editing = false; }
   compose.classList.toggle('home', home);
   $('toHome').style.display = known && !home ? 'block' : 'none';
   if (home) { people(); lantern(); count('home', Math.min(threads().length, 12) + ' people'); return; }
   $('toChip').textContent = '';                       // the title already says who it is for
-  $('forRow').style.display = deskCtx.to || deskCtx.many || deskCtx.join ? 'none' : '';
+  $('forRow').style.display = deskCtx.to || deskCtx.many || deskCtx.join || deskCtx.cast ? 'none' : '';
   $('occasion').value = '';
-  $('gatherB').style.display = deskCtx.to || deskCtx.key || deskCtx.many || deskCtx.join || deskCtx.gather ? 'none' : 'block';
+  const plain = !(deskCtx.to || deskCtx.key || deskCtx.many || deskCtx.join || deskCtx.gather || deskCtx.cast);
+  $('gatherB').style.display = plain ? 'block' : 'none';
+  $('castB').style.display = plain && !linked ? 'block' : 'none';
   if (deskCtx.join) { gatherSaid = ''; list(null, invite.key).then((all) => { gatherSaid = sofar(all); if (deskCtx.join && !compose.classList.contains('done')) $('gatherSay').textContent = gatherSaid; }); }
   $('forWho').value = '';
   $('mobile').value = '';
@@ -3757,6 +3902,8 @@ function desk(ctx) {
   dropPic();
   dropSand();
   deskTuck = ''; tuckDraw();
+  deskUntil = 0; untilDraw();
+  $('whenRow').style.display = deskCtx.join || deskCtx.gather ? 'none' : '';      // a bottle on a beach from everyone is opened with all the others
   $('sandRow').style.display = deskCtx.many || deskCtx.join || deskCtx.gather ? 'none' : '';
   try { who.value = myName() || deskCtx.me || ''; } catch {}      // answering a note addressed "For Ana" on a phone with no name yet: sign it Ana
   for (const c of $('moods').children) c.classList.toggle('on', c.dataset.mood === ((shown && shown.mood) || 'dusk'));
@@ -3777,7 +3924,7 @@ let madeSt = null;           // what the screen is showing: { mode: 'link' | 'di
 const copyLabel = () => (madeSt && !madeSt.passed && (navigator.share || madeSt.number) ? 'Copy the link instead' : 'Copy the link');
 function made(how, to, number, extra) {
   const el = $('made');
-  el.classList.remove('many', 'gather', 'joined', 'passed');
+  el.classList.remove('many', 'gather', 'joined', 'passed', 'cast');
   el.classList.toggle('direct', how === 'sending');
   el.classList.toggle('busy', how === 'sending');
   madeSt = { mode: how === 'sending' ? 'direct' : 'link', to, number, extra, sand: madeSand, passed: false, saved: false, showLink: false, texting: false };
@@ -3833,11 +3980,12 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
  * One note, a bottle each. Every person gets their own bottle in their own conversation, with its own seat.
  * It goes straight to anyone whose lantern is lit. Each of the others gets a button that texts or shares their link.
  */
-function sendMany(message, name, pic, tuck) {
+function sendMany(message, name, pic, tuck, until) {
   const who = deskCtx.many, el = $('made'), list = $('sentList');
   const run = sendMany.run = (sendMany.run || 0) + 1;
   madeLink = ''; madeTo = '';
-  el.classList.remove('direct', 'busy', 'gather', 'joined', 'passed', 'sheet');
+  el.classList.remove('direct', 'busy', 'gather', 'joined', 'passed', 'sheet', 'cast');
+  madeUntil = until || 0;
   el.classList.add('many');
   madeSt = null; $('madeNext').textContent = '';
   $('madeTitle').textContent = `Sending to ${who.length} people`;
@@ -3857,7 +4005,7 @@ function sendMany(message, name, pic, tuck) {
   who.forEach((p, i) => {
     let claim = '';
     try { claim = newClaim(); } catch {}
-    const b = { message, name, mood: deskMood, to: p.to, key: p.key, claim, pic, tuck };
+    const b = { message, name, mood: deskMood, to: p.to, key: p.key, claim, pic, tuck, when: until };
     const link = linkFor(location.origin + location.pathname, b), number = numberOf(p.key);
     const row = document.createElement('div'); row.className = 'sentRow';
     const head = document.createElement('span'); head.className = 'rowWho'; head.textContent = p.to || 'Someone';
@@ -3867,9 +4015,9 @@ function sendMany(message, name, pic, tuck) {
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(p.key, p.to, 0);
-    keep(p.key, [{ message, name, mood: deskMood, to: p.to, id, at: Date.now() + i, ...(pic ? { pic } : {}), ...(tuck ? { tuck } : {}) }]);
+    keep(p.key, [{ message, name, mood: deskMood, to: p.to, id, at: Date.now() + i, ...(pic ? { pic } : {}), ...(tuck ? { tuck } : {}), ...(until ? { when: until } : {}) }]);
     // one after another, a moment apart, so the server is never asked for too much at once
-    wait(i * 350).then(() => token()).then((auth) => add(auth, p.key, { m: message, n: name, mood: deskMood, to: p.to, id, t: Date.now(), ...(pic ? { p: pic } : {}), ...(tuck ? { x: tuck } : {}) }, claim)).then(async (r) => {
+    wait(i * 350).then(() => token()).then((auth) => add(auth, p.key, { m: message, n: name, mood: deskMood, to: p.to, id, t: Date.now(), ...(pic ? { p: pic } : {}), ...(tuck ? { x: tuck } : {}), ...(until ? { w: until } : {}) }, claim)).then(async (r) => {
       if (!r.ok) count('f_save', 'the server did not take the note', true);
       const reached = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
       if (reached) setReach(p.key, { j: 1, l: 1 }); else if (r.ok && reachOf(p.key).l) setReach(p.key, { l: 0 });
@@ -3915,6 +4063,7 @@ function wire() {
   $('desk').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!msg.value.trim() && !deskPic && !deskSand) { msg.focus(); return; }
+    if (deskCtx.cast) { castOut(msg.value.trim()); return; }
     // What was written in the sand is left with the server first. If it will not go, nothing is sent in its place.
     let sandSecret = '';
     if (deskSand) {
@@ -3936,16 +4085,18 @@ function wire() {
     if (deskPic && deskPic.state !== 'ready') { $('picShow').scrollIntoView({ block: 'center' }); return; }
     const pic = sandSecret || (deskPic ? deskPic.secret : ''), kind = sandSecret ? 's' : '', words = sandSecret ? '' : msg.value.trim();
     const tuck = sandSecret ? '' : deskTuck;            // what is written in the sand carries nothing with it
+    const until = sandSecret || !(deskUntil > Date.now()) ? 0 : deskUntil;      // a time that passed while the note was being written seals nothing
+    madeUntil = until;
     const name = who.value.trim();
     setName(name);
     if (deskCtx.join || deskCtx.gather) { joinOrStart(msg.value.trim(), name, pic, tuck); return; }
-    if (deskCtx.many) { sendMany(msg.value.trim(), name, pic, tuck); return; }
+    if (deskCtx.many) { sendMany(msg.value.trim(), name, pic, tuck, until); return; }
     let key = deskCtx.key || '', claim = '';
     try { if (!key) key = newKey(); claim = newClaim(); } catch {}
     const to = deskCtx.to || $('forWho').value.trim();
     const number = mobile($('mobile').value) || numberOf(key);
     // The link carries the note, the conversation's key, and one seat: whoever opens it first is the one it was for.
-    const b = { message: words, name, mood: deskMood, to, key, claim, pic, g: kind, tuck };
+    const b = { message: words, name, mood: deskMood, to, key, claim, pic, g: kind, tuck, when: until };
     madeTo = to;
     const link = madeLink = linkFor(location.origin + location.pathname, b);
     // A reply adds to a shore the two of you already share. Say what it will leave there.
@@ -3953,7 +4104,8 @@ function wire() {
     const leaves = before ? ` It is bottle ${before + 1} between you` + (before < MAX_SHELLS ? `, and it leaves ${(before + 1) % 5 ? 'a new shell' : 'a starfish'} on ${placeName(key)}, the beach you share.` : '.') : '';
     // If their lantern is lit the bottle goes straight to their shore and their phone is told. No link to text.
     const direct = !!(deskCtx.key && reachOf(key).l);
-    made(direct ? 'sending' : 'link', to, number, leaves);
+    const extra = leaves + (until ? ` It stays sealed until ${whenShort(until)}.` : '');
+    made(direct ? 'sending' : 'link', to, number, extra);
     if (madeSt) { madeSt.place = key ? placeName(key) : ''; madeSt.first = !deskCtx.key; madeWords(); }
     count('made', `${deskMood} ${deskCtx.key ? 'reply' : 'new'} ${b.message.length} letters${pic ? ', with a picture' : ''}`, true);
     // Going by link: Messages or the share sheet opens straight away, while this is still the same tap.
@@ -3966,8 +4118,8 @@ function wire() {
     const id = Math.random().toString(36).slice(2, 12);
     wrote(id);
     remember(key, to, 0, number);
-    keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now(), ...(pic ? { pic } : {}), ...(kind ? { kind } : {}), ...(tuck ? { tuck } : {}) }]);
-    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now(), ...(pic ? { p: pic } : {}), ...(kind ? { k: kind } : {}), ...(tuck ? { x: tuck } : {}) }, claim)).then(async (r) => {
+    keep(key, [{ message: b.message, name: b.name, mood: b.mood, to: b.to, id, at: Date.now(), ...(pic ? { pic } : {}), ...(kind ? { kind } : {}), ...(tuck ? { tuck } : {}), ...(until ? { when: until } : {}) }]);
+    token().then((auth) => add(auth, key, { m: b.message, n: b.name, mood: b.mood, to: b.to, id, t: Date.now(), ...(pic ? { p: pic } : {}), ...(kind ? { k: kind } : {}), ...(tuck ? { x: tuck } : {}), ...(until ? { w: until } : {}) }, claim)).then(async (r) => {
       if (!r.ok) count('f_save', 'the server did not take the note', true);
       // Was the other phone told? The sender is given a few seconds to answer.
       const told = r.ok ? await Promise.race([r.told, wait(9000).then(() => 0)]) : 0;
@@ -3982,7 +4134,7 @@ function wire() {
         el.classList.remove('passed'); $('madeNext').textContent = '';
         el.classList.add('direct');
         $('madeTitle').textContent = to ? `Sent to ${to}` : 'Sent';
-        lede.textContent = (direct ? `${Whose(to)} phone has been told. No link needed.` : `${to || 'They'} ${to ? 'has' : 'have'} notifications on, so ${whose(to)} phone has already been told. No need to text this one.`) + leaves;
+        lede.textContent = (direct ? `${Whose(to)} phone has been told. No link needed.` : `${to || 'They'} ${to ? 'has' : 'have'} notifications on, so ${whose(to)} phone has already been told. No need to text this one.`) + extra;
       } else if (direct) {
         if (madeSt) madeSt.mode = 'fallback';
         el.classList.remove('direct');
@@ -3996,6 +4148,12 @@ function wire() {
   for (const c of $('moods').children) c.addEventListener('click', () => { deskMood = c.dataset.mood; sky(deskMood); for (const o of $('moods').children) o.classList.toggle('on', o === c); });
   $('mobileAsk').addEventListener('click', () => { mobileOpen = true; mobileShow(true); $('mobile').focus(); });
   $('tuckAdd').addEventListener('click', () => tuckDraw(true));
+  $('whenAdd').addEventListener('click', () => untilDraw(true));
+  $('whenNo').addEventListener('click', () => untilDraw());
+  $('whenDrop').addEventListener('click', () => { deskUntil = 0; untilDraw(); });
+  $('whenAt').addEventListener('change', () => { const v = $('whenAt').value; if (v) untilSet(new Date(v).getTime()); });
+  $('castA').addEventListener('click', () => desk({ cast: true }));
+  $('castB').addEventListener('click', () => desk({ cast: true }));
   $('tuckDrop').addEventListener('click', () => { deskTuck = ''; tuckDraw(); });
   $('sandAdd').addEventListener('click', () => sandPad());
   $('sandShow').addEventListener('click', (e) => { if (e.target.id !== 'sandDrop') sandPad(); });       // a tap on what was written opens it to change
@@ -4028,7 +4186,7 @@ function wire() {
   $('several').addEventListener('click', () => { picking = picking ? null : new Set(); people(); });
   $('editPeople').addEventListener('click', () => { editing = !editing; picking = null; people(); });
   $('toHome').addEventListener('click', () => desk({}));
-  const back = () => { compose.classList.remove('show'); if (bottle) { sky(shown.mood); $('letter').classList.add('show'); } };
+  const back = () => { compose.classList.remove('show'); if (bottle) { sky(shown.mood); if (locked) waitShow(); else $('letter').classList.add('show'); } };
   $('backToNote').addEventListener('click', back);
   $('homeBack').addEventListener('click', back);
   // Android: choose them from the phone's own contacts. The phone shows its list; only the one name and number chosen come back.
@@ -4179,11 +4337,12 @@ if (scene) setTimeout(() => count('view', scene.info() + (scene.flat ? ` | 3D re
 else count('f_nogl', `nothing to draw on: ${why3D} | ${document.visibilityState} ${innerWidth}x${innerHeight}`);
 count(bottle ? (seeing ? 'see' : rereading ? 'reread' : 's_open') : 'desk', bottle ? bottle.mood + (bottle.key ? '' : ' old link') : '');
 // A beach was asked for from a page that was showing a bottle: the page was loaded again as the list, and the beach opens over it.
+if (locked) count('later', seeing ? 'the writer looked at what they will see' : 'found still at sea');
 let visitNext = '';
 try { visitNext = (!linked && !hop && sessionStorage.getItem('bottle-visit')) || ''; sessionStorage.removeItem('bottle-visit'); } catch {}
 if (bottle) sky(bottle.mood);
 if (beach) { shoreKeeps(readOnes().length); beachLoad(); }
-else if (bottle) { const known = bottle.key ? kept(bottle.key).filter((n) => !isLamp(n) && !isSand(n)) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
+else if (bottle && !locked) { const known = bottle.key ? kept(bottle.key).filter((n) => !isLamp(n) && !isSand(n)) : []; shoreKeeps(known.length + (among(known, bottle) ? 0 : 1)); }
 if (invite) count('gather', 'opened an invitation');
 if (sandMsg) count('sand', 'opened');
 lantern();
@@ -4194,7 +4353,7 @@ if (!scene) {
   // Nothing to draw on at all. The words still get through.
   ready();
   $('veil').classList.add('up');
-  if (bottle) showLetter(true); else if (sandMsg) sandShow(); else { desk(invite ? { join: true } : {}); if (visitNext) showBeach(visitNext); }
+  if (bottle) { if (locked) waitShow(); else showLetter(true); } else if (sandMsg) sandShow(); else { desk(invite ? { join: true } : {}); if (visitNext) showBeach(visitNext); }
 } else {
   run();
 }
@@ -4280,7 +4439,7 @@ function run() {
   if (reading) {
     // The first touch has to be a real click for iPhone to allow sound and motion.
     cv.addEventListener('click', (e) => {
-      if (story.state !== 'arrive') return;
+      if (story.state !== 'arrive' || locked) return;      // a sealed bottle stays out at sea: the story does not start
       if (!seeing) count('s_touch');
       audio.unlock();
       askMotion();
@@ -4299,7 +4458,8 @@ function run() {
     cv.addEventListener('pointercancel', up);
     $('skip').addEventListener('click', () => { count('skip', 'stuck at: ' + story.state); audio.unlock(); audio.play('reveal'); story.state = 'reading'; story.seen = true; story.lift = 1; showLetter(false); });
   }
-  if (reading && rereading) { story.state = 'reading'; story.seen = true; story.lift = 1; showLetter(false); }
+  if (locked) waitShow();
+  else if (reading && rereading) { story.state = 'reading'; story.seen = true; story.lift = 1; showLetter(false); }
   addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('visibilitychange', () => { if (audio.ctx && document.visibilityState === 'visible') audio.ctx.resume(); });
 
@@ -4359,7 +4519,7 @@ function run() {
 
     if (reading) {
       const many = beach && beachNotes && story.state === 'arrive' ? beachNotes.length : 0;
-      const h = many > 1 ? `${many} bottles washed up for you. Touch the water` : story.hint();
+      const h = locked ? '' : many > 1 ? `${many} bottles washed up for you. Touch the water` : story.hint();
       if (h !== hintText) { hintText = h; hintEl.textContent = h; hintEl.classList.toggle('show', !!h); hintEl.classList.toggle('big', story.state === 'arrive'); }
       // the ghost finger
       const cue = story.cue();
@@ -4370,7 +4530,7 @@ function run() {
         finger.style.opacity = cueT < 0.08 ? cueT / 0.08 : cueT > 0.75 ? Math.max(0, 1 - (cueT - 0.75) / 0.2) : 1;
       } else { finger.style.opacity = 0; cueT = 0; }
       // a way out for anyone who is stuck
-      if ((seeing || story.idle > 16) && story.state !== 'reading') $('skip').classList.add('show');
+      if ((seeing || story.idle > 16) && story.state !== 'reading' && !locked) $('skip').classList.add('show');
       // shells fade away while a note is being read: the page lays its words and buttons over that sand
       scene.keepHide = (scene.keepHide || 0) + ((story.state === 'reading' ? 1 : 0) - (scene.keepHide || 0)) * Math.min(1, dt * 2.5);
     }
@@ -4378,7 +4538,8 @@ function run() {
     const held = story.state !== 'arrive' && story.state !== 'adrift';
     const zs = swash(story.bx, t);
     // The camera. It starts on the horizon, comes down to the sand when the bottle shows, and follows the phone a little.
-    const goalY = visiting ? 0.05 : !reading ? 0.1 : story.state === 'arrive' ? 0.44 : story.state === 'adrift' ? (story.seen ? 0.0 : 0.3) : 0.16;
+    if (casting) { casting.t += dt; if (casting.t >= CAST_SECS) castDone(); }
+    const goalY = visiting ? 0.05 : casting ? 0.34 : !reading ? 0.1 : story.state === 'arrive' ? 0.44 : story.state === 'adrift' ? (story.seen ? 0.0 : 0.3) : 0.16;
     camY += (goalY - camY) * Math.min(1, dt * 1.1);
     let lx = 0.035 * Math.sin(t * 0.21), ly = 0.02 * Math.sin(t * 0.17 + 1);
     if (story.motion) {
@@ -4390,10 +4551,10 @@ function run() {
     scene.cam.target = [look[0] * 1.5 * amount, camY - look[1] * 1.1 * amount, -1.5];
     const wider = visiting ? 1.26 : 1;
     if (Math.abs(wide - wider) > 0.001) { wide += (wider - wide) * Math.min(1, dt * 2.4); scene.cam.fov = baseFov * wide; }
-    const dimTo = visiting || (sandMsg && $('sand').classList.contains('wait')) ? 0 : 0.35;
+    const dimTo = visiting || casting || (sandMsg && $('sand').classList.contains('wait')) ? 0 : 0.35;
     dimNow += (dimTo - dimNow) * Math.min(1, dt * 3);
     // the ring over each shell follows the picture
-    if (visiting) for (const m of visiting.marks) { const p = scene.project([m.s.x, 0, m.s.z]); m.el.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)`; m.el.style.opacity = m.s.a > 0.5 ? '1' : '0'; }
+    placeMarks();
     scene.draw({
       time: t,
       dim: reading ? (held ? 0.55 * Math.min(1, story.lift) + (story.state === 'reading' ? 0.25 : 0) : 0) : dimNow,
@@ -4402,7 +4563,7 @@ function run() {
       bottle: reading && story.visible ? story.bottleMatrix() : null,
       cork: reading ? story.corkMatrix() : null,
       note: reading ? story.noteMatrix() : null,
-      others: stillOut(t),
+      others: locked ? [floating(0, t)] : casting ? [drifting(Math.min(1, casting.t / CAST_SECS), t)] : stillOut(t),
       noteOut: story.note > 0.55,
       wet: held ? Math.max(0, 1 - story.st / 9) * (story.state === 'held' ? 1 : 0.4) : (zs > story.bz - 0.3 ? 1 : 0.6),
     });

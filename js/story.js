@@ -24,6 +24,17 @@ export function floating(i, t) {
   return M.mul(M.translate(x, 0.16 * LIE + 0.004 + 0.014 * Math.sin(t * 2.1 + i * 2.3), z), M.mul(rot, M.scale(LIE)));
 }
 
+/**
+ * A bottle cast out to sea, for no one: it rides out from the surf to the horizon and is gone. k runs from 0 to 1.
+ * The same kind of thing as floating(), so it is drawn the same way.
+ */
+export function drifting(k, t) {
+  const e = k * k * (3 - 2 * k);
+  const z = -0.75 - e * 8.6, x = 0.22 * Math.sin(k * 2.6) + 0.05 * Math.sin(t * 0.31);
+  const rot = M.mul(M.rotY(0.4 + 0.9 * k + 0.25 * Math.sin(t * 0.4)), M.mul(M.rotZ(-Math.PI / 2), M.rotY(t * 0.15)));
+  return M.mul(M.translate(x, 0.16 * LIE + 0.004 + 0.014 * Math.sin(t * 2.1), z), M.mul(rot, M.scale(LIE)));
+}
+
 export class Story {
   /** view: { W, H, project(world), ground(sx, sy, y), basis() } */
   constructor(view) {

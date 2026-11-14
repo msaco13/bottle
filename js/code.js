@@ -19,6 +19,9 @@
 //              "s": not a bottle at all, but something written in the sand (see sand.js). pic is the secret of what was written.
 //   [message, name, mood, to, key, claim, pic, g, tuck]  added later still, optional:
 //        tuck  one letter: something small tucked in with the note (a pressed flower, a feather...). See TUCKS.
+//   [message, name, mood, to, key, claim, pic, g, tuck, when]  added later still, optional:
+//        when  the bottle is sealed until this time: minutes since 1970, written in base 36. Before then the page shows it
+//              out at sea. A courtesy, not a lock: the note is in the link, as it always is.
 // Plain base64 on purpose (no compression): it opens on every phone, old or new.
 //
 // PROMISE: every link ever made must keep opening. New things may only be added
@@ -31,10 +34,13 @@ export const MOODS = { dusk: '', night: 'n', dawn: 'a' };
 const MOOD_OF = { n: 'night', a: 'dawn' };
 /** What can be tucked into a bottle with the note: one letter in the link, and the words for it. The drawings are in main.js. */
 export const TUCKS = { f: 'a pressed flower', c: 'a four-leaf clover', q: 'a feather', k: 'a small key', h: 'a heart-shaped stone', t: 'a ticket' };
+/** A time a bottle is sealed until, read from its link: milliseconds, or 0 if it is not one. */
+const whenOf = (x) => { const m = typeof x === 'string' && /^[0-9a-z]{5,7}$/.test(x) ? parseInt(x, 36) : 0; return m > 1e7 && m < 9e7 ? m * 60000 : 0; };       // 1989 to 2141: anything else is not a time
 const isTuck = (x) => typeof x === 'string' && Object.prototype.hasOwnProperty.call(TUCKS, x);
 
 /** bottle: { message, name, mood, to, key, claim, pic } */
-export function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '', g = '', tuck = '') {
+export function encode(message, name = '', mood = 'dusk', to = '', key = '', claim = '', pic = '', g = '', tuck = '', when = 0) {
+  const at = !g && Number(when) > 0 ? Math.round(Number(when) / 60000).toString(36) : '';
   const list = [
     String(message).slice(0, MAX_MESSAGE),
     String(name || '').trim().slice(0, MAX_NAME),
@@ -45,6 +51,7 @@ export function encode(message, name = '', mood = 'dusk', to = '', key = '', cla
     /^[A-Za-z0-9_-]{22}$/.test(pic || '') ? pic : '',
     g === 'i' || g === 'o' || g === 's' ? g : '',
     isTuck(tuck) && !g ? tuck : '',                    // only a bottle carries one: not an invitation, a beach from everyone, or the sand
+    whenOf(at) ? at : '',                              // and only a bottle can be sealed until a time
   ];
   while (list.length > 1 && list[list.length - 1] === '') list.pop();   // old-style links stay exactly as they were
   const bytes = new TextEncoder().encode(JSON.stringify(list));
@@ -80,6 +87,7 @@ export function decode(hash) {
       ...(pic ? { pic } : {}),          // only there when the bottle carries one: every older link reads exactly as it always did
       ...(g ? { g } : {}),
       ...(!g && isTuck(v[8]) ? { tuck: v[8] } : {}),
+      ...(!g && whenOf(v[9]) ? { when: whenOf(v[9]) } : {}),
     };
   } catch {
     return null;
@@ -87,5 +95,5 @@ export function decode(hash) {
 }
 
 export function linkFor(base, b) {
-  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic, b.g, b.tuck);
+  return String(base).replace(/[#?].*$/, '') + '#' + encode(b.message, b.name, b.mood, b.to, b.key, b.claim, b.pic, b.g, b.tuck, b.when);
 }
