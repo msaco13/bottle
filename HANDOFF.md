@@ -12,6 +12,18 @@ Real phones, 2026-11-13 (Michael's screenshots, his word, and the counter): two 
 
 What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a person): at 6:51 am Miami an "iPhone iOS 18.7 · Safari 27" drew the 3D beach on "Apple GPU" at 57 pictures a second, granted motion, popped the cork by tilt, read the note and took its seat. An Android (Adreno 750) also drew 3D. Chrome dressed as an iPhone does not report "Apple GPU", so these are taken to be real phones. That is the first sign the 3D shaders run on Apple's driver.
 
+## Where it is going (decided with Michael, 2026-11-14)
+
+Read this before building anything. The day before, six features went out in one day and the counter showed nobody had used the last three (a beach from everyone, a lantern for someone, writing in the sand). Michael's own words: "there should be more to it than just a message in a bottle." The answer agreed was that what is missing is not features but a clear job.
+
+- **What it is for: occasions.** A beach full of bottles for a birthday, a retirement, a goodbye, a memorial. That is what to tell people, and what to polish first.
+- **A reason to use it alone: "cast it out to sea".** Not built. A bottle for the things someone needs to say and cannot send: it is written, thrown out, and gone. Perhaps also a bottle to yourself that washes back up in a year. Today the page is useless without a friend at the other end.
+- **Stop adding to the two-person side** (shells, lanterns, sand, direct sending). It has plenty.
+- **The test that would settle it**: one real beach for a real person, with eight or ten people adding bottles. Michael was asked whether an occasion is coming up; not answered yet.
+- **Owed before more features**: "move my shore to a new phone" (clearing browser data or changing phones loses every conversation), and a trimmed writing page (it now offers a picture, the sand, a sky, a mobile number and a beach all at once).
+- **Still unproven on a real phone**: the beach from everyone, lanterns, sand, and an iPhone receiving any notification. Only two or three friends have used it, and Michael has not advertised it.
+- Working habits that held up: publish small, check the live site byte for byte after each publish (`test/live.smoke.mjs`), read the counter before believing anything about real phones, and run `test/sender.check.mjs` before and after touching the notification sender.
+
 ## The promises
 
 1. **Links already sent keep working.** The link format only grows by adding optional fields on the end. `test/code.test.mjs` holds real links from the first version (`SENT`). Never edit that list. If that test fails, do not publish. `npm run watch` also checks an old link against the live code.
@@ -234,7 +246,7 @@ stats.html        the stats page
 ops/notify/       the notification sender (deployed to Supabase) and its Web Push code
 ops/make-icons.mjs  draws the icons
 ops/watch.yml     the GitHub schedule for the watch (not switched on)
-test/             code, keeps, story, flat, thread, pic, sand, push (npm test); live, watch and app.browser (by hand)
+test/             code, keeps, story, flat, thread, pic, sand, push (npm test); live, watch, app.browser, live.smoke and sender.check (by hand)
 ops/sql/          server functions added since the first build, kept here so the database can be rebuilt
 ```
 
