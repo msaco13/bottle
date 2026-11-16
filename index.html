@@ -14,16 +14,17 @@
 <meta name="theme-color" content="#1a1430">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="format-detection" content="telephone=no">
-<title>A message in a bottle</title>
+<title>Cast Your Bottle: a message in a bottle</title>
 <meta name="description" content="Something washed ashore for you.">
 <meta property="og:title" content="A message in a bottle">
 <meta property="og:description" content="Something washed ashore for you. Tap to open it, then write back.">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="Cast Your Bottle">
 <meta property="og:image" content="https://castyourbottle.com/og.jpg">
 <meta property="og:url" content="https://castyourbottle.com/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.500' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=05657d8e2c">
+<link rel="stylesheet" href="css/style.css?v=0e35161cda">
 </head>
 <body>
 <div id="stage">
@@ -54,7 +55,7 @@
       <div id="shelf"></div>
       <div class="lantern" id="lanternA"></div>
       <button class="link keep" type="button" id="keepA">Keep Bottle on your home screen</button>
-      <button class="link how" type="button">How Bottle works</button>
+      <button class="link how" type="button">How it works</button>
     </div>
   </section>
 
@@ -73,11 +74,11 @@
       <button class="link" type="button" id="editPeople">Rename or remove someone</button>
       <div class="lantern" id="lanternD"></div>
       <button class="link keep" type="button" id="install">Keep Bottle on your home screen</button>
-      <button class="link how" type="button">How Bottle works</button>
+      <button class="link how" type="button">How it works</button>
       <button class="link" type="button" id="homeBack">Back to the note</button>
     </div>
     <form id="desk" autocomplete="off">
-      <div id="deskHead"><h1 id="deskTitle">Message in a bottle</h1><button class="how" type="button" id="howDesk" aria-label="How Bottle works">?</button></div>
+      <div id="deskHead"><h1 id="deskTitle">Cast your bottle</h1><button class="how" type="button" id="howDesk" aria-label="How it works">?</button></div>
       <div id="toChip"></div>
       <ol id="steps" aria-label="How it works">
         <li><b>1</b><span>Write a note</span></li>
@@ -109,8 +110,10 @@
         </div>
       </div>
       <label for="msg">Your message</label>
+      <div id="starts" role="group" aria-label="A few ways to begin"></div>
       <textarea id="msg" rows="5" maxlength="600" placeholder="Write it here"></textarea>
       <div class="count"><span id="left">600</span> characters left</div>
+      <button type="button" class="mood" id="moreAdd">Add something<span>a picture, a keepsake, a sky, a time to open</span></button>
       <div id="extras">
       <div id="picRow">
         <input type="file" id="picFile" accept="image/*" hidden>
@@ -178,6 +181,7 @@
       <a class="btn ghost" id="try" href="#">See what they will see</a>
       <div class="lantern" id="lanternB"></div>
       <button class="link keep" type="button" id="keepB">Keep Bottle on your home screen</button>
+      <button class="btn ghost" type="button" id="another">Who else deserves a bottle?</button>
       <button class="link" id="again">Write another</button>
       <button class="link" id="backToNote">Back to the note</button>
     </div>
@@ -233,7 +237,7 @@
   <!-- how it works, in six lines. Opened from the desk, the list of beaches, and under a note. -->
   <div id="howcard" role="dialog" aria-modal="true" aria-labelledby="howTitle">
     <div class="card">
-      <h1 id="howTitle">How Bottle works</h1>
+      <h1 id="howTitle">How Cast Your Bottle works</h1>
       <ol>
         <li><b>Write a note.</b> Up to 600 characters. Add a picture or a GIF, tuck in something small, or seal it until a day you choose.</li>
         <li><b>Send it in one tap.</b> Your messages open with the bottle already in place. Nothing to copy or paste.</li>
@@ -321,6 +325,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain("a file failed to load"); }, true);   // or a file failed outright
 })();
 </script>
-<script defer src="app.js?v=05657d8e2c"></script>
+<script defer src="app.js?v=0e35161cda"></script>
 </body>
 </html>

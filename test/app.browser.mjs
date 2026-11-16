@@ -176,7 +176,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('and the shore says a bottle is waiting', (await p.text('homeLede')) === 'A bottle is waiting for you.');
   await p.shot('6-home-waiting');
   await p.page.click('#newOne'); await p.page.waitForTimeout(300);
-  check('someone new: the full desk, with a way back', await p.shown('forRow') && await p.shown('toHome') && (await p.text('deskTitle')) === 'Message in a bottle');
+  check('someone new: the full desk, with a way back', await p.shown('forRow') && await p.shown('toHome') && (await p.text('deskTitle')) === 'Cast your bottle');
   await p.page.fill('#forWho', 'Ana'); await p.page.click('#mobileAsk'); await p.page.fill('#mobile', '+1 305 555 0199'); await p.page.fill('#msg', 'Hello.');
   await p.page.click('#make'); await p.page.waitForTimeout(600);
   const href = await p.page.evaluate(() => document.getElementById('text').getAttribute('href'));
@@ -564,7 +564,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   const d = await phone({});
   check('someone new is shown the three steps: write, text it, they write back', await d.shown('steps') && (await d.text('steps')).replace(/\s+/g, ' ').trim() === '1Write a note 2Text it in one tap 3They write back', (await d.text('steps')).replace(/\s+/g, ' '));
   await d.page.click('#howDesk'); await d.page.waitForTimeout(200);
-  check('"How Bottle works" opens six plain lines', await d.shown('howcard') && (await d.page.evaluate(() => document.querySelectorAll('#howcard li').length)) === 6 && (await d.text('howcard')).includes('Nothing to copy or paste.'));
+  check('"How it works" opens six plain lines', await d.shown('howcard') && (await d.page.evaluate(() => document.querySelectorAll('#howcard li').length)) === 6 && (await d.text('howcard')).includes('Nothing to copy or paste.'));
   await d.shot('14-how');
   await d.page.click('#howClose'); await d.page.waitForTimeout(200);
   check('and is put away with one tap', !(await d.shown('howcard')));
@@ -804,7 +804,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('and nothing was kept on the phone', await c.page.evaluate(() => !localStorage.getItem('bottle-notes') && !localStorage.getItem('bottle-threads') && document.getElementById('msg').value === '' && !JSON.stringify(Object.entries(localStorage)).includes('called more often')));
   await c.shot('17-gone');
   await c.page.click('#again'); await c.page.waitForTimeout(300);
-  check('afterwards the desk is the plain one again', await c.shown('desk') && (await c.text('deskTitle')) === 'Message in a bottle' && await c.shown('forWho'));
+  check('afterwards the desk is the plain one again', await c.shown('desk') && (await c.text('deskTitle')) === 'Cast your bottle' && await c.shown('forWho'));
   check('no errors', !c.errs.length, c.errs.join(' ; '));
   await c.ctx.close();
   // a phone with beaches is offered it on the list; a page showing a bottle is not
@@ -814,6 +814,43 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   await m.page.click('#castA'); await m.page.waitForTimeout(250);
   check('and gets the same desk, with the way back', (await m.text('deskTitle')) === 'Cast it out to sea' && await m.shown('toHome'));
   await m.ctx.close();
+}
+// 18. the desk as people see it: names, the words and the send button, with the rest behind "Add something"
+{
+  const p = await phone({ at: '?dev&fold', share: 'ok' });
+  check('the desk is called by the one name', (await p.text('deskTitle')) === 'Cast your bottle' && (await p.page.title()).startsWith('Cast Your Bottle'));
+  check('a new person sees names, the words and the send button, and little else', await p.shown('forWho') && await p.shown('who') && await p.shown('msg') && await p.shown('make') && !(await p.shown('picAdd')) && !(await p.shown('sandAdd')) && !(await p.shown('tuckAdd')) && !(await p.shown('whenAdd')) && !(await p.shown('moods')) && !(await p.shown('mobileAsk')));
+  check('the whole desk fits on the screen', (await p.page.evaluate(() => document.getElementById('compose').scrollHeight <= innerHeight)), String(await p.page.evaluate(() => document.getElementById('desk').offsetHeight)));
+  check('a blank page offers a few ways to begin', await p.shown('starts') && (await p.page.evaluate(() => document.querySelectorAll('#starts button').length)) === 6);
+  await p.shot('18-desk-simple');
+  await p.page.click('#starts button:first-child'); await p.page.waitForTimeout(150);
+  check('a tap puts the first words down and steps aside', (await p.page.evaluate(() => document.getElementById('msg').value)) === 'Happy birthday! ' && !(await p.shown('starts')) && (await p.text('left')) === '584');
+  check('"Add something" says what is behind it', await p.shown('moreAdd') && (await p.text('moreAdd')).startsWith('Add something'));
+  await p.page.click('#moreAdd'); await p.page.waitForTimeout(150);
+  check('one tap brings out the picture, the sand, the keepsake, the seal, the sky and their number', await p.shown('picAdd') && await p.shown('sandAdd') && await p.shown('tuckAdd') && await p.shown('whenAdd') && await p.shown('moods') && await p.shown('mobileAsk') && !(await p.shown('moreAdd')));
+  await p.shot('18-desk-open');
+  await p.page.fill('#forWho', 'Ana'); await p.page.fill('#who', 'Mike');
+  await p.page.click('#make'); await p.page.waitForTimeout(1200);
+  check('after sending, the page asks who else deserves one', await p.shown('another') && (await p.text('another')) === 'Who else deserves a bottle?' && (await p.text('madeTitle')) === 'Off it goes');
+  await p.shot('18-who-else');
+  await p.page.click('#another'); await p.page.waitForTimeout(300);
+  check('and that leads to a fresh, simple desk', await p.shown('desk') && (await p.text('deskTitle')) === 'Cast your bottle' && (await p.page.evaluate(() => document.getElementById('msg').value)) === '' && !(await p.shown('picAdd')) && await p.shown('toHome'));
+  check('no errors', !p.errs.length, p.errs.join(' ; '));
+  await p.ctx.close();
+  // an answer is simple too, and has no starters; casting out shows its sky without a fold
+  const { linkFor } = await import('../js/code.js');
+  const r = await phone({ at: linkFor('http://localhost:8899/', { message: 'Dinner?', name: 'Mike', mood: 'dusk', to: 'Ana', key: 'rrrrrrrrrrrrrrrrrrrrrr', claim: 'cccccccccccccccc' }).replace('http://localhost:8899/', '').replace('#', '?dev&fold#') });
+  await r.page.touchscreen.tap(20, 20);
+  await r.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(1); window.dev.hold = true; });
+  await r.page.waitForFunction(() => getComputedStyle(document.getElementById('after')).opacity === '1', null, { timeout: 30000 });
+  await r.page.click('#reply'); await r.page.waitForTimeout(400);
+  check('writing back is simple too, with no starters', await r.shown('msg') && await r.shown('moreAdd') && !(await r.shown('picAdd')) && !(await r.shown('starts')));
+  await r.shot('18-desk-back');
+  await r.ctx.close();
+  const c = await phone({ at: '?dev&fold' });
+  await c.page.click('#castB'); await c.page.waitForTimeout(250);
+  check('casting one out shows its sky, with nothing folded away', await c.shown('moods') && !(await c.shown('moreAdd')) && !(await c.shown('starts')));
+  await c.ctx.close();
 }
 await browser.close();
 const bad = results.filter((r) => !r[0]);
