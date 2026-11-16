@@ -9,7 +9,7 @@
 
 import { SERVER } from '../js/thread.js';
 
-const SITE = process.env.SITE || 'https://msaco13.github.io/bottle/';
+const SITE = process.env.SITE || 'https://castyourbottle.com/';
 const LIMIT = Number(process.env.LIMIT || 3);
 const bad = [];
 const note = (ok, what) => { console.log((ok ? 'ok    ' : 'WRONG ') + what); if (!ok) bad.push(what); };

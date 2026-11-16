@@ -66,8 +66,8 @@ assert.equal(encode('No name on this one.'), SENT[4][0]);
 assert.equal(decode(encode('m', 'n', 'dusk', 't', 'short')).key, '');
 assert.equal(decode(encode('m', 'n', 'dusk', 't', KEY, 'tiny')).claim, '', 'a seat that is not a seat is dropped');
 assert.equal(encode('m', 'n', 'dusk', 't', KEY), encode('m', 'n', 'dusk', 't', KEY, ''), 'no seat, no sixth field: links made before seats read the same');
-const long = linkFor('https://msaco13.github.io/bottle/', { message: 'x'.repeat(MAX_MESSAGE), name: 'N', mood: 'night', to: 'T', key: KEY });
-const typical = linkFor('https://msaco13.github.io/bottle/', { message: cases[0][0], name: 'Michael', mood: 'dusk', to: 'Ana', key: KEY });
+const long = linkFor('https://castyourbottle.com/', { message: 'x'.repeat(MAX_MESSAGE), name: 'N', mood: 'night', to: 'T', key: KEY });
+const typical = linkFor('https://castyourbottle.com/', { message: cases[0][0], name: 'Michael', mood: 'dusk', to: 'Ana', key: KEY });
 console.log(`longest possible link: ${long.length} characters. A typical reply: ${typical.length}`);
 assert(long.length < 1000);
 assert.equal(decode('#' + encode('y'.repeat(900))).message.length, MAX_MESSAGE, 'over-long messages are cut, not broken');
@@ -89,7 +89,7 @@ assert.equal(decode('#' + e.slice(0, 20) + '\n ' + e.slice(20)).name, 'Sam');
   assert.equal('pic' in decode(SENT[1][0]), false, 'an old link has never heard of pictures');
   assert.equal(encode('m', 'n', 'dusk', 't', KEY, 'seatseatseatseat'), encode('m', 'n', 'dusk', 't', KEY, 'seatseatseatseat', ''), 'no picture, no seventh field');
   assert.equal(decode(linkFor('https://a.test/', { message: 'hi', pic: PIC }).split('#')[1]).pic, PIC);
-  const longest = linkFor('https://msaco13.github.io/bottle/', { message: 'x'.repeat(MAX_MESSAGE), name: 'N'.repeat(40), mood: 'night', to: 'T'.repeat(40), key: KEY, claim: 'seatseatseatseat', pic: PIC });
+  const longest = linkFor('https://castyourbottle.com/', { message: 'x'.repeat(MAX_MESSAGE), name: 'N'.repeat(40), mood: 'night', to: 'T'.repeat(40), key: KEY, claim: 'seatseatseatseat', pic: PIC });
   assert(longest.length < 1100, 'the longest link with a picture: ' + longest.length);
 }
 // a beach many people fill for one person: an eighth optional field, and its link needs no words of its own
