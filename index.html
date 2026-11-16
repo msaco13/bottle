@@ -23,8 +23,8 @@
 <meta property="og:image" content="https://castyourbottle.com/og.jpg">
 <meta property="og:url" content="https://castyourbottle.com/">
 <meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.500' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=8d2c4ba972">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.5' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css?v=b75594cc96">
 </head>
 <body>
 <div id="stage">
@@ -69,13 +69,23 @@
       <div id="gathers"></div>
       <button class="btn" type="button" id="newOne">A bottle for someone new</button>
       <button class="link" type="button" id="several">One bottle for several people</button>
-      <button class="link" type="button" id="gatherA">A beach full of bottles for someone, from everyone</button>
-      <button class="link" type="button" id="castA">Cast a bottle out to sea, for no one</button>
       <button class="link" type="button" id="editPeople">Rename or remove someone</button>
-      <div class="lantern" id="lanternD"></div>
-      <button class="link keep" type="button" id="install">Keep Bottle on your home screen</button>
-      <button class="link how" type="button">How it works</button>
+      <!-- not on this phone's home screen yet: say why it is worth it, and make it one tap where the phone allows -->
+      <div id="keepCard">
+        <b>Keep it on your phone</b>
+        <span id="keepSay">Put Cast Your Bottle on your home screen, so your beaches are one tap away.</span>
+        <button class="btn ghost keep" type="button" id="install">Add to my home screen</button>
+        <button class="btn ghost" type="button" id="installIos">Show me how</button>
+      </div>
       <button class="link" type="button" id="homeBack">Back to the note</button>
+    </div>
+    <!-- more: everything that is not the list of people or the page for writing -->
+    <div id="moreTab">
+      <h1>More</h1>
+      <button class="row" type="button" id="gatherA"><span class="rowWho">A beach from everyone</span><span class="rowSub">For a birthday or a send-off: many people each add a bottle for one person</span></button>
+      <button class="row" type="button" id="castA"><span class="rowWho">Cast one out to sea</span><span class="rowSub">For no one. Write what you cannot send, and watch it go</span></button>
+      <button class="row how" type="button"><span class="rowWho">How it works</span><span class="rowSub">Six plain lines</span></button>
+      <div class="lantern" id="lanternD"></div>
     </div>
     <form id="desk" autocomplete="off">
       <div id="deskHead"><h1 id="deskTitle">Cast your bottle</h1><button class="how" type="button" id="howDesk" aria-label="How it works">?</button></div>
@@ -186,6 +196,13 @@
       <button class="link" id="backToNote">Back to the note</button>
     </div>
   </section>
+
+  <!-- always the same three places: the list of beaches, the page for writing, and everything else -->
+  <nav id="tabs" aria-label="Cast Your Bottle">
+    <button type="button" id="tabHome"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5V20h-5.5v-5.5h-5V20H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Home</button>
+    <button type="button" id="tabWrite"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19l1-4L16.5 4.5l3 3L9 18z M14.5 6.5l3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Write</button>
+    <button type="button" id="tabMore"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="18.5" cy="12" r="1.7" fill="currentColor"/></svg>More</button>
+  </nav>
 
   <!-- iPhone: how to put the page on the Home Screen, so a bottle can announce itself -->
   <div id="homecard" role="dialog" aria-modal="true" aria-labelledby="homeTitle">
@@ -325,6 +342,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain("a file failed to load"); }, true);   // or a file failed outright
 })();
 </script>
-<script defer src="app.js?v=8d2c4ba972"></script>
+<script defer src="app.js?v=b75594cc96"></script>
 </body>
 </html>

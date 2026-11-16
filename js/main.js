@@ -338,12 +338,11 @@ function lantern() {
     if (!el) continue;
     el.textContent = '';
     if (st === 'none') continue;
-    if (onDesk && !(st === 'lit' || standalone || threads().length)) continue;      // the desk only mentions it to people it could help
+    if (id === 'lanternC' && !(st === 'lit' || standalone || threads().length)) continue;      // the desk only mentions it to people it could help; the More page always has it
     // In the Home Screen app, lighting it is the first thing to do, so it goes at the very top.
     // On the desk it goes at the foot, under everything: the page is for writing, and the top of it is the title and the words.
     // (It used to sit at the very top in the Home Screen app, where it pushed the desk off the screen.)
     if (id === 'lanternC') $('desk').appendChild(el);
-    if (id === 'lanternD') { if (standalone && st !== 'lit') $('home').insertBefore(el, $('people')); else $('newOne').after(el); }
     const say = (t) => { const p = document.createElement('p'); p.className = 'lanternSay'; p.textContent = t; el.appendChild(p); };
     const btn = (t, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = t; b.onclick = fn; el.appendChild(b); return b; };
     if (id === 'lanternC' && carriedLost && !threads().length) say('If you already have bottles in Safari, they did not come across. To bring them: in Safari, open any bottle, tap "Turn on notifications", and add it to the Home Screen again.');
@@ -870,7 +869,7 @@ function pickWords(count) {
   if (editing) { $('several').style.display = 'none'; $('homeLede').textContent = 'Change a name, or take a beach off this phone.'; return; }
   $('several').style.display = count > 1 ? 'block' : 'none';
   $('several').textContent = on ? 'Never mind' : 'One bottle for several people';
-  $('newOne').textContent = on ? (n < 2 ? 'Choose two or more' : `Write to these ${n}`) : 'A bottle for someone new';
+  $('newOne').textContent = on ? (n < 2 ? 'Choose two or more' : `Write to these ${n}`) : count || gathers().length ? 'A bottle for someone new' : 'Write your first bottle';
   $('newOne').disabled = on && n < 2;
   if (on) $('homeLede').textContent = 'Tap everyone this bottle is for. Each of them gets their own.';
 }
@@ -945,7 +944,8 @@ async function people() {
     const lit = found.filter((f) => f.lamp);
     lampHere = lit.length > 0;
     if (scene) scene.lamp = standing() === 'lit' || lampHere ? 1 : 0;
-    $('homeLede').textContent = found.some((f) => f.isNew) ? 'A bottle is waiting for you.' : lit.length ? `${lit[0].who || 'Someone'} lit a lantern for you.` : 'One beach for each person you trade bottles with. Tap a name to visit it.';
+    $('homeLede').textContent = found.some((f) => f.isNew) ? 'A bottle is waiting for you.' : lit.length ? `${lit[0].who || 'Someone'} lit a lantern for you.` : found.length ? 'One beach for each person you trade bottles with. Tap a name to visit it.' : gathers().length ? 'The beaches you started for someone are below.' : 'No beaches yet. Send your first bottle and it starts one: a beach for you and the person you write to.';
+    keepCard();
     people.found = found;
     pickWords(found.length);
     drawGathers();
@@ -1171,7 +1171,10 @@ function desk(ctx) {
   compose.scrollTop = 0;
   wire();
   const known = threads().length > 0 || gathers().length > 0;
-  const home = known && !deskCtx.key && !deskCtx.to && !deskCtx.fresh && !deskCtx.many && !deskCtx.join && !deskCtx.gather && !deskCtx.cast;
+  // Home is where every visit starts and where the Home tab leads, whether or not this phone has any beaches yet.
+  const home = !deskCtx.key && !deskCtx.to && !deskCtx.fresh && !deskCtx.many && !deskCtx.join && !deskCtx.gather && !deskCtx.cast;
+  compose.classList.remove('more');
+  tabOn(home ? 'tabHome' : 'tabWrite');
   $('wait').classList.remove('show');
   $('castA').style.display = linked ? 'none' : '';      // cast from a plain page, where the sea is free to show it going
   if (!home) { picking = null; editing = false; }
@@ -1510,7 +1513,7 @@ function wire() {
 // under a note, on the "last step" screen and on the shore, so the first bottle someone reads can become a place
 // they come back to. (An iPhone has no such offer: its way is the Home Screen card, opened from "Turn on notifications".)
 let installOffer = null;
-const keepShow = () => { for (const b of document.querySelectorAll('.keep')) b.style.display = installOffer ? 'block' : 'none'; };
+const keepShow = () => { for (const b of document.querySelectorAll('.keep')) b.style.display = installOffer ? 'block' : 'none'; keepCard(); };
 addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installOffer = e; keepShow(); count('install', 'offered by the browser'); });
 addEventListener('appinstalled', () => { installOffer = null; keepShow(); count('install', 'installed', true); });
 for (const b of document.querySelectorAll('.keep')) b.addEventListener('click', async () => {
@@ -1524,6 +1527,32 @@ for (const b of document.querySelectorAll('.keep')) b.addEventListener('click', 
 for (const b of document.querySelectorAll('.how')) b.addEventListener('click', () => { $('howcard').classList.add('show'); count('how', 'opened', true); });
 $('howClose').addEventListener('click', () => $('howcard').classList.remove('show'));
 $('howcard').addEventListener('click', (e) => { if (e.target.id === 'howcard') $('howcard').classList.remove('show'); });
+
+// ---------------------------------------------------------------- the three tabs: Home, Write, More
+function tabOn(id) { for (const t of ['tabHome', 'tabWrite', 'tabMore']) $(t).classList.toggle('on', t === id); }
+/** Everything that is not the list of beaches or the page for writing. */
+function showMore() {
+  const compose = $('compose');
+  wire();
+  picking = null; editing = false;
+  compose.classList.remove('home', 'done');
+  compose.classList.add('show', 'more');
+  compose.scrollTop = 0;
+  $('castA').style.display = linked ? 'none' : '';
+  tabOn('tabMore');
+  lantern();
+  count('more', 'the More page', true);
+}
+$('tabHome').addEventListener('click', () => desk({}));
+$('tabWrite').addEventListener('click', () => desk({ fresh: true }));
+$('tabMore').addEventListener('click', showMore);
+/** On Home: the card that says to keep it on the phone, until it is there. One tap where the phone allows, the steps on an iPhone. */
+function keepCard() {
+  const android = !!installOffer, iphone = ios && !standalone && standing() === 'home';
+  $('keepCard').classList.toggle('on', !standalone && (android || iphone));
+  $('installIos').style.display = iphone && !android ? 'block' : 'none';
+}
+$('installIos').addEventListener('click', homeCard);
 
 /** The page has learned something new about this phone's people (the server answered, or the page came back to the front). */
 function homecoming() {
