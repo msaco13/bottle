@@ -3060,7 +3060,9 @@ function lantern() {
     if (st === 'none') continue;
     if (onDesk && !(st === 'lit' || standalone || threads().length)) continue;      // the desk only mentions it to people it could help
     // In the Home Screen app, lighting it is the first thing to do, so it goes at the very top.
-    if (id === 'lanternC') { if (standalone && st !== 'lit') $('desk').insertBefore(el, $('desk').firstChild); else $('make').after(el); }
+    // On the desk it goes at the foot, under everything: the page is for writing, and the top of it is the title and the words.
+    // (It used to sit at the very top in the Home Screen app, where it pushed the desk off the screen.)
+    if (id === 'lanternC') $('desk').appendChild(el);
     if (id === 'lanternD') { if (standalone && st !== 'lit') $('home').insertBefore(el, $('people')); else $('newOne').after(el); }
     const say = (t) => { const p = document.createElement('p'); p.className = 'lanternSay'; p.textContent = t; el.appendChild(p); };
     const btn = (t, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = t; b.onclick = fn; el.appendChild(b); return b; };
@@ -3090,7 +3092,7 @@ function lantern() {
         lanternSaid = litHere ? '' : how === 'refused' ? 'Notifications stay off. You can turn them on any time.'
           : 'Notifications could not be turned on (' + how.replace('failed: ', '') + '). Try again in a minute.';
         lantern();
-      }, standalone ? 'btn' : 'btn ghost');
+      }, standalone && id !== 'lanternC' ? 'btn' : 'btn ghost');
       say(lanternSaid || 'Then this phone tells you when a bottle arrives, and friends can send you one with no link to text.');
     }
   }

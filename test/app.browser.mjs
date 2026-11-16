@@ -852,6 +852,19 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('casting one out shows its sky, with nothing folded away', await c.shown('moods') && !(await c.shown('moreAdd')) && !(await c.shown('starts')));
   await c.ctx.close();
 }
+// 19. the installed app, notifications not yet on (as on Michael's phone, 2026-11-16): the offer must not push the desk off the screen
+{
+  const p = await phone({ at: '?dev&fold&standalone&lantern=can' });
+  await p.page.setViewportSize({ width: 394, height: 769 });
+  await p.page.waitForTimeout(300);
+  const box = (id) => p.page.evaluate((i) => { const r = document.getElementById(i).getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) }; }, id);
+  const title = await box('deskTitle'), more = await box('moreAdd'), make = await box('make'), lamp = await box('lanternC');
+  check('the title is the first thing on the desk, not the offer of notifications', title.top < 80 && lamp.top > make.bottom, JSON.stringify({ title, lamp }));
+  check('"Add something" is in full view above the send button', more.bottom <= make.top + 1 && make.bottom <= 769, JSON.stringify({ more, make }));
+  check('notifications are still offered, quietly, at the foot', (await p.text('lanternC')).startsWith('Turn on notifications') && await p.page.evaluate(() => document.querySelector('#lanternC button').classList.contains('ghost')));
+  await p.shot('19-installed');
+  await p.ctx.close();
+}
 await browser.close();
 const bad = results.filter((r) => !r[0]);
 console.log(bad.length ? `\n${bad.length} WRONG` : `\nall ${results.length} ok`);
