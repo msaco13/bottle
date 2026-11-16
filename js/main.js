@@ -597,6 +597,7 @@ function dropSand() {
 }
 /** Open the wet sand to write on. */
 function sandPad() {
+  $('desk').classList.remove('folded');             // what is written will be shown on the desk
   const [w, h] = sandSize();
   pad.strokes = deskSand ? deskSand.strokes.map((s) => s.slice()) : [];
   pad.cur = null; pad.aspect = w / h; pad.on = true; pad.g = sandFit();
@@ -757,6 +758,18 @@ function tuckDraw(picking) {
       pick.appendChild(b);
     }
   }
+}
+// A few ways to begin, for a blank page: a tap puts the first words down. Only for a bottle to someone new, and only while nothing is written.
+const STARTS = [['Happy birthday', 'Happy birthday! '], ['Thinking of you', 'Thinking of you. '], ['Thank you', 'Thank you for '], ['I\u2019m sorry', 'I\u2019m sorry. '], ['Congratulations', 'Congratulations! '], ['I miss you', 'I miss you. ']];
+function startsDraw() {
+  const el = $('starts'), msg = $('msg');
+  if (!el.firstChild) for (const [label, words] of STARTS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = label;
+    b.onclick = () => { msg.value = words; msg.focus(); try { msg.setSelectionRange(words.length, words.length); } catch {} $('left').textContent = String(MAX_MESSAGE - words.length); startsDraw(); count('more', 'began with: ' + label, true); };
+    el.appendChild(b);
+  }
+  el.classList.toggle('on', !msg.value);
 }
 // The time the bottle on the desk is sealed until, if any (milliseconds).
 let deskUntil = 0;
@@ -1134,7 +1147,7 @@ function deskWords() {
     return;
   }
   const to = deskCtx.to || '', direct = !!(deskCtx.key && reachOf(deskCtx.key).l), back = !!deskCtx.back;
-  $('deskTitle').textContent = to ? (back ? `Write back to ${to}` : `A bottle for ${to}`) : (deskCtx.key ? (back ? 'Write back' : 'Another bottle') : 'Message in a bottle');
+  $('deskTitle').textContent = to ? (back ? `Write back to ${to}` : `A bottle for ${to}`) : (deskCtx.key ? (back ? 'Write back' : 'Another bottle') : 'Cast your bottle');
   $('deskLede').textContent = direct ? `Write your note and tap send. ${to || 'They'} ${to ? 'has' : 'have'} notifications on, so it goes straight to ${whose(to)} phone. Nothing to copy or text.`
     : to || deskCtx.key ? `Write your note. Then one tap sends it to ${to || 'them'}, already written out. Nothing to copy or paste.`
     : 'Back and forth, as often as you both like. No app to download, no account.';
@@ -1182,6 +1195,9 @@ function desk(ctx) {
   dropPic();
   dropSand();
   deskTuck = ''; tuckDraw();
+  // Names, the words and the send button: everything else waits behind "Add something". (?dev shows it all, for building; add &fold to see it as people do.)
+  $('desk').classList.toggle('folded', !(qs.has('dev') && !qs.has('fold')) && !deskCtx.cast);
+  startsDraw();
   deskUntil = 0; untilDraw();
   $('whenRow').style.display = deskCtx.join || deskCtx.gather ? 'none' : '';      // a bottle on a beach from everyone is opened with all the others
   $('sandRow').style.display = deskCtx.many || deskCtx.join || deskCtx.gather ? 'none' : '';
@@ -1427,6 +1443,9 @@ function wire() {
   });
   for (const c of $('moods').children) c.addEventListener('click', () => { deskMood = c.dataset.mood; sky(deskMood); for (const o of $('moods').children) o.classList.toggle('on', o === c); });
   $('mobileAsk').addEventListener('click', () => { mobileOpen = true; mobileShow(true); $('mobile').focus(); });
+  $('moreAdd').addEventListener('click', () => { $('desk').classList.remove('folded'); count('more', 'opened', true); });
+  $('another').addEventListener('click', () => { count('more', 'who else deserves one', true); desk({ fresh: true }); });
+  msg.addEventListener('input', startsDraw);
   $('tuckAdd').addEventListener('click', () => tuckDraw(true));
   $('whenAdd').addEventListener('click', () => untilDraw(true));
   $('whenNo').addEventListener('click', () => untilDraw());
@@ -1499,7 +1518,7 @@ for (const b of document.querySelectorAll('.keep')) b.addEventListener('click', 
   try { offer.prompt(); const c = await offer.userChoice; count('install', ((c && c.outcome) || '') + ' (' + b.id + ')', true); } catch {}
   keepShow();
 });
-// "How Bottle works": five lines, a tap away wherever someone might be wondering.
+// "How it works": six lines, a tap away wherever someone might be wondering.
 for (const b of document.querySelectorAll('.how')) b.addEventListener('click', () => { $('howcard').classList.add('show'); count('how', 'opened', true); });
 $('howClose').addEventListener('click', () => $('howcard').classList.remove('show'));
 $('howcard').addEventListener('click', (e) => { if (e.target.id === 'howcard') $('howcard').classList.remove('show'); });

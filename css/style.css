@@ -293,6 +293,18 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 #steps li { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 4px 9px; border-radius: 14px; background: rgba(255, 240, 220, 0.07); border: 1px solid var(--line); text-align: center; font-size: 13.5px; line-height: 1.25; color: var(--ink); position: relative; }
 #steps b { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #2b1a0c; background: linear-gradient(180deg, #ffe0b4, #ffc07a); }
 #steps li + li::before { content: ""; position: absolute; left: -7px; top: 21px; width: 8px; height: 1px; background: rgba(255, 201, 138, 0.6); }
+/* the desk asks for names, the words and the send button. Everything else waits behind "Add something". */
+#desk.folded #extras, #desk.folded #extras2, #desk.folded #moodsLabel, #desk.folded #moods, #desk.folded #mobileAsk, #desk.folded #mobileRow { display: none !important; }
+#moreAdd { display: none; flex: none; width: 100%; padding: 11px 14px; font-size: 14.5px; }
+#moreAdd span { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: var(--dim); }
+#desk.folded #moreAdd { display: block; }
+#desk.cast #moreAdd { display: none; }
+/* a few ways to begin, for a blank page */
+#starts { display: none; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; touch-action: pan-x; }
+#starts::-webkit-scrollbar { display: none; }
+#desk.first #starts.on { display: flex; }
+#starts button { flex: none; appearance: none; font: inherit; font-size: 13.5px; color: var(--ink); background: rgba(255, 240, 220, 0.08); border: 1px solid var(--line); border-radius: 14px; padding: 7px 12px; cursor: pointer; }
+#made.gather #another, #made.many #another, #made.busy #another { display: none; }
 /* the last step: where the phone can send it in one tap, the bare link stays out of sight */
 #made.sheet #link { display: none; }
 #madeNext { color: var(--gold); margin: 2px 0 0; }
@@ -351,7 +363,9 @@ textarea:focus, input[type=text]:focus, input[type=tel]:focus, input[type=dateti
 .btn:active { transform: scale(0.985); }
 /* The button that makes the bottle never leaves the screen, however short the phone or however long the page */
 #make { position: sticky; bottom: 10px; z-index: 2; box-shadow: 0 10px 26px rgba(255, 170, 90, 0.28), 0 0 0 7px rgba(34, 24, 42, 0.6); }
-@media (max-height: 700px) { #desk.first #deskLede, #desk.gather #deskLede { display: none; } #desk { padding-top: 18px; gap: 8px; } }
+/* for someone new the three steps say it: the line under them is not needed */
+#desk.first #deskLede { display: none; }
+@media (max-height: 700px) { #desk.gather #deskLede { display: none; } #desk { padding-top: 18px; gap: 8px; } }
 @media (max-height: 600px) { textarea { min-height: 96px; } }
 #names { display: flex; gap: 10px; }
 #names > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }

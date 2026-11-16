@@ -14,6 +14,19 @@ Real phones, 2026-11-13 (Michael's screenshots, his word, and the counter): two 
 
 What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a person): at 6:51 am Miami an "iPhone iOS 18.7 · Safari 27" drew the 3D beach on "Apple GPU" at 57 pictures a second, granted motion, popped the cork by tilt, read the note and took its seat. An Android (Adreno 750) also drew 3D. Chrome dressed as an iPhone does not report "Apple GPU", so these are taken to be real phones. That is the first sign the 3D shaders run on Apple's driver.
 
+## A simpler desk, one name, and reasons to send (2026-11-16)
+
+Michael, looking at it on his own phone at the new address: the page is cluttered, and how does it grow? The counter for 13 to 15 November said receiving works (26 bottles opened, 26 read to the end) and that nobody had used anything added on the 14th.
+
+- **The desk asks for names, the words and the send button.** The picture, the sand, the keepsake, the seal, the sky and their mobile number wait behind one button, "Add something". Writing in the sand opens it by itself. Casting one out shows its sky with nothing folded. For someone new the three steps stand in for the line of text under them, so the whole desk fits one screen (390 by 844).
+- **With `?dev` the desk is shown unfolded**, so the older checks still reach every button; add `&fold` to see it as people do.
+- **One name: "Cast Your Bottle"**, to match the address. The desk's title, the page's title, the name in the two manifests and the "How it works" card use it. The home screen label stays "Bottle" (a long name is cut off there), and what a recipient sees in a text preview is still "A message in a bottle".
+- **A few ways to begin** on a blank page for someone new: Happy birthday, Thinking of you, Thank you, I'm sorry, Congratulations, I miss you. A tap puts the first words down. They go away once anything is written.
+- **"Who else deserves a bottle?"** on the screen after sending. It grows only one way: a bottle someone receives is the advertisement, so what matters is people sending to someone new and not only writing back.
+- Counted as `more` (named on the stats page; not yet in the list inside `event_stats`).
+- Tested: 12 new browser checks (232 in all). **Not tested**: any real phone.
+- **Agreed next, and not built**: one real beach from everyone for a real occasion, as the test of whether people want it. No advertising before that.
+
 ## Sealed until a time, and cast out to sea (2026-11-14, night)
 
 Michael's go: "proceed with your best recommendations". PR #15 (writing back, what a beach is, tucking in) was merged and checked live first (version `3d30c336a0`, the two files byte for byte, `test/live.smoke.mjs` on the real site). What is described here went out as PR #16 and was checked the same way (version `05657d8e2c`). Then two of the three things offered were built. The third, a voice in the bottle, was held back on purpose: an iPhone and an Android record in different formats, and neither can be tried here.
@@ -187,7 +200,7 @@ What turns it from a link maker into something you open to send. No accounts, no
 - The number is kept with the person in this phone's list, which is scrambled before its copy goes to the server, like the names. What is known of each lantern (`bottle-reach`) stays on the phone.
 - Android: "Put Bottle on your home screen" appears on the shore when Chrome offers to install it.
 - Sending results are counted under "Lantern (notifications)" on the stats page, as "sending: went straight to their lit lantern" and so on.
-- Tested with `test/app.browser.mjs` (131 checks then, 220 now, with pictures, unsigned notes, the small things, a beach from everyone, lanterns and sand, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
+- Tested with `test/app.browser.mjs` (131 checks then, 232 now, with pictures, unsigned notes, the small things, a beach from everyone, lanterns and sand, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
 - **Not tested**: any real phone. Whether `sms:` opens Messages with the words in place on a real iPhone and Android. The contact picker. The install offer. And everything about iPhone lanterns, as before: direct sending to an iPhone depends on it.
 - **One bottle for several people** ("One bottle for several people" on the shore, when it has two or more): tick up to eight names, write one note, and each gets their own bottle in their own conversation with its own seat. It goes straight to anyone whose lantern is lit. Each of the others gets one button that texts or shares their own link. A group text cannot carry it: one link has one seat.
 
