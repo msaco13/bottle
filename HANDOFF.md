@@ -2,7 +2,9 @@
 
 Write a note, get one link, text it to someone. They tap it and a bottle washes up on a beach with the note inside. They can write back in one tap. A phone can light a lantern to be told when a bottle arrives.
 
-Live: https://msaco13.github.io/bottle/ (the page with no message is the writing page). Stats: https://msaco13.github.io/bottle/stats.html
+Live: https://castyourbottle.com/ (the page with no message is the writing page). Stats: https://castyourbottle.com/stats.html. Until 2026-11-16 it lived at https://msaco13.github.io/bottle/.
+
+**A name of its own (2026-11-16).** Michael bought `castyourbottle.com` through Netlify ($14.82 the first year, $18.03 a year after, auto-renewing). The site is still served by GitHub Pages: the `CNAME` file in this repository names the domain, and the DNS records are kept in Netlify's DNS panel (four A records for the bare name pointing at GitHub Pages, and a CNAME for `www` pointing at `msaco13.github.io`). Michael chose to switch at once and accept one reset: a phone's beaches, name, notifications and home screen icon belong to the address, so every phone starts empty on the new one. Nothing on the server changed.
 
 Last updated: 2026-11-14 (see the two sections dated that day). Before that: 2026-11-13, late afternoon. Published: keepsakes, Your shore, one bottle for several people, pictures and GIFs, a beach full of bottles from many people, a lantern lit for someone, and writing in the sand. Michael has an Android, no iPhone. On 2026-11-13 he cleared the assistant to merge this repository's pull requests and to change the Bottle database without asking each time. Touching no other Supabase project still holds.
 

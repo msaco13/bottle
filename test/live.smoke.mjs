@@ -4,7 +4,7 @@
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const SITE = 'https://msaco13.github.io/bottle/';
+const SITE = 'https://castyourbottle.com/';
 const open = async (url, seed) => {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
   const page = await ctx.newPage(); page.setDefaultTimeout(120000);
