@@ -15,7 +15,7 @@ const check = (name, ok, detail = '') => { results.push([ok, name, detail]); con
 
 const shelf = new Map();          // the pictures the pretend server is holding, by name
 const open = new Map();           // and the beaches many people are filling: conversation number -> rows
-async function phone({ reach, sent = 0, addOk = true, seed, ios = false, picOk = true, listOk = true, at = '?dev', share = '' }) {
+async function phone({ reach, sent = 0, addOk = true, seed, ios = false, picOk = true, listOk = true, at = '?dev', share = '', stay = false }) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true,
     userAgent: ios ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E148 Safari/604.1' : undefined });
   const page = await ctx.newPage(); page.setDefaultTimeout(60000);
@@ -63,6 +63,8 @@ async function phone({ reach, sent = 0, addOk = true, seed, ios = false, picOk =
   const text = (id) => page.evaluate((i) => document.getElementById(i).textContent, id);
   const shown = (id) => page.evaluate((i) => { const e = document.getElementById(i); return !!(e && e.offsetParent !== null); }, id);
   const shot = (name) => page.screenshot({ path: `${out}/${name}.png`, timeout: 90000 });
+  // A phone with no beaches now opens on an empty Home. Most checks are about the page for writing, so go there (stay: true keeps Home).
+  if (!stay && await shown('home') && !(await page.evaluate(() => document.querySelector('#people .row, #people .person, #gathers .row')))) { await page.click('#tabWrite'); await page.waitForTimeout(150); }
   return { ctx, page, calls, errs, text, shown, shot };
 }
 
@@ -76,8 +78,38 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
 
 // 1. a phone that has never sent a bottle: the plain desk, a number, a link to text
 {
+  const h = await phone({ stay: true });
+  check('a new phone opens on Home, which says what it is and how to start', await h.shown('home') && !(await h.shown('desk')) && (await h.text('homeLede')).startsWith('No beaches yet. Send your first bottle and it starts one') && (await h.text('newOne')) === 'Write your first bottle');
+  check('three tabs are always there, and Home is lit', await h.shown('tabs') && (await h.page.evaluate(() => [...document.querySelectorAll('#tabs button')].map((b) => b.textContent.trim() + (b.classList.contains('on') ? '*' : '')).join(','))) === 'Home*,Write,More');
+  await h.shot('20-home-empty');
+  await h.page.click('#tabMore'); await h.page.waitForTimeout(200);
+  check('More holds the rest: a beach from everyone, the sea, how it works', await h.shown('moreTab') && await h.shown('gatherA') && await h.shown('castA') && !(await h.shown('home')) && !(await h.shown('desk')) && await h.page.evaluate(() => document.getElementById('tabMore').classList.contains('on')));
+  await h.shot('20-more');
+  await h.page.click('#moreTab .how'); await h.page.waitForTimeout(150);
+  check('how it works opens from More', await h.shown('howcard'));
+  await h.page.click('#howClose');
+  await h.page.click('#gatherA'); await h.page.waitForTimeout(200);
+  check('a beach from everyone starts from More', (await h.text('deskTitle')) === 'A beach full of bottles' && !(await h.shown('moreTab')));
+  await h.page.click('#tabHome'); await h.page.waitForTimeout(200);
+  check('the Home tab leads home from anywhere', await h.shown('home'));
+  check('nothing is offered for the home screen until the phone can do it', !(await h.shown('keepCard')));
+  await h.page.evaluate(() => { const e = new Event('beforeinstallprompt', { cancelable: true }); e.prompt = () => { window.__prompted = 1; }; e.userChoice = Promise.resolve({ outcome: 'accepted' }); window.dispatchEvent(e); });
+  await h.page.waitForTimeout(150);
+  check('when it can, Home says to keep it on the phone, with one button', await h.shown('keepCard') && await h.shown('install') && (await h.text('install')) === 'Add to my home screen' && !(await h.shown('installIos')));
+  await h.shot('20-home-keep');
+  await h.page.click('#install'); await h.page.waitForTimeout(200);
+  check('one tap takes the offer and the card goes', (await h.page.evaluate(() => window.__prompted)) === 1 && !(await h.shown('keepCard')));
+  await h.page.click('#newOne'); await h.page.waitForTimeout(200);
+  check('"Write your first bottle" opens the page for writing, with the Write tab lit', await h.shown('desk') && await h.page.evaluate(() => document.getElementById('tabWrite').classList.contains('on')));
+  check('no errors', !h.errs.length, h.errs.join(' ; '));
+  await h.ctx.close();
+  const ip = await phone({ stay: true, ios: true, at: '?dev&lantern=home' });
+  check('an iPhone in Safari is shown how, since it has no one-tap way', await ip.shown('keepCard') && await ip.shown('installIos') && !(await ip.shown('install')));
+  await ip.page.click('#installIos'); await ip.page.waitForTimeout(300);
+  check('and the button opens the three steps', await ip.shown('homecard'));
+  await ip.ctx.close();
   const p = await phone({});
-  check('a new phone is shown the desk, not an empty shore', await p.shown('desk') && !(await p.shown('home')));
+  check('the Write tab shows the page for writing', await p.shown('desk') && !(await p.shown('home')));
   check('a new phone is not asked about going home', !(await p.shown('toHome')));
   await p.page.fill('#forWho', 'Jorge');
   check('their number is not asked for up front: it is behind one small link', await p.shown('mobileAsk') && !(await p.shown('mobileRow')));
@@ -804,13 +836,14 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('and nothing was kept on the phone', await c.page.evaluate(() => !localStorage.getItem('bottle-notes') && !localStorage.getItem('bottle-threads') && document.getElementById('msg').value === '' && !JSON.stringify(Object.entries(localStorage)).includes('called more often')));
   await c.shot('17-gone');
   await c.page.click('#again'); await c.page.waitForTimeout(300);
-  check('afterwards the desk is the plain one again', await c.shown('desk') && (await c.text('deskTitle')) === 'Cast your bottle' && await c.shown('forWho'));
+  check('afterwards it is back to Home', await c.shown('home') && !(await c.shown('made')));
   check('no errors', !c.errs.length, c.errs.join(' ; '));
   await c.ctx.close();
   // a phone with beaches is offered it on the list; a page showing a bottle is not
   const m = await phone({ seed: jorge });
   await m.page.waitForTimeout(600);
-  check('a phone with beaches is offered the sea on its list', await m.shown('castA'));
+  await m.page.click('#tabMore'); await m.page.waitForTimeout(200);
+  check('a phone with beaches is offered the sea under More', await m.shown('castA'));
   await m.page.click('#castA'); await m.page.waitForTimeout(250);
   check('and gets the same desk, with the way back', (await m.text('deskTitle')) === 'Cast it out to sea' && await m.shown('toHome'));
   await m.ctx.close();

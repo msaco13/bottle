@@ -14,6 +14,19 @@ Real phones, 2026-11-13 (Michael's screenshots, his word, and the counter): two 
 
 What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a person): at 6:51 am Miami an "iPhone iOS 18.7 · Safari 27" drew the 3D beach on "Apple GPU" at 57 pictures a second, granted motion, popped the cork by tilt, read the note and took its seat. An Android (Adreno 750) also drew 3D. Chrome dressed as an iPhone does not report "Apple GPU", so these are taken to be real phones. That is the first sign the 3D shaders run on Apple's driver.
 
+## A home page and three tabs (2026-11-16, afternoon)
+
+Michael, after using the installed app: there should be a clear home page (who you write to, what has arrived), a way to get there that is always in sight, and a nudge to install for anyone who has not. A phone used to open on the page for writing unless it already had beaches.
+
+- **Three tabs at the foot of every page that is not a bottle being opened: Home, Write, More** (`#tabs` in the page; `tabOn`, `showMore` in `js/main.js`). They show whenever the desk, the list or the screen after sending is showing, and not while a bottle is being opened or a beach is being visited.
+- **Every visit starts on Home**, whether or not the phone has beaches. With none it says: "No beaches yet. Send your first bottle and it starts one", and the button reads "Write your first bottle".
+- **Home is the list of beaches** as before (a waiting bottle first), with "A bottle for someone new", "One bottle for several people" and "Rename or remove someone".
+- **"Keep it on your phone"** is a card on Home while the page is not on the home screen: one button where Chrome offers to install, "Show me how" on an iPhone in Safari (it opens the three-step card). It is gone once installed.
+- **More** holds what used to crowd Home and the desk: a beach from everyone, cast one out to sea, how it works, and notifications (always offered here, whatever else the phone has).
+- The page for writing is unchanged, and is the Write tab.
+- `test/live.smoke.mjs` now expects a new phone to open on Home.
+- Tested: 13 new browser checks (248 in all). **Not tested**: any real phone, the tab bar above a phone's own gesture bar, and an iPhone's safe area at the foot.
+
 ## A simpler desk, one name, and reasons to send (2026-11-16)
 
 Michael, looking at it on his own phone at the new address: the page is cluttered, and how does it grow? The counter for 13 to 15 November said receiving works (26 bottles opened, 26 read to the end) and that nobody had used anything added on the 14th.
@@ -201,7 +214,7 @@ What turns it from a link maker into something you open to send. No accounts, no
 - The number is kept with the person in this phone's list, which is scrambled before its copy goes to the server, like the names. What is known of each lantern (`bottle-reach`) stays on the phone.
 - Android: "Put Bottle on your home screen" appears on the shore when Chrome offers to install it.
 - Sending results are counted under "Lantern (notifications)" on the stats page, as "sending: went straight to their lit lantern" and so on.
-- Tested with `test/app.browser.mjs` (131 checks then, 232 now, with pictures, unsigned notes, the small things, a beach from everyone, lanterns and sand, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
+- Tested with `test/app.browser.mjs` (131 checks then, 248 now, with pictures, unsigned notes, the small things, a beach from everyone, lanterns and sand, Chromium, the server played by the script): new phone, lit lantern, silent lantern, server down, a server without `bottle_reach`, a waiting bottle, an iPhone's text link, one bottle for three people.
 - **Not tested**: any real phone. Whether `sms:` opens Messages with the words in place on a real iPhone and Android. The contact picker. The install offer. And everything about iPhone lanterns, as before: direct sending to an iPhone depends on it.
 - **One bottle for several people** ("One bottle for several people" on the shore, when it has two or more): tick up to eight names, write one note, and each gets their own bottle in their own conversation with its own seat. It goes straight to anyone whose lantern is lit. Each of the others gets one button that texts or shares their own link. A group text cannot carry it: one link has one seat.
 

@@ -275,7 +275,24 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
   width: min(100%, 420px); margin: auto 0; padding: 24px 22px 22px; border-radius: 24px; background: var(--panel); border: 1px solid var(--line);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 10px;
 }
-#made, #home { display: none; }
+#made, #home, #moreTab { display: none; }
+#moreTab { width: min(100%, 420px); margin: auto 0; padding: 24px 22px 22px; border-radius: 24px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5); flex-direction: column; gap: 10px; }
+#compose.more #desk, #compose.more #home, #compose.more #made { display: none !important; }
+#compose.more #moreTab { display: flex; }
+/* the three tabs, at the foot of every page that is not a bottle being opened */
+#tabs { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; display: none; height: calc(58px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: rgba(18, 13, 30, 0.92); border-top: 1px solid var(--line); }
+#compose.show ~ #tabs { display: flex; }
+#compose.show { bottom: calc(58px + env(safe-area-inset-bottom)); padding-bottom: 12px; }
+#tabs button { flex: 1; appearance: none; border: 0; background: none; color: var(--dim); font: inherit; font-size: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; }
+#tabs svg { width: 22px; height: 22px; }
+#tabs button.on { color: var(--gold); }
+/* keep it on your phone: shown on the home page until it is on the home screen */
+#keepCard { display: none; flex-direction: column; gap: 6px; margin-top: 4px; padding: 14px; border-radius: 16px; border: 1px solid rgba(255, 201, 138, 0.45); background: rgba(255, 201, 138, 0.10); font-size: 14.5px; line-height: 1.4; }
+#keepCard.on { display: flex; }
+#keepCard b { color: var(--gold); font-size: 15.5px; }
+#keepCard span { color: var(--dim); }
+#keepCard .btn { margin-top: 4px; padding: 12px 14px; font-size: 16px; }
+#installIos { display: none; }
 #compose.done #desk, #compose.home #desk { display: none; }
 #compose.done #made { display: flex; }
 #compose.home:not(.done) #home { display: flex; }
