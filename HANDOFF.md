@@ -23,6 +23,7 @@ Michael, looking at it on his own phone at the new address: the page is cluttere
 - **One name: "Cast Your Bottle"**, to match the address. The desk's title, the page's title, the name in the two manifests and the "How it works" card use it. The home screen label stays "Bottle" (a long name is cut off there), and what a recipient sees in a text preview is still "A message in a bottle".
 - **A few ways to begin** on a blank page for someone new: Happy birthday, Thinking of you, Thank you, I'm sorry, Congratulations, I miss you. A tap puts the first words down. They go away once anything is written.
 - **"Who else deserves a bottle?"** on the screen after sending. It grows only one way: a bottle someone receives is the advertisement, so what matters is people sending to someone new and not only writing back.
+- **First real-phone finding (Michael's Android, the installed app, the same day):** "Turn on notifications" sat at the very top of the desk in the Home Screen app, pushed everything down, and the send button covered "Add something". The offer now sits at the foot of the desk, as a quiet button. The test browser had not shown it because notifications are blocked there.
 - Counted as `more` (named on the stats page; not yet in the list inside `event_stats`).
 - Tested: 12 new browser checks (232 in all). **Not tested**: any real phone.
 - **Agreed next, and not built**: one real beach from everyone for a real occasion, as the test of whether people want it. No advertising before that.
