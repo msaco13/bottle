@@ -848,26 +848,26 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   check('and gets the same desk, with the way back', (await m.text('deskTitle')) === 'Cast it out to sea' && await m.shown('toHome'));
   await m.ctx.close();
 }
-// 18. the desk as people see it: names, the words and the send button, with the rest behind "Add something"
+// 18. the desk as people see it: names, the words, a picture and the send button, with the rest behind "More options"
 {
   const p = await phone({ at: '?dev&fold', share: 'ok' });
   check('the desk is called by the one name', (await p.text('deskTitle')) === 'Cast your bottle' && (await p.page.title()).startsWith('Cast Your Bottle'));
-  check('a new person sees names, the words and the send button, and little else', await p.shown('forWho') && await p.shown('who') && await p.shown('msg') && await p.shown('make') && !(await p.shown('picAdd')) && !(await p.shown('sandAdd')) && !(await p.shown('tuckAdd')) && !(await p.shown('whenAdd')) && !(await p.shown('moods')) && !(await p.shown('mobileAsk')));
+  check('a new person sees names, the words, a picture button and the send button, and little else', await p.shown('forWho') && await p.shown('who') && await p.shown('msg') && await p.shown('make') && await p.shown('picAdd') && !(await p.shown('sandAdd')) && !(await p.shown('tuckAdd')) && !(await p.shown('whenAdd')) && !(await p.shown('moods')) && !(await p.shown('mobileAsk')));
   check('the whole desk fits on the screen', (await p.page.evaluate(() => document.getElementById('compose').scrollHeight <= innerHeight)), String(await p.page.evaluate(() => document.getElementById('desk').offsetHeight)));
   check('a blank page offers a few ways to begin', await p.shown('starts') && (await p.page.evaluate(() => document.querySelectorAll('#starts button').length)) === 6);
   await p.shot('18-desk-simple');
   await p.page.click('#starts button:first-child'); await p.page.waitForTimeout(150);
   check('a tap puts the first words down and steps aside', (await p.page.evaluate(() => document.getElementById('msg').value)) === 'Happy birthday! ' && !(await p.shown('starts')) && (await p.text('left')) === '584');
-  check('"Add something" says what is behind it', await p.shown('moreAdd') && (await p.text('moreAdd')).startsWith('Add something'));
+  check('the picture button is in the open, beside the button for everything else', await p.shown('picAdd') && (await p.text('picAdd')) === 'Picture or GIF' && await p.shown('moreAdd') && (await p.text('moreAdd')) === 'More options' && (await p.page.evaluate(() => Math.abs(document.getElementById('picAdd').getBoundingClientRect().top - document.getElementById('moreAdd').getBoundingClientRect().top) < 2)));
   await p.page.click('#moreAdd'); await p.page.waitForTimeout(150);
-  check('one tap brings out the picture, the sand, the keepsake, the seal, the sky and their number', await p.shown('picAdd') && await p.shown('sandAdd') && await p.shown('tuckAdd') && await p.shown('whenAdd') && await p.shown('moods') && await p.shown('mobileAsk') && !(await p.shown('moreAdd')));
+  check('one tap brings out the sand, the keepsake, the seal, the sky and their number, and the picture stays', await p.shown('picAdd') && await p.shown('sandAdd') && await p.shown('tuckAdd') && await p.shown('whenAdd') && await p.shown('moods') && await p.shown('mobileAsk') && !(await p.shown('moreAdd')));
   await p.shot('18-desk-open');
   await p.page.fill('#forWho', 'Ana'); await p.page.fill('#who', 'Mike');
   await p.page.click('#make'); await p.page.waitForTimeout(1200);
   check('after sending, the page asks who else deserves one', await p.shown('another') && (await p.text('another')) === 'Who else deserves a bottle?' && (await p.text('madeTitle')) === 'Off it goes');
   await p.shot('18-who-else');
   await p.page.click('#another'); await p.page.waitForTimeout(300);
-  check('and that leads to a fresh, simple desk', await p.shown('desk') && (await p.text('deskTitle')) === 'Cast your bottle' && (await p.page.evaluate(() => document.getElementById('msg').value)) === '' && !(await p.shown('picAdd')) && await p.shown('toHome'));
+  check('and that leads to a fresh, simple desk', await p.shown('desk') && (await p.text('deskTitle')) === 'Cast your bottle' && (await p.page.evaluate(() => document.getElementById('msg').value)) === '' && await p.shown('picAdd') && !(await p.shown('sandAdd')) && await p.shown('toHome'));
   check('no errors', !p.errs.length, p.errs.join(' ; '));
   await p.ctx.close();
   // an answer is simple too, and has no starters; casting out shows its sky without a fold
@@ -877,7 +877,7 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   await r.page.evaluate(() => { window.dev.hold = false; document.getElementById('skip').click(); window.dev.run(1); window.dev.hold = true; });
   await r.page.waitForFunction(() => getComputedStyle(document.getElementById('after')).opacity === '1', null, { timeout: 30000 });
   await r.page.click('#reply'); await r.page.waitForTimeout(400);
-  check('writing back is simple too, with no starters', await r.shown('msg') && await r.shown('moreAdd') && !(await r.shown('picAdd')) && !(await r.shown('starts')));
+  check('writing back is simple too, with no starters', await r.shown('msg') && await r.shown('moreAdd') && await r.shown('picAdd') && !(await r.shown('sandAdd')) && !(await r.shown('starts')));
   await r.shot('18-desk-back');
   await r.ctx.close();
   const c = await phone({ at: '?dev&fold' });
@@ -893,10 +893,34 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   const box = (id) => p.page.evaluate((i) => { const r = document.getElementById(i).getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) }; }, id);
   const title = await box('deskTitle'), more = await box('moreAdd'), make = await box('make'), lamp = await box('lanternC');
   check('the title is the first thing on the desk, not the offer of notifications', title.top < 80 && lamp.top > make.bottom, JSON.stringify({ title, lamp }));
-  check('"Add something" is in full view above the send button', more.bottom <= make.top + 1 && make.bottom <= 769, JSON.stringify({ more, make }));
+  check('the picture button and "More options" are in full view above the send button', more.bottom <= make.top + 1 && (await box('picAdd')).bottom <= make.top + 1 && make.bottom <= 769, JSON.stringify({ more, make }));
   check('notifications are still offered, quietly, at the foot', (await p.text('lanternC')).startsWith('Turn on notifications') && await p.page.evaluate(() => document.querySelector('#lanternC button').classList.contains('ghost')));
   await p.shot('19-installed');
   await p.ctx.close();
+}
+// the picture button is never folded away, and the send button never covers it (Michael, 2026-11-17: "are we not able to put GIFs or pictures in any more?")
+{
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAGCAIAAABxZ0isAAAAFklEQVR42mP8z8Dwn4EIwMRAJBhVCAA7VAIKzTXl3QAAAABJRU5ErkJggg==', 'base64');
+  // a phone in its browser, with the address bar taking room: 384 by 693 is what his Android reported; 360 by 640 is a small phone
+  for (const [w, h] of [[384, 750], [384, 693], [360, 640]]) {
+    const p = await phone({ at: '?dev&fold' });
+    await p.page.setViewportSize({ width: w, height: h });
+    await p.page.click('#tabWrite'); await p.page.waitForTimeout(400);
+    const box = (id) => p.page.evaluate((i) => { const r = document.getElementById(i).getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) }; }, id);
+    const pic = await box('picAdd'), more = await box('moreAdd'), bar = await box('sendBar'), make = await box('make'), tabs = await box('tabs');
+    check(`${w} by ${h}: the picture button and "More options" are clear of the send button`, await p.shown('picAdd') && pic.bottom <= bar.top + 16 && more.bottom <= bar.top + 16 && make.bottom <= tabs.top, JSON.stringify({ pic, more, bar, make, tabs }));
+    if (h === 693) {
+      await p.page.setInputFiles('#picFile', { name: 'beach.png', mimeType: 'image/png', buffer: PNG });
+      await p.page.waitForFunction(() => /tucked in\./.test(document.getElementById('picSay').textContent), null, { timeout: 20000 });
+      const row = await box('picShow'), rest = await box('moreAdd'), bar2 = await box('sendBar');
+      check('a picture can be tucked in without opening anything else, and both it and the way to the rest stay in view', await p.shown('picThumb') && !(await p.shown('picAdd')) && !(await p.shown('sandAdd')) && row.bottom <= bar2.top + 16 && rest.bottom <= bar2.top + 16, JSON.stringify({ row, rest, bar2 }));
+      await p.page.click('#moreAdd'); await p.page.waitForTimeout(200);
+      check('opening the rest keeps the picture', await p.shown('picThumb') && await p.shown('sandAdd') && await p.shown('moods') && !(await p.shown('moreAdd')));
+      await p.shot('20-picture-in-the-open');
+    }
+    check('no errors', !p.errs.length, p.errs.join(' ; '));
+    await p.ctx.close();
+  }
 }
 await browser.close();
 const bad = results.filter((r) => !r[0]);

@@ -24,7 +24,7 @@
 <meta property="og:url" content="https://castyourbottle.com/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1430'/%3E%3Cpath d='M14 4h4v6c3 2 4 4 4 7v9a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-9c0-3 1-5 4-7z' fill='%2389d6c2'/%3E%3Crect x='13.5' y='3' width='5' height='3' rx='1' fill='%23c59a5a'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=b75594cc96">
+<link rel="stylesheet" href="css/style.css?v=f09346abe0">
 </head>
 <body>
 <div id="stage">
@@ -123,7 +123,6 @@
       <div id="starts" role="group" aria-label="A few ways to begin"></div>
       <textarea id="msg" rows="5" maxlength="600" placeholder="Write it here"></textarea>
       <div class="count"><span id="left">600</span> characters left</div>
-      <button type="button" class="mood" id="moreAdd">Add something<span>a picture, a keepsake, a sky, a time to open</span></button>
       <div id="extras">
       <div id="picRow">
         <input type="file" id="picFile" accept="image/*" hidden>
@@ -134,6 +133,7 @@
         <button type="button" class="mood" id="sandAdd">Write in the sand</button>
         <div id="sandShow"><canvas id="sandThumb" width="112" height="112"></canvas><span id="sandNote" aria-live="polite">Written in the sand. A wave takes it once they have seen it.</span><button type="button" class="link" id="sandDrop">Remove</button></div>
       </div>
+      <button type="button" class="mood" id="moreAdd">More options</button>
       </div>
       <div id="extras2">
       <div id="tuckRow">
@@ -159,7 +159,7 @@
         <button type="button" class="mood" data-mood="night">Night</button>
         <button type="button" class="mood" data-mood="dawn">Dawn</button>
       </div>
-      <button class="btn" type="submit" id="make">Seal it and send</button>
+      <div id="sendBar"><button class="btn" type="submit" id="make">Seal it and send</button></div>
       <div class="lantern" id="lanternC"></div>
       <button class="link" type="button" id="gatherB">Or fill a beach with bottles from everyone</button>
       <button class="link" type="button" id="castB">Or cast one out to sea, for no one</button>
@@ -342,6 +342,6 @@
   window.addEventListener("error", function (e) { if (e && e.target && e.target.tagName === "SCRIPT") window.__plain("a file failed to load"); }, true);   // or a file failed outright
 })();
 </script>
-<script defer src="app.js?v=b75594cc96"></script>
+<script defer src="app.js?v=f09346abe0"></script>
 </body>
 </html>

@@ -14,6 +14,17 @@ Real phones, 2026-11-13 (Michael's screenshots, his word, and the counter): two 
 
 What the counter showed on 2026-11-13 (read from `event_stats`, not watched by a person): at 6:51 am Miami an "iPhone iOS 18.7 · Safari 27" drew the 3D beach on "Apple GPU" at 57 pictures a second, granted motion, popped the cork by tilt, read the note and took its seat. An Android (Adreno 750) also drew 3D. Chrome dressed as an iPhone does not report "Apple GPU", so these are taken to be real phones. That is the first sign the 3D shaders run on Apple's driver.
 
+## The picture button back in the open (2026-11-18)
+
+Michael, 2026-11-17: "Are we not able to put GIFs or pictures in the bottle notes any more?" They were still there, behind "Add something", and on his phone the send button sat over the lower half of that button, so it read as a caption. The counter agreed: pictures were the most used extra until the 15th, and none were added after the desk was folded on the 16th.
+
+- **"Picture or GIF" is always on the page for writing**, beside the button for everything else, which now reads **"More options"** (the sand, the keepsake, the seal, the sky, their number). With a picture tucked in, its row takes the line and "More options" is a quiet line under it.
+- **The send button rides in a strip of its own** (`#sendBar`, the colour of the desk), so what scrolls beneath it fades out and is never left half covered.
+- **On a shorter screen the page for words gives up height** (800, 720 and 660 pixels tall), so the names, the words, the picture button and the send button are all in view at once. Checked at 384 by 750, 384 by 693 (what his Android reports in its browser), 394 by 769 (the installed app) and 360 by 640.
+- Lesson for the next fold: count what people use before hiding it, and look at the page at the height of a phone with its address bar showing, not only at 390 by 844.
+- This was done from the first chat, which had gone quiet on the 14th. The second chat (branch `ccr-79f1eea1-dtotqn`) built everything from the 14th to the 16th. Only one of them should be pushing at a time; Michael said the second was idle.
+- Tested: 5 new browser checks and the older ones changed to expect the picture in the open. **Not tested**: any real phone.
+
 ## A home page and three tabs (2026-11-16, afternoon)
 
 Michael, after using the installed app: there should be a clear home page (who you write to, what has arrived), a way to get there that is always in sight, and a nudge to install for anyone who has not. A phone used to open on the page for writing unless it already had beaches.
@@ -31,7 +42,7 @@ Michael, after using the installed app: there should be a clear home page (who y
 
 Michael, looking at it on his own phone at the new address: the page is cluttered, and how does it grow? The counter for 13 to 15 November said receiving works (26 bottles opened, 26 read to the end) and that nobody had used anything added on the 14th.
 
-- **The desk asks for names, the words and the send button.** The picture, the sand, the keepsake, the seal, the sky and their mobile number wait behind one button, "Add something". Writing in the sand opens it by itself. Casting one out shows its sky with nothing folded. For someone new the three steps stand in for the line of text under them, so the whole desk fits one screen (390 by 844).
+- **The desk asks for names, the words and the send button.** The picture, the sand, the keepsake, the seal, the sky and their mobile number wait behind one button, "Add something". (Changed 2026-11-18: the picture is back in the open and the button reads "More options". See the top.) Writing in the sand opens it by itself. Casting one out shows its sky with nothing folded. For someone new the three steps stand in for the line of text under them, so the whole desk fits one screen (390 by 844).
 - **With `?dev` the desk is shown unfolded**, so the older checks still reach every button; add `&fold` to see it as people do.
 - **One name: "Cast Your Bottle"**, to match the address. The desk's title, the page's title, the name in the two manifests and the "How it works" card use it. The home screen label stays "Bottle" (a long name is cut off there), and what a recipient sees in a text preview is still "A message in a bottle".
 - **A few ways to begin** on a blank page for someone new: Happy birthday, Thinking of you, Thank you, I'm sorry, Congratulations, I miss you. A tap puts the first words down. They go away once anything is written.
