@@ -4185,6 +4185,24 @@ function wire() {
   $('picAdd').addEventListener('click', () => $('picFile').click());
   $('picFile').addEventListener('change', () => tuckPic($('picFile').files && $('picFile').files[0]));
   $('picDrop').addEventListener('click', () => { dropPic(); count('pic', 'removed', true); });
+  // A picture or a GIF can also be pasted in, or dropped on the page, while a note is being written. It lands where a chosen one does.
+  // (Where a browser passes on what a keyboard's GIF button picks, it arrives as a paste. Most phones do not yet: see HANDOFF.)
+  const writing = () => $('desk').getClientRects().length > 0 && !$('sand').classList.contains('show');
+  const picIn = (from) => { for (const f of (from && from.files) || []) if (/^image\//.test(f.type)) return f; return null; };
+  const hasFiles = (e) => !!e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  document.addEventListener('paste', (e) => {
+    const f = writing() && picIn(e.clipboardData);
+    if (!f || e.clipboardData.getData('text/plain')) return;          // words copied along with a picture are pasted as words, as ever
+    e.preventDefault();
+    tuckPic(f); count('pic', 'pasted in', true);
+  });
+  document.addEventListener('dragover', (e) => { if (writing() && hasFiles(e)) e.preventDefault(); });
+  document.addEventListener('drop', (e) => {
+    if (!writing() || !hasFiles(e)) return;
+    e.preventDefault();                                                // or the browser leaves the page to show the file, and the note is lost
+    const f = picIn(e.dataTransfer);
+    if (f) { tuckPic(f); count('pic', 'dropped in', true); }
+  });
   $('link').addEventListener('focus', () => $('link').select());
   $('copy').addEventListener('click', async () => {
     let ok = false;
