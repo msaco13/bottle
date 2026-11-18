@@ -311,9 +311,12 @@ canvas.draw { position: absolute; inset: 0; width: 100%; height: 100%; display: 
 #steps b { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #2b1a0c; background: linear-gradient(180deg, #ffe0b4, #ffc07a); }
 #steps li + li::before { content: ""; position: absolute; left: -7px; top: 21px; width: 8px; height: 1px; background: rgba(255, 201, 138, 0.6); }
 /* the desk asks for names, the words and the send button. Everything else waits behind "Add something". */
-#desk.folded #extras, #desk.folded #extras2, #desk.folded #moodsLabel, #desk.folded #moods, #desk.folded #mobileAsk, #desk.folded #mobileRow { display: none !important; }
-#moreAdd { display: none; flex: none; width: 100%; padding: 11px 14px; font-size: 14.5px; }
-#moreAdd span { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: var(--dim); }
+#desk.folded #sandRow, #desk.folded #extras2, #desk.folded #moodsLabel, #desk.folded #moods, #desk.folded #mobileAsk, #desk.folded #mobileRow { display: none !important; }
+/* A picture is what people add most, so its button is always in sight. The button for everything else sits beside it. */
+#extras > #moreAdd { display: none; flex: 1 1 0; min-width: 0; width: auto; padding: 11px 10px; font-size: 14px; }
+/* with a picture tucked in, its row takes the line, and the button for the rest becomes a quiet line of its own under it */
+#desk.folded #picRow.has ~ #moreAdd { flex-basis: 100%; padding: 2px 4px; border: 0; background: none; color: var(--gold); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; }
+#desk.folded #picThumb { width: 46px; height: 46px; }
 #desk.folded #moreAdd { display: block; }
 #desk.cast #moreAdd { display: none; }
 /* a few ways to begin, for a blank page */
@@ -379,7 +382,13 @@ textarea:focus, input[type=text]:focus, input[type=tel]:focus, input[type=dateti
 }
 .btn:active { transform: scale(0.985); }
 /* The button that makes the bottle never leaves the screen, however short the phone or however long the page */
-#make { position: sticky; bottom: 10px; z-index: 2; box-shadow: 0 10px 26px rgba(255, 170, 90, 0.28), 0 0 0 7px rgba(34, 24, 42, 0.6); }
+/* It rides in a strip of its own, the colour of the desk, so what scrolls beneath it fades out cleanly and is never left half covered. */
+#sendBar { position: sticky; bottom: 0; z-index: 2; margin: 0 -22px -4px; padding: 16px 22px 10px; background: linear-gradient(to bottom, rgba(27, 20, 42, 0) 0, rgba(27, 20, 42, 0.97) 15px); }
+#make { margin-top: 0; }
+/* on a shorter screen the page for words gives up a little height, so the names, the words, the picture and the send button are all in view at once */
+@media (max-height: 800px) { #desk.folded textarea { height: 132px; min-height: 0; } }
+@media (max-height: 720px) { #desk.folded textarea { height: 108px; } }
+@media (max-height: 660px) { #desk.folded textarea { height: 92px; } }
 /* for someone new the three steps say it: the line under them is not needed */
 #desk.first #deskLede { display: none; }
 @media (max-height: 700px) { #desk.gather #deskLede { display: none; } #desk { padding-top: 18px; gap: 8px; } }

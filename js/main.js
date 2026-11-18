@@ -1200,7 +1200,7 @@ function desk(ctx) {
   dropPic();
   dropSand();
   deskTuck = ''; tuckDraw();
-  // Names, the words and the send button: everything else waits behind "Add something". (?dev shows it all, for building; add &fold to see it as people do.)
+  // Names, the words and the send button: and a picture, which is what people add most. Everything else waits behind "More options". (?dev shows it all, for building; add &fold to see it as people do.)
   $('desk').classList.toggle('folded', !(qs.has('dev') && !qs.has('fold')) && !deskCtx.cast);
   startsDraw();
   deskUntil = 0; untilDraw();
