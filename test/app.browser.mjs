@@ -296,6 +296,29 @@ const jorge = { 'bottle-name': 'Mike', 'bottle-threads': [{ k: KEY, w: 'Jorge', 
   await h.page.waitForFunction(() => document.getElementById('picWrap').classList.contains('got'), null, { timeout: 20000 });
   check('and the GIF arrives still a GIF', await h.page.evaluate(async () => (await (await fetch(document.getElementById('pic').src)).blob()).type === 'image/gif'));
   await h.ctx.close();
+  // a picture or a GIF pasted in, or dropped on the page, lands where a chosen one does (Michael, 2026-11-18: a GIF from the keyboard did nothing)
+  {
+    const v = await phone({});
+    const give = (kind, files, text) => v.page.evaluate(([kind, files, text]) => {
+      const dt = new DataTransfer();
+      for (const [name, type, b64] of files) dt.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], name, { type }));
+      if (text) dt.setData('text/plain', text);
+      const e = kind === 'paste' ? new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }) : new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true });
+      return !document.getElementById('msg').dispatchEvent(e);       // true: the page took it for itself
+    }, [kind, files, text || '']);
+    const has = () => v.page.evaluate(() => document.getElementById('picRow').classList.contains('has'));
+    check('words pasted along with a picture are left to be pasted as words', !(await give('paste', [['a.png', 'image/png', PNG.toString('base64')]], 'hello')) && !(await has()));
+    check('a pasted GIF is taken by the page', await give('paste', [['wave.gif', 'image/gif', GIF.toString('base64')]]));
+    await v.page.waitForFunction(() => /tucked in\./.test(document.getElementById('picSay').textContent), null, { timeout: 20000 });
+    check('and tucked in as a GIF', (await v.text('picSay')) === 'Your GIF is tucked in.' && await v.shown('picThumb'));
+    await v.page.click('#picDrop');
+    check('a file that is no picture, dropped on the page, is turned away without leaving the page', await give('drop', [['notes.txt', 'text/plain', 'aGk=']]) && !(await has()) && await v.shown('desk'));
+    check('a dropped photo is taken by the page', await give('drop', [['beach.png', 'image/png', PNG.toString('base64')]]));
+    await v.page.waitForFunction(() => /tucked in\./.test(document.getElementById('picSay').textContent), null, { timeout: 20000 });
+    check('and tucked in', (await v.text('picSay')) === 'Your picture is tucked in.');
+    check('no errors', !v.errs.length, v.errs.join(' ; '));
+    await v.ctx.close();
+  }
   // things that go wrong are said plainly, and a bottle never leaves without the picture it was given
   const big = await phone({});
   await big.page.setInputFiles('#picFile', { name: 'huge.gif', mimeType: 'image/gif', buffer: Buffer.concat([GIF, Buffer.alloc(3600000)]) });
